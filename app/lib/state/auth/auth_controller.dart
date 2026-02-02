@@ -1,40 +1,49 @@
-import 'package:app/state/auth/auth_state.dart';
+import 'package:app/state/dongles/dongles_providers.dart';
 import 'package:app/state/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'auth_state.dart';
 
 final authControllerProvider =
-    NotifierProvider<AuthController, AuthState>(AuthController.new);
+    AsyncNotifierProvider<AuthController, AuthState>(AuthController.new);
 
-class AuthController extends Notifier<AuthState> {
+class AuthController extends AsyncNotifier<AuthState> {
   @override
-  AuthState build() {
-    _bootstrap(); // async init
-    return const AuthState.unknown();
-  }
-
-  Future<void> _bootstrap() async {
+  Future<AuthState> build() async {
     final tokens = await ref.read(authTokensStorageProvider).readTokens();
-    state = (tokens == null)
+    final next = (tokens == null)
         ? const AuthState.unauthenticated()
         : AuthState.authenticated(tokens);
+
+    _invalidateCaches();
+    return next;
   }
 
   Future<void> login(String email, String password) async {
-    try {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
       final tokens = await ref.read(authApiProvider).login(
             email: email,
             password: password,
           );
 
       await ref.read(authTokensStorageProvider).writeTokens(tokens);
-      state = AuthState.authenticated(tokens);
-    } catch (e) {
-      state = AuthState.unauthenticated(error: e.toString());
-    }
+      _invalidateCaches();
+      return AuthState.authenticated(tokens);
+    });
   }
 
   Future<void> logout() async {
-    await ref.read(authTokensStorageProvider).clear();
-    state = const AuthState.unauthenticated();
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(authTokensStorageProvider).clear();
+      _invalidateCaches();
+      return const AuthState.unauthenticated();
+    });
+  }
+
+  void _invalidateCaches() {
+    ref.invalidate(dongleListProvider);
+    // ref.invalidate(profileProvider);
+    // ref.invalidate(settingsProvider);
   }
 }
