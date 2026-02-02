@@ -1,6 +1,8 @@
+import 'package:app/config/env_config.dart';
 import 'package:flutter/material.dart';
 
 void main() {
+  EnvConfig.init(Environment.prod);
   runApp(const MyApp());
 }
 
