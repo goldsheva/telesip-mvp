@@ -1,0 +1,19 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'package:app/services/auth_api.dart';
+import 'package:app/services/auth_tokens_storage.dart';
+
+final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
+  return const FlutterSecureStorage();
+});
+
+final authTokensStorageProvider = Provider<AuthTokensStorage>((ref) {
+  return AuthTokensStorage(ref.read(secureStorageProvider));
+});
+
+final authApiProvider = Provider<AuthApi>((ref) {
+  final api = AuthApi();
+  ref.onDispose(api.dispose);
+  return api;
+});

@@ -1,6 +1,7 @@
-import 'package:app/state/dongles/dongles_providers.dart';
-import 'package:app/state/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:app/state/core_providers.dart';
+import 'package:app/state/dongles/dongles_providers.dart';
 import 'auth_state.dart';
 
 final authControllerProvider =
@@ -10,6 +11,7 @@ class AuthController extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
     final tokens = await ref.read(authTokensStorageProvider).readTokens();
+
     final next = (tokens == null)
         ? const AuthState.unauthenticated()
         : AuthState.authenticated(tokens);
@@ -20,6 +22,7 @@ class AuthController extends AsyncNotifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     state = const AsyncLoading();
+
     state = await AsyncValue.guard(() async {
       final tokens = await ref.read(authApiProvider).login(
             email: email,
@@ -34,6 +37,7 @@ class AuthController extends AsyncNotifier<AuthState> {
 
   Future<void> logout() async {
     state = const AsyncLoading();
+
     state = await AsyncValue.guard(() async {
       await ref.read(authTokensStorageProvider).clear();
       _invalidateCaches();
@@ -43,7 +47,5 @@ class AuthController extends AsyncNotifier<AuthState> {
 
   void _invalidateCaches() {
     ref.invalidate(dongleListProvider);
-    // ref.invalidate(profileProvider);
-    // ref.invalidate(settingsProvider);
   }
 }

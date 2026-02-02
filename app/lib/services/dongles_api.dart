@@ -21,11 +21,16 @@ class DonglesApi {
     }
 
     final data = decoded['data'];
-    if (data is! List) {
-      throw Exception('Missing "data" list in response: ${response.body}');
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Missing "data" object in response: ${response.body}');
     }
 
-    return data
+    final list = data['dongles'];
+    if (list is! List) {
+      throw Exception('Missing "data.dongles" list in response: ${response.body}');
+    }
+
+    return list
         .whereType<Map<String, dynamic>>()
         .map(Dongle.fromJson)
         .toList();

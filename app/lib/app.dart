@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:app/config/app_theme.dart';
 import 'package:app/state/auth/auth_controller.dart';
 import 'package:app/state/auth/auth_state.dart';
 import 'package:app/ui/pages/login_page.dart';
@@ -12,15 +14,22 @@ class App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
 
-    final screen = switch (auth.status) {
-      AuthStatus.unknown => const _Splash(),
-      AuthStatus.unauthenticated => LoginPage(error: auth.error),
-      AuthStatus.authenticated => const HomePage(),
-    };
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: screen,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
+      home: auth.when(
+        loading: () => const _Splash(),
+        error: (e, _) => Scaffold(body: Center(child: Text(e.toString()))),
+        data: (s) {
+          return switch (s.status) {
+            AuthStatus.authenticated => const HomePage(),
+            AuthStatus.unauthenticated => LoginPage(error: s.error),
+            AuthStatus.unknown => const _Splash(),
+          };
+        },
+      ),
     );
   }
 }
@@ -30,8 +39,6 @@ class _Splash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
