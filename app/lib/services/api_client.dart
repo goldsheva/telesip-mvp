@@ -6,6 +6,7 @@ typedef TokensReader = Future<AuthTokens?> Function();
 typedef TokensWriter = Future<void> Function(AuthTokens tokens);
 typedef TokensClear = Future<void> Function();
 typedef RefreshFn = Future<AuthTokens> Function(String refreshToken);
+typedef AuthLostCallback = void Function();
 
 class ApiClient {
   ApiClient({
@@ -13,23 +14,27 @@ class ApiClient {
     required TokensWriter writeTokens,
     required TokensClear clearTokens,
     required RefreshFn refresh,
+    AuthLostCallback? onAuthLost,
+    http.Client? client,
   })  : _readTokens = readTokens,
         _writeTokens = writeTokens,
         _clearTokens = clearTokens,
-        _refresh = refresh;
+        _refresh = refresh,
+        _onAuthLost = onAuthLost,
+        _client = client ?? http.Client();
 
   final TokensReader _readTokens;
   final TokensWriter _writeTokens;
   final TokensClear _clearTokens;
   final RefreshFn _refresh;
+  final AuthLostCallback? _onAuthLost;
+  final http.Client _client;
 
   Future<AuthTokens>? _refreshInFlight;
 
-  Future<http.Response> get(String apiUri) async {
-    return _request('GET', apiUri);
-  }
+  Future<http.Response> get(String apiUri) => _request('GET', apiUri);
 
-  Future<http.Response> post(String apiUri, Map<String, dynamic> body) async {
+  Future<http.Response> post(String apiUri, Map<String, dynamic> body) {
     return _request('POST', apiUri, body: body);
   }
 
@@ -47,28 +52,37 @@ class ApiClient {
       if (tokens != null) 'Authorization': 'Bearer ${tokens.accessToken}',
     };
 
-    http.Response response;
-
-    switch(method) {
-      case 'GET':
-        response = await http.get(uri, headers: headers);
-      case 'POST':
-        response = await http.post(uri, headers: headers, body: jsonEncode(body ?? {}));
-      default:
-        throw UnsupportedError('Unsupported method: $method');
-    }
+    final response = await _send(method, uri, headers: headers, body: body);
 
     if (response.statusCode == 401 && !isRetriedAfterRefresh) {
       final refreshed = await _tryRefresh(tokens);
+
       if (refreshed == null) {
         await _clearTokens();
+        _onAuthLost?.call();
         return response;
       }
-  
+
       return _request(method, apiUri, body: body, isRetriedAfterRefresh: true);
     }
 
     return response;
+  }
+
+  Future<http.Response> _send(
+    String method,
+    Uri uri, {
+    required Map<String, String> headers,
+    Map<String, dynamic>? body,
+  }) {
+    switch (method) {
+      case 'GET':
+        return _client.get(uri, headers: headers);
+      case 'POST':
+        return _client.post(uri, headers: headers, body: jsonEncode(body ?? {}));
+      default:
+        throw UnsupportedError('Unsupported method: $method');
+    }
   }
 
   Future<AuthTokens?> _tryRefresh(AuthTokens? currentTokens) async {
@@ -76,6 +90,7 @@ class ApiClient {
     if (refreshToken == null || refreshToken.isEmpty) return null;
 
     _refreshInFlight ??= _refresh(refreshToken);
+
     try {
       final newTokens = await _refreshInFlight!;
       await _writeTokens(newTokens);
@@ -86,4 +101,6 @@ class ApiClient {
       _refreshInFlight = null;
     }
   }
+
+  void dispose() => _client.close();
 }

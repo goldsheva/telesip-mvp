@@ -12,40 +12,28 @@ class AuthApi {
     required String email,
     required String password,
   }) async {
-    final uri = Uri.parse(ApiEndpoints.authLogin);
-
     final response = await _client.post(
-      uri,
+      Uri.parse(ApiEndpoints.authLogin),
+      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),
     );
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Login failed: ${response.statusCode} ${response.body}');
-    }
-
-    final decodedBody = jsonDecode(response.body);
-    if (decodedBody is! Map<String, dynamic>) {
-      throw Exception('Unexpected response: ${response.body}');
-    }
-
-    final data = decodedBody['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('Missing "data" in response: ${response.body}');
-    }
-
-    return AuthTokens.fromJson(data);
+    return _parseTokens(response, errorPrefix: 'Login failed');
   }
 
   Future<AuthTokens> refreshToken({required String refreshToken}) async {
-    final uri = Uri.parse(ApiEndpoints.authRefresh);
-
     final response = await _client.post(
-      uri,
+      Uri.parse(ApiEndpoints.authRefresh),
+      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'refresh_token': refreshToken}),
     );
 
+    return _parseTokens(response, errorPrefix: 'Refresh failed');
+  }
+
+  AuthTokens _parseTokens(http.Response response, {required String errorPrefix}) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Refresh failed: ${response.statusCode} ${response.body}');
+      throw Exception('$errorPrefix: ${response.statusCode} ${response.body}');
     }
 
     final decoded = jsonDecode(response.body);
