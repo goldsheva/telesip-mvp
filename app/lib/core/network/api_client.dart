@@ -1,5 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
+import 'package:app/config/env_config.dart';
+import 'package:app/core/network/api_exception.dart';
 import 'package:app/features/auth/models/auth_tokens.dart';
 import 'package:http/http.dart' as http;
 
@@ -55,6 +59,19 @@ class ApiClient {
 
     final response = await _send(method, uri, headers: headers, body: body);
 
+    if (_shouldLog()) {
+      debugPrint('ApiClient -> $method $apiUri');
+      debugPrint('Headers: $headers');
+      if (body != null && body.isNotEmpty) {
+        debugPrint('Body: $body');
+      }
+      debugPrint('ApiClient <- ${response.statusCode} ${response.body}');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return response;
+    }
+
     if (response.statusCode == 401 && !isRetriedAfterRefresh) {
       final refreshed = await _tryRefresh(tokens);
 
@@ -67,7 +84,7 @@ class ApiClient {
       return _request(method, apiUri, body: body, isRetriedAfterRefresh: true);
     }
 
-    return response;
+    throw ApiException.fromResponse(response);
   }
 
   Future<http.Response> _send(
@@ -75,18 +92,24 @@ class ApiClient {
     Uri uri, {
     required Map<String, String> headers,
     Map<String, dynamic>? body,
-  }) {
-    switch (method) {
-      case 'GET':
-        return _client.get(uri, headers: headers);
-      case 'POST':
-        return _client.post(
-          uri,
-          headers: headers,
-          body: jsonEncode(body ?? {}),
-        );
-      default:
-        throw UnsupportedError('Unsupported method: $method');
+  }) async {
+    try {
+      switch (method) {
+        case 'GET':
+          return await _client.get(uri, headers: headers);
+        case 'POST':
+          return await _client.post(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? {}),
+          );
+        default:
+          throw UnsupportedError('Unsupported method: $method');
+      }
+    } catch (error) {
+      throw ApiException.network(
+        error is Exception ? error.toString() : '$error',
+      );
     }
   }
 
@@ -108,4 +131,8 @@ class ApiClient {
   }
 
   void dispose() => _client.close();
+
+  bool _shouldLog() {
+    return EnvConfig.env == Environment.dev;
+  }
 }

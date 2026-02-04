@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:app/core/network/api_exception.dart';
 import 'package:app/core/providers.dart';
 import 'package:app/features/dongles/state/dongle_list_notifier.dart';
 import 'auth_state.dart';
@@ -22,7 +23,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       return next;
     } catch (e) {
       _invalidateCaches();
-      return AuthState.unauthenticated(error: e.toString());
+      return AuthState.unauthenticated(error: _messageFrom(e));
     }
   }
 
@@ -39,7 +40,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       state = AsyncData(AuthState.authenticated(tokens));
     } catch (e) {
       _invalidateCaches();
-      state = AsyncData(AuthState.unauthenticated(error: e.toString()));
+      state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
     }
   }
 
@@ -52,11 +53,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       state = const AsyncData(AuthState.unauthenticated());
     } catch (e) {
       _invalidateCaches();
-      state = AsyncData(AuthState.unauthenticated(error: e.toString()));
+      state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
     }
   }
 
   void _invalidateCaches() {
     ref.invalidate(dongleListProvider);
+  }
+
+  String _messageFrom(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+
+    return error.toString();
   }
 }

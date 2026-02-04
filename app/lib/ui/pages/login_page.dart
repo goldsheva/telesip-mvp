@@ -130,15 +130,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       autofillHints: const [AutofillHints.password],
                     ),
 
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: isLoading ? null : () {},
-                        child: const Text('Forgot password?'),
-                      ),
-                    ),
-
                     if (error != null && error!.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
