@@ -67,12 +67,8 @@ class CallState {
   }
 }
 
-class CallNotifier extends StateNotifier<CallState> {
-  CallNotifier(this._engine) : super(CallState.initial()) {
-    _subscription = _engine.events.listen(_onEvent);
-  }
-
-  final SipEngine _engine;
+class CallNotifier extends Notifier<CallState> {
+  late final SipEngine _engine;
   late final StreamSubscription<SipEvent> _subscription;
 
   Future<void> startCall(String destination) async {
@@ -92,9 +88,11 @@ class CallNotifier extends StateNotifier<CallState> {
   }
 
   @override
-  void dispose() {
-    _subscription.cancel();
-    super.dispose();
+  CallState build() {
+    _engine = ref.read(sipEngineProvider);
+    _subscription = _engine.events.listen(_onEvent);
+    ref.onDispose(() => _subscription.cancel());
+    return CallState.initial();
   }
 
   void _onEvent(SipEvent event) {
@@ -146,9 +144,6 @@ class CallNotifier extends StateNotifier<CallState> {
   }
 }
 
-final callControllerProvider = StateNotifierProvider<CallNotifier, CallState>((
-  ref,
-) {
-  final engine = ref.watch(sipEngineProvider);
-  return CallNotifier(engine);
-});
+final callControllerProvider = NotifierProvider<CallNotifier, CallState>(
+  CallNotifier.new,
+);

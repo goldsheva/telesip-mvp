@@ -46,8 +46,7 @@ analyze:
 # -------------------------
 
 metrics:
-	@echo "📊 Running dart_code_metrics..."
-	cd app && $(DART) run dart_code_metrics:metrics analyze $(LIB) --disable-sunset-warning
+	@echo "⚠ dart_code_metrics is disabled (incompatible with flutter_riverpod ^3.2.1); skipping metrics."
 
 # -------------------------
 # Tests
