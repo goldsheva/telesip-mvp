@@ -352,9 +352,7 @@ class CallNotifier extends Notifier<CallState> {
         state.activeCall?.status == CallStatus.connected &&
         !_userInitiatedRetry) {
       _startFailureTimer(state.activeCall!.id);
-    } else {
-      // Cancel pending hangup timer as soon as we are no longer in FAILED state
-      // (e.g. while reconnecting/ICE restart is in progress).
+    } else if (newState.status == CallWatchdogStatus.ok) {
       _cancelFailureTimer();
     }
     if (newState.status == CallWatchdogStatus.ok) {
