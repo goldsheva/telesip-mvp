@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/core/providers/sip_providers.dart';
+import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/sip/sip_engine.dart';
 
 enum CallStatus { dialing, ringing, connected, ended }
@@ -50,22 +51,32 @@ class CallInfo {
 }
 
 class CallState {
-  const CallState({required this.calls, this.activeCallId});
+  const CallState({
+    required this.calls,
+    this.activeCallId,
+    this.errorMessage,
+  });
 
-  factory CallState.initial() => const CallState(calls: {});
+  factory CallState.initial() => const CallState(calls: {}, errorMessage: null);
 
   final Map<String, CallInfo> calls;
   final String? activeCallId;
+  final String? errorMessage;
 
   CallInfo? get activeCall => activeCallId != null ? calls[activeCallId] : null;
 
   List<CallInfo> get history =>
       calls.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-  CallState copyWith({Map<String, CallInfo>? calls, String? activeCallId}) {
+  CallState copyWith({
+    Map<String, CallInfo>? calls,
+    String? activeCallId,
+    String? errorMessage,
+  }) {
     return CallState(
       calls: calls ?? this.calls,
       activeCallId: activeCallId ?? this.activeCallId,
+      errorMessage: errorMessage ?? this.errorMessage,
     );
   }
 }
@@ -73,12 +84,20 @@ class CallState {
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
+  bool _isRegistered = false;
+  int? _registeredUserId;
+  PbxSipUser? _lastKnownUser;
 
   Future<void> startCall(String destination) async {
     if (state.activeCallId != null) return;
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return;
+    if (!_isRegistered) {
+      _setError('SIP не зарегистрирован');
+      return;
+    }
     final callId = await _engine.startCall(trimmed);
+    _clearError();
     state = state.copyWith(activeCallId: callId);
   }
 
@@ -89,6 +108,46 @@ class CallNotifier extends Notifier<CallState> {
   Future<void> sendDtmf(String callId, String digits) async {
     if (digits.isEmpty) return;
     await _engine.sendDtmf(callId, digits);
+  }
+
+  Future<void> ensureRegistered(PbxSipUser user) async {
+    _lastKnownUser = user;
+    if (_isRegistered && _registeredUserId == user.pbxSipUserId) return;
+
+    final connections = user.sipConnections;
+    if (connections.isEmpty) {
+      _setError('Нет доступных SIP серверов');
+      return;
+    }
+    final connection = connections.firstWhere(
+      (c) => c.pbxSipProtocol.toLowerCase().contains('ws'),
+      orElse: () => connections.first,
+    );
+
+    final protocol = connection.pbxSipProtocol.toLowerCase();
+    final scheme = protocol.contains('wss')
+        ? 'wss'
+        : protocol.contains('ws')
+            ? 'ws'
+            : null;
+    if (scheme == null) {
+      _setError('Поддерживается только WS/WSS');
+      return;
+    }
+
+    final wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
+    final uri = 'sip:${user.sipLogin}@${connection.pbxSipUrl}';
+    try {
+      _clearError();
+      await _engine.register(
+        uri: uri,
+        password: user.sipPassword,
+        wsUrl: wsUrl,
+        displayName: user.sipLogin,
+      );
+    } catch (error) {
+      _setError('Ошибка регистрации SIP: $error');
+    }
   }
 
   @override
@@ -103,7 +162,22 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _onEvent(SipEvent event) {
-    if (event.type == SipEventType.registration) return;
+    if (event.type == SipEventType.registration) {
+      final registrationState = event.registrationState;
+      if (registrationState == SipRegistrationState.registered) {
+        _isRegistered = true;
+        _registeredUserId = _lastKnownUser?.pbxSipUserId;
+        _clearError();
+      } else if (registrationState == SipRegistrationState.failed) {
+        _isRegistered = false;
+        _setError(event.message ?? 'Ошибка регистрации SIP');
+      } else if (registrationState == SipRegistrationState.unregistered ||
+          registrationState == SipRegistrationState.none) {
+        _isRegistered = false;
+        _registeredUserId = null;
+      }
+      return;
+    }
     final callId = event.callId;
     if (callId == null) return;
 
@@ -124,9 +198,6 @@ class CallNotifier extends Notifier<CallState> {
           : previous?.connectedAt,
       endedAt: status == CallStatus.ended ? event.timestamp : previous?.endedAt,
       timeline: logs,
-      errorMessage: event.type == SipEventType.error
-          ? event.message
-          : previous?.errorMessage,
     );
 
     var activeCallId = state.activeCallId;
@@ -138,7 +209,13 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId ??= callId;
     }
 
-    state = state.copyWith(calls: updated, activeCallId: activeCallId);
+    final errorMessage =
+        event.type == SipEventType.error ? event.message ?? 'SIP error' : null;
+    state = state.copyWith(
+      calls: updated,
+      activeCallId: activeCallId,
+      errorMessage: errorMessage,
+    );
   }
 
   CallStatus _mapStatus(SipEventType event) {
@@ -163,6 +240,16 @@ class CallNotifier extends Notifier<CallState> {
   String _describe(SipEvent event) {
     final payload = event.message != null ? ' (${event.message})' : '';
     return '${event.type.name.toUpperCase()}$payload';
+  }
+
+  void _setError(String message) {
+    state = state.copyWith(errorMessage: message);
+  }
+
+  void _clearError() {
+    if (state.errorMessage != null) {
+      state = state.copyWith(errorMessage: null);
+    }
   }
 }
 

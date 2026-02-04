@@ -30,6 +30,19 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   bool _isSpeakerOn = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _registerSipUser());
+    ref.listen<CallState>(callControllerProvider, (previous, next) {
+      final message = next.errorMessage;
+      if (message != null && message.isNotEmpty && message != previous?.errorMessage) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _numberController.dispose();
     super.dispose();
@@ -74,6 +87,12 @@ class _DialerPageState extends ConsumerState<DialerPage> {
         onKey: (k) => ref.read(callControllerProvider.notifier).sendDtmf(active.id, k),
       ),
     );
+  }
+
+  void _registerSipUser() {
+    final user = widget.sipUser;
+    if (user == null) return;
+    ref.read(callControllerProvider.notifier).ensureRegistered(user);
   }
 
   @override

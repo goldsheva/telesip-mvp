@@ -214,6 +214,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
         SipRegistrationState.failed,
         message: error.toString(),
       );
+      _emitError('Ошибка регистрации SIP: $error');
     }
   }
 
@@ -258,6 +259,11 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       callId: callId,
       message: 'Набор $target',
     );
+    if (_registrationState != SipRegistrationState.registered) {
+      _emitError('SIP не зарегистрирован', callId: callId);
+      _cleanupCall(callId, callId);
+      return callId;
+    }
     final started = await _helper.call(target, voiceOnly: true);
     if (!started) {
       _emitError('Не удалось начать вызов', callId: callId);
@@ -266,8 +272,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
         callId: callId,
         message: 'Вызов не пошёл',
       );
-      _currentCallId = null;
-      _callReferences.remove(callId);
+      _cleanupCall(callId, callId);
     }
     return callId;
   }
