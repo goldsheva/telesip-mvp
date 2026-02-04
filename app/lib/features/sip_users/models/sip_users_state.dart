@@ -5,4 +5,8 @@ class SipUsersState {
   final List<SipUser> items;
 
   const SipUsersState({required this.total, required this.items});
+
+  static SipUser itemFromJson(Map<String, dynamic> json) {
+    return SipUser.fromJson(json);
+  }
 }

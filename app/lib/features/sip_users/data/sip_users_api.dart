@@ -1,58 +1,69 @@
-import 'dart:convert';
-
-import 'package:app/core/network/api_client.dart';
-import 'package:app/core/network/api_endpoints.dart';
-import 'package:app/features/sip_users/models/sip_user.dart';
+import 'package:app/config/env_config.dart';
+import 'package:app/core/network/api_exception.dart';
+import 'package:app/core/network/graphql_client.dart';
 import 'package:app/features/sip_users/models/sip_users_state.dart';
 
 class SipUsersApi {
-  const SipUsersApi(this._apiClient);
+  const SipUsersApi(this._graphQLClient);
 
-  final ApiClient _apiClient;
+  final GraphqlClient _graphQLClient;
 
   Future<SipUsersState> fetchSipUsersState() async {
-    final response = await _apiClient.get(ApiEndpoints.sipUsersList);
+    const request = GraphqlRequest(
+      query: _sipUsersQuery,
+      operationName: 'sipUsers',
+    );
+    final decoded = await _graphQLClient.execute(request, EnvConfig.graphqlUrl);
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'SipUsers failed: ${response.statusCode} ${response.body}',
-      );
+    final errors = decoded['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      final first = errors.first;
+      final message = (first is Map && first['message'] is String)
+          ? first['message'] as String
+          : 'GraphQL error';
+      throw ApiException.network(message);
     }
 
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception('Unexpected response: ${response.body}');
+    final data = decoded['data'] as Map<String, dynamic>?;
+    final sipUsersWrapper = data?['sipUsers'] as Map<String, dynamic>?;
+    if (sipUsersWrapper == null) {
+      throw ApiException.network('Missing sipUsers payload');
     }
 
-    final data = decoded['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('Missing "data" object: ${response.body}');
-    }
-
-    final wrap = data['sipUsers'];
-    if (wrap is! Map<String, dynamic>) {
-      throw Exception('Missing "data.sipUsers" object: ${response.body}');
-    }
-
-    final list = wrap['sipUsers'];
+    final total = (sipUsersWrapper['total'] as num?)?.toInt() ?? 0;
+    final list = sipUsersWrapper['sipUsers'];
     if (list is! List) {
-      throw Exception(
-        'Missing "data.sipUsers.sipUsers" list: ${response.body}',
-      );
+      throw ApiException.network('Unexpected sipUsers list');
     }
 
     final items = list
         .whereType<Map<String, dynamic>>()
-        .map(SipUser.fromJson)
+        .map(SipUsersState.itemFromJson)
         .toList();
-
-    final total = (wrap['total'] as num?)?.toInt() ?? 0;
 
     return SipUsersState(total: total, items: items);
   }
-
-  Future<List<SipUser>> fetchSipUsers() =>
-      fetchSipUsersState().then((state) => state.items);
-
-  Future<int> fetchTotal() => fetchSipUsersState().then((state) => state.total);
 }
+
+const _sipUsersQuery = r'''
+query sipUsers {
+  sipUsers {
+    total: total_count
+    sipUsers: pbx_sip_users {
+      sipUserId: pbx_sip_user_id
+      userId: user_id
+      sipLogin: sip_login
+      sipPassword: sip_password
+      dialplanId: dialplan_id
+      dongleId: dongle_id
+      pbxSipUrl: pbx_sip_url
+      sipConnections: pbx_sip_connections {
+        sipUrl: pbx_sip_url
+        sipPort: pbx_sip_port
+        sipProtocol: pbx_sip_protocol
+      }
+    }
+    __typename
+  }
+}
+''';

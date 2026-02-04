@@ -6,7 +6,5 @@ class ApiEndpoints {
   static String get authLogin => '$_baseApiUrl/auth/login';
   static String get authRefresh => '$_baseApiUrl/auth/refresh';
 
-  static String get donglesList => '$_baseApiUrl/dongles';
-
   static String get sipUsersList => '$_baseApiUrl/sip/users';
 }

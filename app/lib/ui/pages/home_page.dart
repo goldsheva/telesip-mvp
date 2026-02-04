@@ -2,33 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/features/auth/state/auth_notifier.dart';
-import 'package:app/features/dongles/state/dongle_list_notifier.dart';
+import 'package:app/features/sip_users/models/sip_user.dart';
+import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'package:app/ui/pages/dialer_page.dart';
-import 'package:app/ui/widgets/dongle_card.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   Future<void> _refresh(WidgetRef ref) async {
-    ref.invalidate(dongleListProvider);
-    await ref.read(dongleListProvider.future);
+    ref.invalidate(sipUsersProvider);
+    await ref.read(sipUsersProvider.future);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dongles = ref.watch(dongleListProvider);
+    final sipUsers = ref.watch(sipUsersProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Dongles',
+          'SIP Users',
           style: Theme.of(
             context,
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
         ),
         actions: [
           IconButton(
-            onPressed: () => ref.invalidate(dongleListProvider),
+            onPressed: () => ref.invalidate(sipUsersProvider),
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
@@ -39,40 +39,30 @@ class HomePage extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () => _refresh(ref),
-        child: dongles.when(
+        child: sipUsers.when(
           loading: () =>
               const _CenteredScroll(child: CircularProgressIndicator()),
           error: (e, _) => _CenteredScroll(
             child: _ErrorState(
               message: e.toString(),
-              onRetry: () => ref.invalidate(dongleListProvider),
+              onRetry: () => ref.invalidate(sipUsersProvider),
             ),
           ),
-          data: (items) {
-            if (items.isEmpty) {
+          data: (state) {
+            if (state.items.isEmpty) {
               return _CenteredScroll(
                 child: _EmptyState(
-                  onRefresh: () => ref.invalidate(dongleListProvider),
+                  onRefresh: () => ref.invalidate(sipUsersProvider),
                 ),
               );
             }
 
-            final w = MediaQuery.of(context).size.width;
-            final cols = w < 650 ? 1 : (w < 1100 ? 2 : 4);
-
-            return Padding(
+            return ListView.separated(
               padding: const EdgeInsets.all(16),
-              child: GridView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: items.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: cols,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.45,
-                ),
-                itemBuilder: (_, i) => DongleCard(dongle: items[i]),
-              ),
+              itemCount: state.items.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (_, index) =>
+                  _SipUserTile(sipUser: state.items[index]),
             );
           },
         ),
@@ -118,10 +108,10 @@ class _EmptyState extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.usb_rounded, size: 52),
+        const Icon(Icons.person_off, size: 52),
         const SizedBox(height: 10),
         Text(
-          'No dongles',
+          'No SIP users',
           style: t.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 6),
@@ -152,7 +142,7 @@ class _ErrorState extends StatelessWidget {
         const Icon(Icons.error_outline_rounded, size: 52),
         const SizedBox(height: 10),
         Text(
-          'Failed to load dongles',
+          'Failed to load SIP users',
           style: t.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           textAlign: TextAlign.center,
         ),
@@ -167,6 +157,40 @@ class _ErrorState extends StatelessWidget {
         const SizedBox(height: 14),
         ElevatedButton(onPressed: onRetry, child: const Text('Try again')),
       ],
+    );
+  }
+}
+
+class _SipUserTile extends StatelessWidget {
+  const _SipUserTile({required this.sipUser});
+
+  final SipUser sipUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+
+    return ListTile(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
+      ),
+      tileColor: Theme.of(context).colorScheme.surface,
+      title: Text(
+        sipUser.sipLogin,
+        style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('ID: ${sipUser.sipUserId}', style: t.bodySmall),
+          if (sipUser.dongleId != null)
+            Text('Dongle #: ${sipUser.dongleId}', style: t.bodySmall),
+        ],
+      ),
+      trailing: const Icon(Icons.chevron_right),
     );
   }
 }
