@@ -16,6 +16,7 @@ class CallInfo {
     this.connectedAt,
     this.endedAt,
     this.timeline = const [],
+    this.errorMessage,
   });
 
   final String id;
@@ -25,6 +26,7 @@ class CallInfo {
   final DateTime? connectedAt;
   final DateTime? endedAt;
   final List<String> timeline;
+  final String? errorMessage;
 
   CallInfo copyWith({
     String? destination,
@@ -32,6 +34,7 @@ class CallInfo {
     DateTime? connectedAt,
     DateTime? endedAt,
     List<String>? timeline,
+    String? errorMessage,
   }) {
     return CallInfo(
       id: id,
@@ -41,6 +44,7 @@ class CallInfo {
       connectedAt: connectedAt ?? this.connectedAt,
       endedAt: endedAt ?? this.endedAt,
       timeline: timeline ?? this.timeline,
+      errorMessage: errorMessage ?? this.errorMessage,
     );
   }
 }
@@ -68,9 +72,10 @@ class CallState {
 
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
-  late final StreamSubscription<SipEvent> _subscription;
+  ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
 
   Future<void> startCall(String destination) async {
+    if (state.activeCallId != null) return;
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return;
     final callId = await _engine.startCall(trimmed);
@@ -89,8 +94,11 @@ class CallNotifier extends Notifier<CallState> {
   @override
   CallState build() {
     _engine = ref.read(sipEngineProvider);
-    _subscription = _engine.events.listen(_onEvent);
-    ref.onDispose(() => _subscription.cancel());
+    _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
+      sipEventsProvider,
+      (previous, next) => next.whenData(_onEvent),
+    );
+    ref.onDispose(() => _eventSubscription?.close());
     return CallState.initial();
   }
 
@@ -116,6 +124,9 @@ class CallNotifier extends Notifier<CallState> {
           : previous?.connectedAt,
       endedAt: status == CallStatus.ended ? event.timestamp : previous?.endedAt,
       timeline: logs,
+      errorMessage: event.type == SipEventType.error
+          ? event.message
+          : previous?.errorMessage,
     );
 
     var activeCallId = state.activeCallId;
