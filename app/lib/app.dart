@@ -12,24 +12,33 @@ class App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,
-      home: auth.when(
-        loading: () => const _Splash(),
-        error: (e, _) => Scaffold(body: Center(child: Text(e.toString()))),
-        data: (s) {
-          return switch (s.status) {
-            AuthStatus.authenticated => const HomePage(),
-            AuthStatus.unauthenticated => LoginPage(error: s.error),
-            AuthStatus.unknown => const _Splash(),
-          };
-        },
-      ),
+      home: const _AuthGate(),
+    );
+  }
+}
+
+class _AuthGate extends ConsumerWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+
+    return auth.when(
+      loading: () => const _Splash(),
+      error: (e, _) => LoginPage(error: e.toString()),
+      data: (s) {
+        return switch (s.status) {
+          AuthStatus.authenticated => const HomePage(),
+          AuthStatus.unauthenticated => LoginPage(error: s.error),
+          AuthStatus.unknown => const _Splash(),
+        };
+      },
     );
   }
 }

@@ -10,20 +10,25 @@ final authControllerProvider =
 class AuthController extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
-    final tokens = await ref.read(authTokensStorageProvider).readTokens();
+    try {
+      final tokens = await ref.read(authTokensStorageProvider).readTokens();
 
-    final next = (tokens == null)
-        ? const AuthState.unauthenticated()
-        : AuthState.authenticated(tokens);
+      final next = (tokens == null)
+          ? const AuthState.unauthenticated()
+          : AuthState.authenticated(tokens);
 
-    _invalidateCaches();
-    return next;
+      _invalidateCaches();
+      return next;
+    } catch (e) {
+      _invalidateCaches();
+      return AuthState.unauthenticated(error: e.toString());
+    }
   }
 
   Future<void> login(String email, String password) async {
     state = const AsyncLoading();
 
-    state = await AsyncValue.guard(() async {
+    try {
       final tokens = await ref.read(authApiProvider).login(
             email: email,
             password: password,
@@ -31,18 +36,24 @@ class AuthController extends AsyncNotifier<AuthState> {
 
       await ref.read(authTokensStorageProvider).writeTokens(tokens);
       _invalidateCaches();
-      return AuthState.authenticated(tokens);
-    });
+      state = AsyncData(AuthState.authenticated(tokens));
+    } catch (e) {
+      _invalidateCaches();
+      state = AsyncData(AuthState.unauthenticated(error: e.toString()));
+    }
   }
 
   Future<void> logout() async {
     state = const AsyncLoading();
 
-    state = await AsyncValue.guard(() async {
+    try {
       await ref.read(authTokensStorageProvider).clear();
       _invalidateCaches();
-      return const AuthState.unauthenticated();
-    });
+      state = const AsyncData(AuthState.unauthenticated());
+    } catch (e) {
+      _invalidateCaches();
+      state = AsyncData(AuthState.unauthenticated(error: e.toString()));
+    }
   }
 
   void _invalidateCaches() {
