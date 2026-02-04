@@ -67,39 +67,82 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final sipUser = widget.sipUser;
 
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
+        elevation: 0,
         title: Text(
           sipUser != null ? 'Dialer · ${sipUser.sipLogin}' : 'Dialer',
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _numberController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Номер',
-                border: OutlineInputBorder(),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 12,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: _numberController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    hintText: 'Введите номер',
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    prefixIcon: const Icon(Icons.dialpad_outlined),
+                    suffixIcon: IconButton(
+                      onPressed: () {
+                        _numberController.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  onChanged: (_) => setState(() {}),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildKeypad(),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: active != null ? null : _call,
-              icon: const Icon(Icons.call),
-              label: const Text('Позвонить'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+              const SizedBox(height: 24),
+              _buildKeypad(),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 56,
+                child: ElevatedButton.icon(
+                  onPressed: active != null ? null : _call,
+                  icon: const Icon(Icons.call),
+                  label: const Text('Позвонить'),
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    backgroundColor: Colors.green,
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            if (active != null) ...[
-              Card(
-                child: Padding(
+              if (active != null) ...[
+                const SizedBox(height: 20),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -121,19 +164,22 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                         ),
                         const SizedBox(height: 6),
                         ...active.timeline.reversed.map(
-                          (event) => Text('• $event', maxLines: 2),
+                          (event) => Text(
+                            '• $event',
+                            maxLines: 2,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                       ],
                       TextField(
                         controller: _dtmfController,
                         decoration: const InputDecoration(
                           labelText: 'DTMF',
                           hintText: '123#',
-                          border: OutlineInputBorder(),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
@@ -156,36 +202,30 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (sipUser != null) ...[
-              const SizedBox(height: 16),
-              Text('Contacts', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              _ContactList(
-                onSelect: (value) {
-                  _numberController.text = value;
-                },
-              ),
-            ],
-            if (state.history.isNotEmpty) ...[
-              Text(
-                'История звонков',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              ...state.history.map(
-                (call) => ListTile(
-                  title: Text(call.destination),
-                  subtitle: Text(_describeStatus(call.status)),
-                  trailing: Text(
-                    '${call.createdAt.hour.toString().padLeft(2, '0')}:${call.createdAt.minute.toString().padLeft(2, '0')}',
+              ],
+              if (state.history.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Text(
+                  'История звонков',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 12),
+                ...state.history.map(
+                  (call) => ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    tileColor: Theme.of(context).colorScheme.surface,
+                    title: Text(call.destination),
+                    subtitle: Text(_describeStatus(call.status)),
+                    trailing: Text(
+                      '${call.createdAt.hour.toString().padLeft(2, '0')}:${call.createdAt.minute.toString().padLeft(2, '0')}',
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -194,23 +234,19 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   Widget _buildKeypad() {
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
-    return GridView.builder(
+    return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: keys.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.1,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemBuilder: (context, index) {
-        final key = keys[index];
-        return ElevatedButton(
-          onPressed: () => _appendDigit(key),
-          child: Text(key, style: const TextStyle(fontSize: 20)),
-        );
-      },
+      crossAxisCount: 3,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.0,
+      children: keys
+          .map((key) => _DialerKey(
+                label: key,
+                onTap: () => _appendDigit(key),
+              ))
+          .toList(),
     );
   }
 
@@ -228,33 +264,34 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   }
 }
 
-class _ContactList extends StatelessWidget {
-  const _ContactList({required this.onSelect});
+class _DialerKey extends StatelessWidget {
+  const _DialerKey({
+    required this.label,
+    required this.onTap,
+  });
 
-  final ValueChanged<String> onSelect;
-
-  static const _contacts = [
-    {'name': 'Office', 'number': '+74951234567'},
-    {'name': 'Support', 'number': '+74959876543'},
-    {'name': 'Client', 'number': '+74955667788'},
-  ];
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: _contacts.map((contact) {
-        final number = contact['number']!;
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: OutlinedButton(
-            onPressed: () => onSelect(number),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [Text('${contact['name']}'), Text(number)],
-            ),
-          ),
-        );
-      }).toList(),
+    final theme = Theme.of(context);
+    return ElevatedButton(
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.green,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        textStyle: theme.textTheme.headlineMedium?.copyWith(color: Colors.white),
+        elevation: 4,
+        shadowColor: Colors.black26,
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.headlineMedium?.copyWith(
+          color: Colors.white,
+          letterSpacing: 1,
+        ),
+      ),
     );
   }
 }

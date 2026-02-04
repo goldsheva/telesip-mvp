@@ -75,15 +75,15 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
 
-    final generalUser = state.items.firstWhere(
+    final generalSipClient = state.items.firstWhere(
       (user) => user.dongleId == null,
       orElse: () => state.items.first,
     );
-    final visibleUsers = state.items
+    final visibleSipClients = state.items
         .where((user) => user.dongleId != null)
         .toList();
 
-    if (visibleUsers.isEmpty) {
+    if (visibleSipClients.isEmpty) {
       return RefreshIndicator(
         onRefresh: _refresh,
         child: _CenteredScroll(child: _EmptyState(onRefresh: _refresh)),
@@ -91,6 +91,17 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     final dongleMap = {for (var dongle in dongles) dongle.dongleId: dongle};
+    final sortedSipClients = [...visibleSipClients];
+    sortedSipClients.sort((a, b) {
+      final isCallableA =
+          dongleMap[a.dongleId!]?.isCallable ?? false;
+      final isCallableB =
+          dongleMap[b.dongleId!]?.isCallable ?? false;
+      if (isCallableA == isCallableB) {
+        return 0;
+      }
+      return isCallableA ? -1 : 1;
+    });
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -101,8 +112,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             sliver: SliverToBoxAdapter(
               child: _GeneralSettingsCard(
-                totalItems: visibleUsers.length,
-                generalUser: generalUser,
+                totalItems: visibleSipClients.length,
+                generalSipClient: generalSipClient,
               ),
             ),
           ),
@@ -110,7 +121,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             sliver: SliverToBoxAdapter(
               child: Text(
-                '${visibleUsers.length} SIP users',
+                '${visibleSipClients.length} SIP clients',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ),
@@ -119,7 +130,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate((context, index) {
-                final sipUser = visibleUsers[index];
+                final sipUser = sortedSipClients[index];
                 final dongle = sipUser.dongleId != null
                     ? dongleMap[sipUser.dongleId!]
                     : null;
@@ -137,7 +148,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                 );
-              }, childCount: visibleUsers.length),
+              }, childCount: visibleSipClients.length),
             ),
           ),
           const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
@@ -150,11 +161,11 @@ class _HomePageState extends ConsumerState<HomePage> {
 class _GeneralSettingsCard extends StatelessWidget {
   const _GeneralSettingsCard({
     required this.totalItems,
-    required this.generalUser,
+    required this.generalSipClient,
   });
 
   final int totalItems;
-  final PbxSipUser generalUser;
+  final PbxSipUser generalSipClient;
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +197,7 @@ class _GeneralSettingsCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Manage ${totalItems > 1 ? 'all' : 'the'} $totalItems SIP user${totalItems == 1 ? '' : 's'}',
+                'Manage ${totalItems > 1 ? 'all' : 'the'} $totalItems SIP client${totalItems == 1 ? '' : 's'}',
                 style: theme.textTheme.bodyMedium,
               ),
             ],
@@ -195,7 +206,8 @@ class _GeneralSettingsCard extends StatelessWidget {
             onPressed: () {
               showDialog<void>(
                 context: context,
-                builder: (_) => _GeneralSettingsDialog(user: generalUser),
+                builder: (_) =>
+                    _GeneralSettingsDialog(sipClient: generalSipClient),
               );
             },
             icon: const Icon(Icons.info_outline),
@@ -394,7 +406,7 @@ class _EmptyState extends StatelessWidget {
         const Icon(Icons.person_off, size: 52),
         const SizedBox(height: 10),
         Text(
-          'No SIP users',
+          'No SIP clients',
           style: t.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 6),
@@ -425,7 +437,7 @@ class _ErrorState extends StatelessWidget {
         const Icon(Icons.error_outline_rounded, size: 52),
         const SizedBox(height: 10),
         Text(
-          'Failed to load SIP users',
+          'Failed to load SIP clients',
           style: t.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           textAlign: TextAlign.center,
         ),
@@ -449,9 +461,9 @@ Color _shadowColor(Color color, double opacity) {
 }
 
 class _GeneralSettingsDialog extends StatelessWidget {
-  const _GeneralSettingsDialog({required this.user});
+  const _GeneralSettingsDialog({required this.sipClient});
 
-  final PbxSipUser user;
+  final PbxSipUser sipClient;
 
   @override
   Widget build(BuildContext context) {
@@ -486,24 +498,24 @@ class _GeneralSettingsDialog extends StatelessWidget {
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
-            _InfoLine(label: 'SIP Username', value: user.sipLogin),
+            _InfoLine(label: 'SIP Username', value: sipClient.sipLogin),
             const SizedBox(height: 6),
-            _InfoLine(label: 'SIP Password', value: user.sipPassword),
-            for (var i = 0; i < user.sipConnections.length && i < 2; i++) ...[
+            _InfoLine(label: 'SIP Password', value: sipClient.sipPassword),
+            for (var i = 0; i < sipClient.sipConnections.length && i < 2; i++) ...[
               const SizedBox(height: 6),
               _InfoLine(
                 label: 'SIP Server',
-                value: user.sipConnections[i].pbxSipUrl,
+                value: sipClient.sipConnections[i].pbxSipUrl,
               ),
               const SizedBox(height: 6),
               _InfoLine(
                 label: 'SIP Port',
-                value: user.sipConnections[i].pbxSipPort.toString(),
+                value: sipClient.sipConnections[i].pbxSipPort.toString(),
               ),
               const SizedBox(height: 6),
               _InfoLine(
                 label: 'Protocol',
-                value: user.sipConnections[i].pbxSipProtocol,
+                value: sipClient.sipConnections[i].pbxSipProtocol,
               ),
             ],
           ],
