@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:flutter_native_contact_picker/model/contact.dart';
 
+import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 
@@ -299,9 +300,11 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
     final active = state.activeCall;
     final hasActiveCall = active != null && active.status != CallStatus.ended;
+    final watchdogState = state.watchdogState;
 
     final titleText = widget.dongleName ?? widget.sipUser?.sipLogin ?? 'Набор';
     final subtitle = widget.dongleNumber;
+    final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -428,6 +431,36 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                     ],
                                   ],
                                 ),
+                                if (watchdogState.status ==
+                                    CallWatchdogStatus.reconnecting) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    watchdogState.message,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                ],
+                                if (watchdogState.status ==
+                                    CallWatchdogStatus.failed) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    watchdogState.message,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: Colors.redAccent,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: hasActiveCall
+                                          ? () => notifier.retryCallAudio()
+                                          : null,
+                                      child: const Text('Retry audio'),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

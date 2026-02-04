@@ -18,6 +18,7 @@ abstract class SipEngine {
   Future<void> hangup(String callId);
   Future<void> sendDtmf(String callId, String digits);
   Future<void> dispose();
+  Call? getCall(String callId);
   Stream<SipEvent> get events;
 }
 
@@ -352,6 +353,12 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     if (_currentCallId == pendingId || _currentCallId == realId) {
       _currentCallId = null;
     }
+  }
+
+  @override
+  Call? getCall(String callId) {
+    final realId = _callIdAliases[callId] ?? callId;
+    return _callReferences[realId];
   }
 
   @override

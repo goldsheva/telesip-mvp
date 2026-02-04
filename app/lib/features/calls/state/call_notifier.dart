@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/env_config.dart';
 import 'package:app/core/providers/sip_providers.dart';
+import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/sip/sip_engine.dart';
 
@@ -52,13 +54,23 @@ class CallInfo {
 }
 
 class CallState {
-  const CallState({required this.calls, this.activeCallId, this.errorMessage});
+  const CallState({
+    required this.calls,
+    this.activeCallId,
+    this.errorMessage,
+    required this.watchdogState,
+  });
 
-  factory CallState.initial() => const CallState(calls: {}, errorMessage: null);
+  factory CallState.initial() => CallState(
+    calls: {},
+    errorMessage: null,
+    watchdogState: CallWatchdogState.ok(),
+  );
 
   final Map<String, CallInfo> calls;
   final String? activeCallId;
   final String? errorMessage;
+  final CallWatchdogState watchdogState;
 
   CallInfo? get activeCall => activeCallId != null ? calls[activeCallId] : null;
 
@@ -69,11 +81,13 @@ class CallState {
     Map<String, CallInfo>? calls,
     String? activeCallId,
     String? errorMessage,
+    CallWatchdogState? watchdogState,
   }) {
     return CallState(
       calls: calls ?? this.calls,
       activeCallId: activeCallId ?? this.activeCallId,
       errorMessage: errorMessage ?? this.errorMessage,
+      watchdogState: watchdogState ?? this.watchdogState,
     );
   }
 }
@@ -85,6 +99,13 @@ class CallNotifier extends Notifier<CallState> {
   int? _registeredUserId;
   PbxSipUser? _lastKnownUser;
   Timer? _dialTimeoutTimer;
+  CallWebRtcWatchdog? _webRtcWatchdog;
+  String? _watchdogCallId;
+  Timer? _watchdogFailureTimer;
+  String? _failureTimerCallId;
+  bool _userInitiatedRetry = false;
+  Timer? _retrySuppressionTimer;
+  bool _watchdogErrorActive = false;
   static const Duration _dialTimeout = Duration(seconds: 25);
 
   Future<void> startCall(String destination) async {
@@ -233,11 +254,13 @@ class CallNotifier extends Notifier<CallState> {
     final errorMessage = event.type == SipEventType.error
         ? event.message ?? 'SIP error'
         : null;
+    final previousState = state;
     state = state.copyWith(
       calls: updated,
       activeCallId: activeCallId,
       errorMessage: errorMessage,
     );
+    _handleWatchdogActivation(previousState, state);
   }
 
   CallStatus _mapStatus(SipEventType event) {
@@ -287,6 +310,157 @@ class CallNotifier extends Notifier<CallState> {
   void _cancelDialTimeout() {
     _dialTimeoutTimer?.cancel();
     _dialTimeoutTimer = null;
+  }
+
+  void _handleWatchdogActivation(CallState previous, CallState next) {
+    final prevStatus = previous.activeCall?.status;
+    final nextStatus = next.activeCall?.status;
+    final hadConnected = prevStatus == CallStatus.connected;
+    final hasConnected = nextStatus == CallStatus.connected;
+
+    if (hasConnected && !hadConnected) {
+      final callId = next.activeCall?.id;
+      if (callId != null) {
+        _attachWatchdog(callId);
+      }
+    } else if (!hasConnected && hadConnected) {
+      _disposeWatchdog();
+    }
+  }
+
+  void _attachWatchdog(String callId) {
+    if (_watchdogCallId == callId) return;
+    _disposeWatchdog();
+    final call = _engine.getCall(callId);
+    if (call == null || call.peerConnection == null) return;
+    _webRtcWatchdog = CallWebRtcWatchdog(
+      call: call,
+      onStateChange: _handleWatchdogStateChange,
+      onFailed: () => _handleWatchdogFailure(callId),
+    );
+    _watchdogCallId = callId;
+    _handleWatchdogStateChange(CallWatchdogState.ok());
+    debugPrint('Watchdog attached for call $callId');
+  }
+
+  void _handleWatchdogStateChange(CallWatchdogState newState) {
+    debugPrint(
+      'Watchdog($_watchdogCallId) state -> ${newState.status}: ${newState.message}',
+    );
+    state = state.copyWith(watchdogState: newState);
+    if (newState.status == CallWatchdogStatus.failed &&
+        state.activeCall?.status == CallStatus.connected &&
+        !_userInitiatedRetry) {
+      _startFailureTimer(state.activeCall!.id);
+    } else {
+      // Cancel pending hangup timer as soon as we are no longer in FAILED state
+      // (e.g. while reconnecting/ICE restart is in progress).
+      _cancelFailureTimer();
+    }
+    if (newState.status == CallWatchdogStatus.ok) {
+      _userInitiatedRetry = false;
+      _cancelRetrySuppressionTimer();
+      _clearWatchdogError();
+    }
+  }
+
+  void _handleWatchdogFailure(String callId) {
+    if (state.activeCall?.id != callId) return;
+    debugPrint('Watchdog failure triggered for $callId');
+    _watchdogErrorActive = true;
+    state = state.copyWith(
+      errorMessage: 'Сеть нестабильна',
+      watchdogState: CallWatchdogState.failed(),
+    );
+  }
+
+  void _startFailureTimer(String callId) {
+    if (_failureTimerCallId == callId) return;
+    _cancelFailureTimer();
+    _failureTimerCallId = callId;
+    _watchdogFailureTimer = Timer(const Duration(seconds: 20), () {
+      if (_failureTimerCallId != callId) return;
+      if (state.activeCall?.id != callId) return;
+      if (state.watchdogState.status != CallWatchdogStatus.failed) return;
+      if (_userInitiatedRetry) {
+        debugPrint('Watchdog hangup suppressed for $callId (user retry)');
+        return;
+      }
+      debugPrint('Watchdog hangup timer expired for $callId');
+      _watchdogErrorActive = true;
+      _setError('Сеть нестабильна, завершаем вызов');
+      _engine.hangup(callId);
+    });
+    debugPrint('Watchdog failure timer started for $callId');
+  }
+
+  void _cancelFailureTimer() {
+    if (_watchdogFailureTimer != null) {
+      debugPrint(
+        'Watchdog failure timer cancelled for ${_failureTimerCallId ?? _watchdogCallId}',
+      );
+    }
+    _watchdogFailureTimer?.cancel();
+    _watchdogFailureTimer = null;
+    _failureTimerCallId = null;
+  }
+
+  void _startRetrySuppressionTimer() {
+    _retrySuppressionTimer?.cancel();
+    _retrySuppressionTimer = Timer(const Duration(seconds: 10), () {
+      debugPrint('Retry suppression ended for $_watchdogCallId');
+      _userInitiatedRetry = false;
+      _retrySuppressionTimer = null;
+      if (state.watchdogState.status == CallWatchdogStatus.failed &&
+          state.activeCall?.status == CallStatus.connected) {
+        _startFailureTimer(state.activeCall!.id);
+      }
+    });
+    debugPrint('Retry suppression timer started for $_watchdogCallId');
+  }
+
+  void _cancelRetrySuppressionTimer() {
+    if (_retrySuppressionTimer != null) {
+      debugPrint('Retry suppression timer cancelled for $_watchdogCallId');
+    }
+    _retrySuppressionTimer?.cancel();
+    _retrySuppressionTimer = null;
+  }
+
+  void _clearWatchdogError() {
+    if (_watchdogErrorActive &&
+        (state.errorMessage == 'Сеть нестабильна' ||
+            state.errorMessage == 'Сеть нестабильна, завершаем вызов')) {
+      state = state.copyWith(errorMessage: null);
+    }
+    _watchdogErrorActive = false;
+  }
+
+  void _disposeWatchdog() {
+    _webRtcWatchdog?.dispose();
+    _webRtcWatchdog = null;
+    _watchdogCallId = null;
+    _cancelFailureTimer();
+    _cancelRetrySuppressionTimer();
+    _userInitiatedRetry = false;
+    _clearWatchdogError();
+    if (state.watchdogState.status != CallWatchdogStatus.ok) {
+      state = state.copyWith(watchdogState: CallWatchdogState.ok());
+    }
+  }
+
+  Future<void> retryCallAudio() async {
+    if (_webRtcWatchdog == null) return;
+    _userInitiatedRetry = true;
+    _cancelFailureTimer();
+    _startRetrySuppressionTimer();
+    await _webRtcWatchdog!.manualRestart();
+  }
+
+  @override
+  void dispose() {
+    _disposeWatchdog();
+    super.dispose();
   }
 }
 
