@@ -54,7 +54,10 @@ class ApiClient {
 
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      if (tokens != null) 'Authorization': 'Bearer ${tokens.accessToken}',
+      if (tokens != null) ...{
+        'Authorization': 'Bearer ${tokens.accessToken}',
+        'access-token': tokens.accessToken,
+      },
     };
 
     if (_shouldLog()) {
