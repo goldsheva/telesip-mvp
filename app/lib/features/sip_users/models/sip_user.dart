@@ -27,7 +27,10 @@ class SipUser {
   factory SipUser.fromJson(Map<String, dynamic> json) {
     final conns = json['sipConnections'];
     final list = (conns is List)
-        ? conns.whereType<Map<String, dynamic>>().map(SipConnection.fromJson).toList()
+        ? conns
+              .whereType<Map<String, dynamic>>()
+              .map(SipConnection.fromJson)
+              .toList()
         : const <SipConnection>[];
 
     return SipUser(

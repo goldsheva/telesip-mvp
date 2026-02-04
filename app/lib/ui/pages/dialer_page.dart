@@ -51,7 +51,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -110,8 +112,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 6),
-                        ...active.timeline
-                            .reversed
+                        ...active.timeline.reversed
                             .map((event) => Text('• $event', maxLines: 2))
                             .toList(),
                         const SizedBox(height: 8),
@@ -173,20 +174,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   }
 
   Widget _buildKeypad() {
-    const keys = [
-      '1',
-      '2',
-      '3',
-      '4',
-      '5',
-      '6',
-      '7',
-      '8',
-      '9',
-      '*',
-      '0',
-      '#',
-    ];
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
     return GridView.builder(
       shrinkWrap: true,
@@ -202,10 +190,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
         final key = keys[index];
         return ElevatedButton(
           onPressed: () => _appendDigit(key),
-          child: Text(
-            key,
-            style: const TextStyle(fontSize: 20),
-          ),
+          child: Text(key, style: const TextStyle(fontSize: 20)),
         );
       },
     );

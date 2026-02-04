@@ -17,12 +17,12 @@ class ApiClient {
     required RefreshFn refresh,
     AuthLostCallback? onAuthLost,
     http.Client? client,
-  })  : _readTokens = readTokens,
-        _writeTokens = writeTokens,
-        _clearTokens = clearTokens,
-        _refresh = refresh,
-        _onAuthLost = onAuthLost,
-        _client = client ?? http.Client();
+  }) : _readTokens = readTokens,
+       _writeTokens = writeTokens,
+       _clearTokens = clearTokens,
+       _refresh = refresh,
+       _onAuthLost = onAuthLost,
+       _client = client ?? http.Client();
 
   final TokensReader _readTokens;
   final TokensWriter _writeTokens;
@@ -80,7 +80,11 @@ class ApiClient {
       case 'GET':
         return _client.get(uri, headers: headers);
       case 'POST':
-        return _client.post(uri, headers: headers, body: jsonEncode(body ?? {}));
+        return _client.post(
+          uri,
+          headers: headers,
+          body: jsonEncode(body ?? {}),
+        );
       default:
         throw UnsupportedError('Unsupported method: $method');
     }

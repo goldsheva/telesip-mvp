@@ -12,8 +12,8 @@ class AuthState {
   const AuthState.unknown() : this._(AuthStatus.unknown);
 
   const AuthState.unauthenticated({String? error})
-      : this._(AuthStatus.unauthenticated, error: error);
+    : this._(AuthStatus.unauthenticated, error: error);
 
   const AuthState.authenticated(AuthTokens tokens)
-      : this._(AuthStatus.authenticated, tokens: tokens);
+    : this._(AuthStatus.authenticated, tokens: tokens);
 }

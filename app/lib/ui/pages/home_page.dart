@@ -22,7 +22,9 @@ class HomePage extends ConsumerWidget {
       appBar: AppBar(
         title: Text(
           'Dongles',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
         ),
         actions: [
           IconButton(
@@ -38,7 +40,8 @@ class HomePage extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () => _refresh(ref),
         child: dongles.when(
-          loading: () => const _CenteredScroll(child: CircularProgressIndicator()),
+          loading: () =>
+              const _CenteredScroll(child: CircularProgressIndicator()),
           error: (e, _) => _CenteredScroll(
             child: _ErrorState(
               message: e.toString(),
@@ -75,9 +78,9 @@ class HomePage extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const DialerPage()),
-        ),
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const DialerPage())),
         child: const Icon(Icons.dialpad),
       ),
     );
@@ -127,10 +130,7 @@ class _EmptyState extends StatelessWidget {
           style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 14),
-        ElevatedButton(
-          onPressed: onRefresh,
-          child: const Text('Refresh'),
-        ),
+        ElevatedButton(onPressed: onRefresh, child: const Text('Refresh')),
       ],
     );
   }
@@ -165,10 +165,7 @@ class _ErrorState extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 14),
-        ElevatedButton(
-          onPressed: onRetry,
-          child: const Text('Try again'),
-        ),
+        ElevatedButton(onPressed: onRetry, child: const Text('Try again')),
       ],
     );
   }

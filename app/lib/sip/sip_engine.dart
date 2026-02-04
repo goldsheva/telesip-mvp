@@ -84,7 +84,11 @@ class FakeSipEngine implements SipEngine {
   @override
   Future<void> initialize(SipConfig config) async {
     // Расширение будет нужно при интеграции настоящего движка.
-    _emit('fake-init', SipEventType.dialing, message: 'initialized ${config.username}');
+    _emit(
+      'fake-init',
+      SipEventType.dialing,
+      message: 'initialized ${config.username}',
+    );
     await Future.delayed(const Duration(milliseconds: 10));
   }
 
@@ -101,7 +105,12 @@ class FakeSipEngine implements SipEngine {
     _emit(callId, SipEventType.dialing, message: destination);
 
     _schedule(callId, dialingDelay, SipEventType.ringing, message: destination);
-    _schedule(callId, dialingDelay + ringingDelay, SipEventType.connected, message: destination);
+    _schedule(
+      callId,
+      dialingDelay + ringingDelay,
+      SipEventType.connected,
+      message: destination,
+    );
     _schedule(
       callId,
       dialingDelay + ringingDelay + connectedDelay,
@@ -136,7 +145,11 @@ class FakeSipEngine implements SipEngine {
 
   @override
   Future<void> setSpeaker(bool enable) async {
-    _emit('speaker', SipEventType.dtmf, message: 'speaker ${enable ? 'on' : 'off'}');
+    _emit(
+      'speaker',
+      SipEventType.dtmf,
+      message: 'speaker ${enable ? 'on' : 'off'}',
+    );
   }
 
   @override
@@ -144,7 +157,12 @@ class FakeSipEngine implements SipEngine {
     _emit(callId, SipEventType.dtmf, message: 'dtmf $digits');
   }
 
-  void _schedule(String callId, Duration delay, SipEventType type, {String? message}) {
+  void _schedule(
+    String callId,
+    Duration delay,
+    SipEventType type, {
+    String? message,
+  }) {
     final timer = Timer(delay, () => _emit(callId, type, message: message));
     _timers.putIfAbsent(callId, () => []).add(timer);
   }
@@ -156,12 +174,14 @@ class FakeSipEngine implements SipEngine {
 
   void _emit(String callId, SipEventType type, {String? message}) {
     if (_events.isClosed) return;
-    _events.add(SipEvent(
-      callId: callId,
-      type: type,
-      timestamp: DateTime.now(),
-      message: message,
-    ));
+    _events.add(
+      SipEvent(
+        callId: callId,
+        type: type,
+        timestamp: DateTime.now(),
+        message: message,
+      ),
+    );
   }
 
   @override
@@ -179,15 +199,17 @@ class FakeSipEngine implements SipEngine {
 /// Заглушка для будущей PJSIP-реализации через MethodChannel.
 class PjsipSipEngine implements SipEngine {
   PjsipSipEngine()
-      : _methodChannel = const MethodChannel('app/pjsip_engine'),
-        _eventChannel = const EventChannel('app/pjsip_engine_events') {
+    : _methodChannel = const MethodChannel('app/pjsip_engine'),
+      _eventChannel = const EventChannel('app/pjsip_engine_events') {
     _eventsStream = _eventChannel.receiveBroadcastStream().map((event) {
       if (event is! Map) return null;
       final map = Map<String, dynamic>.from(event as Map);
       return SipEvent(
         callId: map['callId'] as String? ?? 'unknown',
         type: _mapType(map['type'] as String?),
-        timestamp: DateTime.tryParse(map['timestamp'] as String? ?? '') ?? DateTime.now(),
+        timestamp:
+            DateTime.tryParse(map['timestamp'] as String? ?? '') ??
+            DateTime.now(),
         message: map['message'] as String?,
       );
     }).whereType<SipEvent>();
@@ -250,8 +272,8 @@ class PjsipSipEngine implements SipEngine {
       _methodChannel.invokeMethod('setSpeaker', {'enable': enable});
 
   @override
-  Future<void> sendDtmf(String callId, String digits) =>
-      _methodChannel.invokeMethod('sendDtmf', {'callId': callId, 'digits': digits});
+  Future<void> sendDtmf(String callId, String digits) => _methodChannel
+      .invokeMethod('sendDtmf', {'callId': callId, 'digits': digits});
 
   SipEventType _mapType(String? raw) {
     switch (raw) {

@@ -4,8 +4,9 @@ import 'package:app/core/providers.dart';
 import 'package:app/features/dongles/state/dongle_list_notifier.dart';
 import 'auth_state.dart';
 
-final authNotifierProvider =
-    AsyncNotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+final authNotifierProvider = AsyncNotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
+);
 
 class AuthNotifier extends AsyncNotifier<AuthState> {
   @override
@@ -29,10 +30,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     state = const AsyncLoading();
 
     try {
-      final tokens = await ref.read(authApiProvider).login(
-            email: email,
-            password: password,
-          );
+      final tokens = await ref
+          .read(authApiProvider)
+          .login(email: email, password: password);
 
       await ref.read(authTokensStorageProvider).writeTokens(tokens);
       _invalidateCaches();

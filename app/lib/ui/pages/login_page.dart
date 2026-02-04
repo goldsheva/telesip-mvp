@@ -24,7 +24,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _emailFocus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _emailFocus.requestFocus(),
+    );
   }
 
   @override
@@ -95,9 +97,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   children: [
                     Text(
                       'Log in',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
+                      style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 18),
@@ -111,7 +111,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       textInputAction: TextInputAction.next,
                       onSubmitted: (_) => _passwordFocus.requestFocus(),
                       enabled: !isLoading,
-                      autofillHints: const [AutofillHints.username, AutofillHints.email],
+                      autofillHints: const [
+                        AutofillHints.username,
+                        AutofillHints.email,
+                      ],
                     ),
                     const SizedBox(height: 14),
 
@@ -141,9 +144,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       Text(
                         error!,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.error,
-                              fontWeight: FontWeight.w800,
-                            ),
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ],
 

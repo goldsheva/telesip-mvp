@@ -13,7 +13,9 @@ class DonglesApi {
     final response = await _apiClient.get(ApiEndpoints.donglesList);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Dongles failed: ${response.statusCode} ${response.body}');
+      throw Exception(
+        'Dongles failed: ${response.statusCode} ${response.body}',
+      );
     }
 
     final decoded = jsonDecode(response.body);
@@ -28,12 +30,11 @@ class DonglesApi {
 
     final list = data['dongles'];
     if (list is! List) {
-      throw Exception('Missing "data.dongles" list in response: ${response.body}');
+      throw Exception(
+        'Missing "data.dongles" list in response: ${response.body}',
+      );
     }
 
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(Dongle.fromJson)
-        .toList();
+    return list.whereType<Map<String, dynamic>>().map(Dongle.fromJson).toList();
   }
 }

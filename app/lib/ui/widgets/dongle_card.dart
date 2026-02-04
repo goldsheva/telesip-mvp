@@ -44,7 +44,10 @@ class DongleCard extends StatelessWidget {
               dongle.phone,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: t.bodyMedium?.copyWith(color: text2, fontWeight: FontWeight.w700),
+              style: t.bodyMedium?.copyWith(
+                color: text2,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -53,7 +56,9 @@ class DongleCard extends StatelessWidget {
                 Expanded(
                   child: _StatusPill(
                     label: dongle.isOnline ? 'Online' : 'Offline',
-                    color: dongle.isOnline ? AppColors.success : AppColors.warning,
+                    color: dongle.isOnline
+                        ? AppColors.success
+                        : AppColors.warning,
                     border: border,
                   ),
                 ),
@@ -61,7 +66,9 @@ class DongleCard extends StatelessWidget {
                 Expanded(
                   child: _StatusPill(
                     label: dongle.isEnabled ? 'Hotspot on' : 'Hotspot off',
-                    color: dongle.isEnabled ? AppColors.success : AppColors.danger,
+                    color: dongle.isEnabled
+                        ? AppColors.success
+                        : AppColors.danger,
                     border: border,
                   ),
                 ),
@@ -73,13 +80,24 @@ class DongleCard extends StatelessWidget {
             const SizedBox(height: 8),
 
             if (dongle.isOnline && dongle.isEnabled) ...[
-              _KV(label: 'Wi-Fi Name', value: dongle.wifiName ?? '—', text2: text2),
+              _KV(
+                label: 'Wi-Fi Name',
+                value: dongle.wifiName ?? '—',
+                text2: text2,
+              ),
               const SizedBox(height: 8),
-              _KV(label: 'Wi-Fi Password', value: dongle.wifiPassword ?? '—', text2: text2),
+              _KV(
+                label: 'Wi-Fi Password',
+                value: dongle.wifiPassword ?? '—',
+                text2: text2,
+              ),
             ] else if (!dongle.isOnline) ...[
               Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.warning,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -91,7 +109,7 @@ class DongleCard extends StatelessWidget {
                     ),
                   ),
                 ],
-              )
+              ),
             ],
           ],
         ),
@@ -101,7 +119,11 @@ class DongleCard extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label, required this.color, required this.border});
+  const _StatusPill({
+    required this.label,
+    required this.color,
+    required this.border,
+  });
 
   final String label;
   final Color color;
@@ -143,7 +165,9 @@ class _KV extends StatelessWidget {
 
     return Row(
       children: [
-        Expanded(child: Text(label, style: t.bodyMedium?.copyWith(color: text2))),
+        Expanded(
+          child: Text(label, style: t.bodyMedium?.copyWith(color: text2)),
+        ),
         Text(value, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w800)),
       ],
     );

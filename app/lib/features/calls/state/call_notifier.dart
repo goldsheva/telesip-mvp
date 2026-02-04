@@ -47,10 +47,7 @@ class CallInfo {
 }
 
 class CallState {
-  const CallState({
-    required this.calls,
-    this.activeCallId,
-  });
+  const CallState({required this.calls, this.activeCallId});
 
   factory CallState.initial() => const CallState(calls: {});
 
@@ -59,13 +56,10 @@ class CallState {
 
   CallInfo? get activeCall => activeCallId != null ? calls[activeCallId] : null;
 
-  List<CallInfo> get history => calls.values.toList()
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  List<CallInfo> get history =>
+      calls.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-  CallState copyWith({
-    Map<String, CallInfo>? calls,
-    String? activeCallId,
-  }) {
+  CallState copyWith({Map<String, CallInfo>? calls, String? activeCallId}) {
     return CallState(
       calls: calls ?? this.calls,
       activeCallId: activeCallId ?? this.activeCallId,
@@ -107,7 +101,8 @@ class CallNotifier extends StateNotifier<CallState> {
     final status = _mapStatus(event.type);
     final previous = state.calls[event.callId];
     final destination = previous?.destination ?? event.message ?? 'call';
-    final logs = List<String>.from(previous?.timeline ?? [])..add(_describe(event));
+    final logs = List<String>.from(previous?.timeline ?? [])
+      ..add(_describe(event));
 
     final updated = Map<String, CallInfo>.from(state.calls);
     updated[event.callId] = CallInfo(
@@ -115,12 +110,15 @@ class CallNotifier extends StateNotifier<CallState> {
       destination: destination,
       status: status,
       createdAt: previous?.createdAt ?? event.timestamp,
-      connectedAt: status == CallStatus.connected ? event.timestamp : previous?.connectedAt,
+      connectedAt: status == CallStatus.connected
+          ? event.timestamp
+          : previous?.connectedAt,
       endedAt: status == CallStatus.ended ? event.timestamp : previous?.endedAt,
       timeline: logs,
     );
 
-    final activeCallId = status == CallStatus.ended && state.activeCallId == event.callId
+    final activeCallId =
+        status == CallStatus.ended && state.activeCallId == event.callId
         ? null
         : state.activeCallId ?? event.callId;
 
@@ -149,7 +147,9 @@ class CallNotifier extends StateNotifier<CallState> {
   }
 }
 
-final callControllerProvider = StateNotifierProvider<CallNotifier, CallState>((ref) {
+final callControllerProvider = StateNotifierProvider<CallNotifier, CallState>((
+  ref,
+) {
   final engine = ref.watch(sipEngineProvider);
   return CallNotifier(engine);
 });

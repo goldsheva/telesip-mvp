@@ -14,7 +14,9 @@ class SipUsersApi {
     final response = await _apiClient.get(ApiEndpoints.sipUsersList);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('SipUsers failed: ${response.statusCode} ${response.body}');
+      throw Exception(
+        'SipUsers failed: ${response.statusCode} ${response.body}',
+      );
     }
 
     final decoded = jsonDecode(response.body);
@@ -34,7 +36,9 @@ class SipUsersApi {
 
     final list = wrap['sipUsers'];
     if (list is! List) {
-      throw Exception('Missing "data.sipUsers.sipUsers" list: ${response.body}');
+      throw Exception(
+        'Missing "data.sipUsers.sipUsers" list: ${response.body}',
+      );
     }
 
     final items = list
@@ -47,7 +51,8 @@ class SipUsersApi {
     return SipUsersState(total: total, items: items);
   }
 
-  Future<List<SipUser>> fetchSipUsers() => fetchSipUsersState().then((state) => state.items);
+  Future<List<SipUser>> fetchSipUsers() =>
+      fetchSipUsersState().then((state) => state.items);
 
   Future<int> fetchTotal() => fetchSipUsersState().then((state) => state.total);
 }

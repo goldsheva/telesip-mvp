@@ -35,9 +35,9 @@ class LabeledInput extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: isDark ? AppColors.text2Dark : AppColors.text2,
-          fontWeight: FontWeight.w700,
-        );
+      color: isDark ? AppColors.text2Dark : AppColors.text2,
+      fontWeight: FontWeight.w700,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

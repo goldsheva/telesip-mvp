@@ -13,7 +13,10 @@ class AuthTokensStorage {
     final access = await _storage.read(key: _keyAccess);
     final refresh = await _storage.read(key: _keyRefresh);
 
-    if (access == null || refresh == null || access.isEmpty || refresh.isEmpty) {
+    if (access == null ||
+        refresh == null ||
+        access.isEmpty ||
+        refresh.isEmpty) {
       return null;
     }
 

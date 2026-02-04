@@ -32,7 +32,10 @@ class AuthApi {
     return _parseTokens(response, errorPrefix: 'Refresh failed');
   }
 
-  AuthTokens _parseTokens(http.Response response, {required String errorPrefix}) {
+  AuthTokens _parseTokens(
+    http.Response response, {
+    required String errorPrefix,
+  }) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('$errorPrefix: ${response.statusCode} ${response.body}');
     }
