@@ -52,11 +52,7 @@ class CallInfo {
 }
 
 class CallState {
-  const CallState({
-    required this.calls,
-    this.activeCallId,
-    this.errorMessage,
-  });
+  const CallState({required this.calls, this.activeCallId, this.errorMessage});
 
   factory CallState.initial() => const CallState(calls: {}, errorMessage: null);
 
@@ -88,6 +84,8 @@ class CallNotifier extends Notifier<CallState> {
   bool _isRegistered = false;
   int? _registeredUserId;
   PbxSipUser? _lastKnownUser;
+  Timer? _dialTimeoutTimer;
+  static const Duration _dialTimeout = Duration(seconds: 25);
 
   Future<void> startCall(String destination) async {
     if (state.activeCallId != null) return;
@@ -98,6 +96,7 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     final callId = await _engine.startCall(trimmed);
+    _startDialTimeout(callId);
     _clearError();
     state = state.copyWith(activeCallId: callId);
   }
@@ -128,8 +127,8 @@ class CallNotifier extends Notifier<CallState> {
       final scheme = protocol.contains('wss')
           ? 'wss'
           : protocol.contains('ws')
-              ? 'ws'
-              : null;
+          ? 'ws'
+          : null;
       if (scheme == null) {
         _setError('Поддерживается только WS/WSS');
         return;
@@ -223,12 +222,17 @@ class CallNotifier extends Notifier<CallState> {
       if (activeCallId == callId) {
         activeCallId = null;
       }
+      _cancelDialTimeout();
     } else {
+      if (status != CallStatus.dialing) {
+        _cancelDialTimeout();
+      }
       activeCallId ??= callId;
     }
 
-    final errorMessage =
-        event.type == SipEventType.error ? event.message ?? 'SIP error' : null;
+    final errorMessage = event.type == SipEventType.error
+        ? event.message ?? 'SIP error'
+        : null;
     state = state.copyWith(
       calls: updated,
       activeCallId: activeCallId,
@@ -268,6 +272,21 @@ class CallNotifier extends Notifier<CallState> {
     if (state.errorMessage != null) {
       state = state.copyWith(errorMessage: null);
     }
+  }
+
+  void _startDialTimeout(String callId) {
+    _cancelDialTimeout();
+    _dialTimeoutTimer = Timer(_dialTimeout, () async {
+      if (state.activeCallId != callId) return;
+      _setError('Вызов не был принят, завершаем');
+      await _engine.hangup(callId);
+      _cancelDialTimeout();
+    });
+  }
+
+  void _cancelDialTimeout() {
+    _dialTimeoutTimer?.cancel();
+    _dialTimeoutTimer = null;
   }
 }
 

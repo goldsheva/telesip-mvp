@@ -7,14 +7,7 @@ enum SipRegistrationState {
   unregistered,
 }
 
-enum SipCallState {
-  none,
-  dialing,
-  ringing,
-  connected,
-  ended,
-  failed,
-}
+enum SipCallState { none, dialing, ringing, connected, ended, failed }
 
 enum SipEventType {
   dialing,

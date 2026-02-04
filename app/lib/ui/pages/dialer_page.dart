@@ -34,18 +34,20 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _registerSipUser());
-    _stateSubscription = ref.listenManual<CallState>(
-      callControllerProvider,
-      (previous, next) {
-        final message = next.errorMessage;
-        if (message != null &&
-            message.isNotEmpty &&
-            message != previous?.errorMessage) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-        }
-      },
-    );
+    _stateSubscription = ref.listenManual<CallState>(callControllerProvider, (
+      previous,
+      next,
+    ) {
+      final message = next.errorMessage;
+      if (message != null &&
+          message.isNotEmpty &&
+          message != previous?.errorMessage) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    });
   }
 
   @override
@@ -91,7 +93,8 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       builder: (_) => _InCallKeypadSheet(
         title: active.destination,
         statusText: _status(active.status),
-        onKey: (k) => ref.read(callControllerProvider.notifier).sendDtmf(active.id, k),
+        onKey: (k) =>
+            ref.read(callControllerProvider.notifier).sendDtmf(active.id, k),
       ),
     );
   }
@@ -133,8 +136,8 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                   child: Text(
                     'Исходящий звонок',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade400,
-                        ),
+                      color: Colors.grey.shade400,
+                    ),
                   ),
                 ),
 
@@ -174,8 +177,12 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                   // TODO: подключи реальный speaker в sip engine
                                 }
                               : null,
-                          onOpenKeypad: hasActiveCall ? () => _openKeypad(active) : null,
-                          onHangup: hasActiveCall ? () => notifier.hangup(active.id) : null,
+                          onOpenKeypad: hasActiveCall
+                              ? () => _openKeypad(active)
+                              : null,
+                          onHangup: hasActiveCall
+                              ? () => notifier.hangup(active.id)
+                              : null,
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -191,7 +198,8 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                   child: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _numberController,
                     builder: (context, value, _) {
-                      final canCall = value.text.trim().isNotEmpty && !hasActiveCall;
+                      final canCall =
+                          value.text.trim().isNotEmpty && !hasActiveCall;
                       return SizedBox(
                         height: 56,
                         width: double.infinity,
@@ -202,7 +210,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                               borderRadius: BorderRadius.circular(18),
                             ),
                             backgroundColor: Colors.green,
-                            textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           child: const Text('Позвонить'),
                         ),
@@ -249,7 +259,9 @@ class _AppBarTitle extends StatelessWidget {
         if (subtitle != null && subtitle.isNotEmpty)
           Text(
             subtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.white70),
           ),
       ],
     );
@@ -288,20 +300,28 @@ class _NumberInputCard extends StatelessWidget {
         decoration: InputDecoration(
           hintText: 'Введите номер или выберите контакт',
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 18,
+          ),
           prefixIcon: const Icon(Icons.phone),
           suffixIcon: SizedBox(
             width: 96,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(onPressed: onPickContact, icon: const Icon(Icons.contacts)),
+                IconButton(
+                  onPressed: onPickContact,
+                  icon: const Icon(Icons.contacts),
+                ),
                 IconButton(onPressed: onClear, icon: const Icon(Icons.close)),
               ],
             ),
           ),
         ),
-        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        style: Theme.of(
+          context,
+        ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -353,7 +373,10 @@ class _ActiveCallCard extends StatelessWidget {
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          Text('Номер: ${active.destination}', style: theme.textTheme.bodyMedium),
+          Text(
+            'Номер: ${active.destination}',
+            style: theme.textTheme.bodyMedium,
+          ),
           const SizedBox(height: 8),
 
           if (events.isNotEmpty)
@@ -374,10 +397,29 @@ class _ActiveCallCard extends StatelessWidget {
 
           Row(
             children: [
-              _ControlButton(icon: Icons.mic_off, label: 'Mute', active: isMuted, onTap: onToggleMute),
-              _ControlButton(icon: Icons.volume_up, label: 'Speaker', active: isSpeakerOn, onTap: onToggleSpeaker),
-              _ControlButton(icon: Icons.dialpad, label: 'Keypad', onTap: onOpenKeypad),
-              _ControlButton(icon: Icons.call_end, label: 'Hang up', danger: true, onTap: onHangup),
+              _ControlButton(
+                icon: Icons.mic_off,
+                label: 'Mute',
+                active: isMuted,
+                onTap: onToggleMute,
+              ),
+              _ControlButton(
+                icon: Icons.volume_up,
+                label: 'Speaker',
+                active: isSpeakerOn,
+                onTap: onToggleSpeaker,
+              ),
+              _ControlButton(
+                icon: Icons.dialpad,
+                label: 'Keypad',
+                onTap: onOpenKeypad,
+              ),
+              _ControlButton(
+                icon: Icons.call_end,
+                label: 'Hang up',
+                danger: true,
+                onTap: onHangup,
+              ),
             ],
           ),
         ],
@@ -423,17 +465,18 @@ class _ControlButton extends StatelessWidget {
     final borderColor = danger
         ? Colors.redAccent
         : (active
-            ? accent
-            : theme.colorScheme.onSurface
-                .withValues(alpha: (0.2 * 255).roundToDouble()));
+              ? accent
+              : theme.colorScheme.onSurface.withValues(
+                  alpha: (0.2 * 255).roundToDouble(),
+                ));
     final iconColor = danger
         ? Colors.redAccent
         : (active ? accent : theme.iconTheme.color ?? Colors.black87);
     final bgColor = danger
         ? Colors.redAccent.withValues(alpha: (0.12 * 255).roundToDouble())
         : (active
-            ? accent.withValues(alpha: (0.12 * 255).roundToDouble())
-            : Colors.transparent);
+              ? accent.withValues(alpha: (0.12 * 255).roundToDouble())
+              : Colors.transparent);
 
     final disabledColor = theme.disabledColor;
 
@@ -484,7 +527,9 @@ class _HistorySection extends StatelessWidget {
       tilePadding: EdgeInsets.zero,
       children: history.map((call) {
         return ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           tileColor: Theme.of(context).colorScheme.surface,
           title: Text(call.destination),
           subtitle: Text(_status(call.status)),
@@ -530,10 +575,18 @@ class _InCallKeypadSheet extends StatefulWidget {
 
 class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
   static const _keys = <String>[
-    '1','2','3',
-    '4','5','6',
-    '7','8','9',
-    '*','0','#',
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '*',
+    '0',
+    '#',
   ];
 
   String _sequence = '';
@@ -559,11 +612,15 @@ class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
             final headerH = 4 + 10 + 12 + 22 + 8 + 18 + 12; // примерно
             final dtmfH = _sequence.isNotEmpty ? (18 + 10) : 0;
 
-            final availableForGrid = (c.maxHeight - headerH - dtmfH)
-                .clamp(220.0, c.maxHeight);
+            final availableForGrid = (c.maxHeight - headerH - dtmfH).clamp(
+              220.0,
+              c.maxHeight,
+            );
 
-            final cellH = ((availableForGrid - main * (rows - 1)) / rows)
-                .clamp(56.0, cellW * 1.05);
+            final cellH = ((availableForGrid - main * (rows - 1)) / rows).clamp(
+              56.0,
+              cellW * 1.05,
+            );
 
             final aspect = cellW / cellH;
 
@@ -583,7 +640,9 @@ class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
                 // Верх как у телефона: номер + статус
                 Text(
                   widget.title,
-                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -591,7 +650,9 @@ class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
                 const SizedBox(height: 8),
                 Text(
                   widget.statusText,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey.shade600,
+                  ),
                   textAlign: TextAlign.center,
                 ),
 
@@ -599,7 +660,10 @@ class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('DTMF: $_sequence', style: theme.textTheme.bodySmall),
+                    child: Text(
+                      'DTMF: $_sequence',
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ),
                 ],
 

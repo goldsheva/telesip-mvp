@@ -42,10 +42,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     _eventController.add(event);
   }
 
-  void _emitRegistration(
-    SipRegistrationState state, {
-    String? message,
-  }) {
+  void _emitRegistration(SipRegistrationState state, {String? message}) {
     _registrationState = state;
     _emit(
       SipEvent(
@@ -57,11 +54,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     );
   }
 
-  void _emitCall(
-    SipEventType type, {
-    String? callId,
-    String? message,
-  }) {
+  void _emitCall(SipEventType type, {String? callId, String? message}) {
     final activeCallId = callId ?? _currentCallId;
     if (activeCallId == null) return;
     _callState = _callStateFromEvent(type);
@@ -221,10 +214,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       await _helper.start(settings);
       _helper.register();
     } catch (error) {
-      _emitRegistration(
-        SipRegistrationState.failed,
-        message: error.toString(),
-      );
+      _emitRegistration(SipRegistrationState.failed, message: error.toString());
       _emitError('Ошибка регистрации SIP: $error');
     }
   }
@@ -249,10 +239,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       );
     } catch (error) {
       _registrationState = SipRegistrationState.failed;
-      _emitRegistration(
-        SipRegistrationState.failed,
-        message: error.toString(),
-      );
+      _emitRegistration(SipRegistrationState.failed, message: error.toString());
     } finally {
       _helper.stop();
     }
@@ -265,11 +252,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     final callId = _buildCallId();
     _currentCallId = callId;
     _callState = SipCallState.dialing;
-    _emitCall(
-      SipEventType.dialing,
-      callId: callId,
-      message: 'Набор $target',
-    );
+    _emitCall(SipEventType.dialing, callId: callId, message: 'Набор $target');
     if (_registrationState != SipRegistrationState.registered) {
       _emitError('SIP не зарегистрирован', callId: callId);
       _cleanupCall(callId, callId);
@@ -278,11 +261,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     final started = await _helper.call(target, voiceOnly: true);
     if (!started) {
       _emitError('Не удалось начать вызов', callId: callId);
-      _emitCall(
-        SipEventType.ended,
-        callId: callId,
-        message: 'Вызов не пошёл',
-      );
+      _emitCall(SipEventType.ended, callId: callId, message: 'Вызов не пошёл');
       _cleanupCall(callId, callId);
     }
     return callId;
@@ -341,8 +320,9 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
   @override
   void callStateChanged(Call call, CallState state) {
     final pendingId = _currentCallId;
-    final realId =
-        (call.id != null && call.id!.isNotEmpty) ? call.id! : pendingId;
+    final realId = (call.id != null && call.id!.isNotEmpty)
+        ? call.id!
+        : pendingId;
     if (realId == null || realId.isEmpty) return;
     if (pendingId != null && realId != pendingId) {
       _callIdAliases[pendingId] = realId;
@@ -357,11 +337,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       _cleanupCall(pendingId, realId);
       return;
     }
-    _emitCall(
-      eventType,
-      callId: realId,
-      message: message,
-    );
+    _emitCall(eventType, callId: realId, message: message);
     if (eventType == SipEventType.ended) {
       _cleanupCall(pendingId, realId);
     }
