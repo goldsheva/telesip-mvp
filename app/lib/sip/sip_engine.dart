@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:sip_ua/sip_ua.dart';
+
 import 'sip_models.dart';
 export 'sip_models.dart';
 
@@ -19,14 +21,18 @@ abstract class SipEngine {
   Stream<SipEvent> get events;
 }
 
-class SipUaEngine implements SipEngine {
+class SipUaEngine implements SipEngine, SipUaHelperListener {
   final StreamController<SipEvent> _eventController =
       StreamController<SipEvent>.broadcast();
+  final SIPUAHelper _helper = SIPUAHelper();
+  final Map<String, Call> _callReferences = <String, Call>{};
+  final Map<String, String> _callIdAliases = <String, String>{};
 
   bool _initialized = false;
+  String? _currentCallId;
   SipRegistrationState _registrationState = SipRegistrationState.none;
   SipCallState _callState = SipCallState.none;
-  String? _currentCallId;
+  String? _registrationDomain;
 
   @override
   Stream<SipEvent> get events => _eventController.stream;
@@ -40,35 +46,43 @@ class SipUaEngine implements SipEngine {
     SipRegistrationState state, {
     String? message,
   }) {
+    _registrationState = state;
     _emit(
       SipEvent(
         type: SipEventType.registration,
+        callId: null,
         registrationState: state,
         message: message,
       ),
     );
   }
 
-  void _emitCall(SipEventType type, {String? message}) {
-    if (_currentCallId == null) return;
+  void _emitCall(
+    SipEventType type, {
+    String? callId,
+    String? message,
+  }) {
+    final activeCallId = callId ?? _currentCallId;
+    if (activeCallId == null) return;
     _callState = _callStateFromEvent(type);
     _emit(
       SipEvent(
         type: type,
-        callId: _currentCallId,
-        message: message,
+        callId: activeCallId,
         callState: _callState,
+        message: message,
       ),
     );
   }
 
   void _emitError(String message, {String? callId}) {
+    _callState = SipCallState.failed;
     _emit(
       SipEvent(
         type: SipEventType.error,
         callId: callId,
-        message: message,
         callState: _callState,
+        message: message,
       ),
     );
   }
@@ -93,24 +107,72 @@ class SipUaEngine implements SipEngine {
     }
   }
 
+  SipEventType _eventTypeFromCallState(CallStateEnum? state) {
+    switch (state) {
+      case CallStateEnum.CALL_INITIATION:
+      case CallStateEnum.CONNECTING:
+      case CallStateEnum.NONE:
+        return SipEventType.dialing;
+      case CallStateEnum.PROGRESS:
+        return SipEventType.ringing;
+      case CallStateEnum.ACCEPTED:
+      case CallStateEnum.CONFIRMED:
+      case CallStateEnum.STREAM:
+      case CallStateEnum.UNMUTED:
+      case CallStateEnum.MUTED:
+      case CallStateEnum.HOLD:
+      case CallStateEnum.UNHOLD:
+      case CallStateEnum.REFER:
+        return SipEventType.connected;
+      case CallStateEnum.ENDED:
+        return SipEventType.ended;
+      case CallStateEnum.FAILED:
+        return SipEventType.error;
+      default:
+        return SipEventType.dialing;
+    }
+  }
+
+  String _buildCallId() => 'call-${DateTime.now().millisecondsSinceEpoch}';
+
+  String _normalizeDestination(String destination) {
+    final trimmed = destination.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (trimmed.toLowerCase().startsWith('sip:')) {
+      return trimmed;
+    }
+    if (trimmed.contains('@')) {
+      return trimmed.startsWith('sip:') ? trimmed : 'sip:$trimmed';
+    }
+    if (_registrationDomain != null && _registrationDomain!.isNotEmpty) {
+      return 'sip:$trimmed@$_registrationDomain';
+    }
+    return trimmed;
+  }
+
+  String? _extractDomain(String uri) {
+    final atIndex = uri.indexOf('@');
+    if (atIndex < 0) return null;
+    var domain = uri.substring(atIndex + 1);
+    for (final delimiter in [';', '/', ':']) {
+      final index = domain.indexOf(delimiter);
+      if (index >= 0) {
+        domain = domain.substring(0, index);
+      }
+    }
+    return domain.isNotEmpty ? domain : null;
+  }
+
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
     await init();
   }
 
-  Future<String> _generateCallId(String destination) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final callId = '$destination#$timestamp';
-    _currentCallId = callId;
-    return callId;
-  }
-
   @override
   Future<void> init() async {
     if (_initialized) return;
+    _helper.addSipUaHelperListener(this);
     _initialized = true;
-    _registrationState = SipRegistrationState.none;
-    _callState = SipCallState.none;
   }
 
   @override
@@ -126,34 +188,33 @@ class SipUaEngine implements SipEngine {
       return;
     }
 
+    final normalizedUri = uri.trim();
+    _registrationDomain = _extractDomain(normalizedUri);
     _registrationState = SipRegistrationState.registering;
-    final registrationMessage = displayName != null && displayName.isNotEmpty
-        ? 'Регистрируемся как $displayName'
-        : 'Регистрируемся...';
     _emitRegistration(
       SipRegistrationState.registering,
-      message: registrationMessage,
+      message: displayName != null && displayName.isNotEmpty
+          ? 'Регистрируемся как $displayName'
+          : 'Регистрируемся...',
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final settings = UaSettings()
+      ..uri = normalizedUri
+      ..password = password
+      ..webSocketUrl = wsUrl.trim()
+      ..displayName = displayName
+      ..transportType = TransportType.WS
+      ..register = true;
 
-    final registrationSuccess =
-        uri.isNotEmpty && password.isNotEmpty && wsUrl.isNotEmpty;
-    if (registrationSuccess) {
-      _registrationState = SipRegistrationState.registered;
+    try {
+      await _helper.start(settings);
+      _helper.register();
+    } catch (error) {
       _emitRegistration(
-        SipRegistrationState.registered,
-        message: 'Регистрация завершена',
+        SipRegistrationState.failed,
+        message: error.toString(),
       );
-      return;
     }
-
-    _registrationState = SipRegistrationState.failed;
-    _emitRegistration(
-      SipRegistrationState.failed,
-      message: 'Ошибка регистрации',
-    );
-    _emitError('Регистрация не удалась');
   }
 
   @override
@@ -167,74 +228,160 @@ class SipUaEngine implements SipEngine {
       SipRegistrationState.unregistering,
       message: 'Отмена регистрации...',
     );
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    _registrationState = SipRegistrationState.unregistered;
-    _emitRegistration(
-      SipRegistrationState.unregistered,
-      message: 'Регистрация снята',
-    );
+    try {
+      await _helper.unregister();
+      _registrationState = SipRegistrationState.unregistered;
+      _emitRegistration(
+        SipRegistrationState.unregistered,
+        message: 'Регистрация снята',
+      );
+    } catch (error) {
+      _registrationState = SipRegistrationState.failed;
+      _emitRegistration(
+        SipRegistrationState.failed,
+        message: error.toString(),
+      );
+    } finally {
+      _helper.stop();
+    }
   }
 
   @override
   Future<String> startCall(String destination) async {
     await _ensureInitialized();
-    final callId = await _generateCallId(destination);
+    final target = _normalizeDestination(destination);
+    final callId = _buildCallId();
+    _currentCallId = callId;
+    _callState = SipCallState.dialing;
     _emitCall(
       SipEventType.dialing,
-      message: 'Набор $destination',
+      callId: callId,
+      message: 'Набор $target',
     );
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    _emitCall(
-      SipEventType.ringing,
-      message: 'Звонок $destination',
-    );
+    final started = await _helper.call(target, voiceOnly: true);
+    if (!started) {
+      _emitError('Не удалось начать вызов', callId: callId);
+      _emitCall(
+        SipEventType.ended,
+        callId: callId,
+        message: 'Вызов не пошёл',
+      );
+      _currentCallId = null;
+      _callReferences.remove(callId);
+    }
     return callId;
   }
 
   @override
   Future<void> hangup(String callId) async {
-    if (_currentCallId != callId) {
-      _emitError('Попытка завершить неизвестный вызов', callId: callId);
-      return;
-    }
-    _emitCall(
-      SipEventType.ended,
-      message: 'Вызов завершён',
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    _currentCallId = null;
-    _callState = SipCallState.none;
+    final resolveId = _callIdAliases[callId] ?? callId;
+    final call = _callReferences[resolveId];
+    call?.hangup();
   }
 
   @override
   Future<void> sendDtmf(String callId, String digits) async {
-    if (_currentCallId != callId || digits.isEmpty) {
-      if (_currentCallId != callId) {
-        _emitError('DTMF для неизвестного вызова', callId: callId);
-      }
-      return;
-    }
+    if (digits.isEmpty) return;
+    final resolveId = _callIdAliases[callId] ?? callId;
+    final call = _callReferences[resolveId];
+    if (call == null) return;
     for (var i = 0; i < digits.length; i++) {
       final digit = digits[i];
+      call.sendDTMF(digit);
       _emit(
         SipEvent(
           type: SipEventType.dtmf,
-          callId: callId,
+          callId: resolveId,
           digit: digit,
           message: 'DTMF $digit',
           callState: _callState,
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 5));
     }
   }
 
   @override
   Future<void> dispose() async {
+    _helper.removeSipUaHelperListener(this);
+    _helper.stop();
     await _eventController.close();
     _initialized = false;
     _currentCallId = null;
+    _callReferences.clear();
     _callState = SipCallState.none;
     _registrationState = SipRegistrationState.none;
+  }
+
+  @override
+  void transportStateChanged(TransportState state) {}
+
+  @override
+  void registrationStateChanged(RegistrationState state) {
+    final newState = _mapRegistrationState(state.state);
+    final message = state.cause?.cause ?? state.cause?.reason_phrase;
+    _emitRegistration(newState, message: message);
+  }
+
+  @override
+  void callStateChanged(Call call, CallState state) {
+    final pendingId = _currentCallId;
+    final realId =
+        (call.id != null && call.id!.isNotEmpty) ? call.id! : pendingId;
+    if (realId == null || realId.isEmpty) return;
+    if (pendingId != null && realId != pendingId) {
+      _callIdAliases[pendingId] = realId;
+    }
+    _callReferences[realId] = call;
+    final nextState = state.state;
+    final eventType = _eventTypeFromCallState(nextState);
+    final message =
+        state.cause?.cause ?? state.cause?.reason_phrase ?? nextState.name;
+    if (eventType == SipEventType.error) {
+      _emitError(message, callId: realId);
+      _cleanupCall(pendingId, realId);
+      return;
+    }
+    _emitCall(
+      eventType,
+      callId: realId,
+      message: message,
+    );
+    if (eventType == SipEventType.ended) {
+      _cleanupCall(pendingId, realId);
+    }
+  }
+
+  void _cleanupCall(String? pendingId, String realId) {
+    _callReferences.remove(realId);
+    if (pendingId != null) {
+      _callReferences.remove(pendingId);
+      _callIdAliases.remove(pendingId);
+    }
+    if (_currentCallId == pendingId || _currentCallId == realId) {
+      _currentCallId = null;
+    }
+  }
+
+  @override
+  void onNewMessage(SIPMessageRequest msg) {}
+
+  @override
+  void onNewNotify(Notify ntf) {}
+
+  @override
+  void onNewReinvite(ReInvite event) {}
+
+  SipRegistrationState _mapRegistrationState(RegistrationStateEnum? state) {
+    switch (state) {
+      case RegistrationStateEnum.REGISTERED:
+        return SipRegistrationState.registered;
+      case RegistrationStateEnum.UNREGISTERED:
+        return SipRegistrationState.unregistered;
+      case RegistrationStateEnum.REGISTRATION_FAILED:
+        return SipRegistrationState.failed;
+      case RegistrationStateEnum.NONE:
+      default:
+        return SipRegistrationState.none;
+    }
   }
 }
