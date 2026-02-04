@@ -76,6 +76,8 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final state = ref.watch(callControllerProvider);
     final notifier = ref.read(callControllerProvider.notifier);
     final active = state.activeCall;
+    final hasActiveCall =
+        active != null && active.status != CallStatus.ended;
     final sipUser = widget.sipUser;
 
     final titleText = widget.dongleName ?? sipUser?.sipLogin ?? 'Набор';
@@ -192,7 +194,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                 height: 56,
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: active != null ? null : _call,
+                  onPressed: hasActiveCall ? null : _call,
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
@@ -321,35 +323,36 @@ class _DialerPageState extends ConsumerState<DialerPage> {
             ),
             const SizedBox(height: 12),
           ],
-          Row(
-            children: [
-              _buildControlButton(
-                icon: Icons.mic_off,
-                label: 'Mute',
-                active: _isMuted,
-                onTap: () => setState(() => _isMuted = !_isMuted),
-              ),
-              _buildControlButton(
-                icon: Icons.volume_up,
-                label: 'Speaker',
-                active: _isSpeakerOn,
-                onTap: () => setState(() => _isSpeakerOn = !_isSpeakerOn),
-              ),
-              _buildControlButton(
-                icon: Icons.dialpad,
-                label: 'Keypad',
-                onTap: () => _showKeypad(active),
-              ),
-              _buildControlButton(
-                icon: Icons.call_end,
-                label: 'Hang up',
-                onTap: () => notifier.hangup(active.id),
-                background: _applyOpacity(Colors.redAccent, 0.12),
-                borderColor: Colors.redAccent,
-                iconColor: Colors.redAccent,
-              ),
-            ],
-          ),
+          if (active.status != CallStatus.ended)
+            Row(
+              children: [
+                _buildControlButton(
+                  icon: Icons.mic_off,
+                  label: 'Mute',
+                  active: _isMuted,
+                  onTap: () => setState(() => _isMuted = !_isMuted),
+                ),
+                _buildControlButton(
+                  icon: Icons.volume_up,
+                  label: 'Speaker',
+                  active: _isSpeakerOn,
+                  onTap: () => setState(() => _isSpeakerOn = !_isSpeakerOn),
+                ),
+                _buildControlButton(
+                  icon: Icons.dialpad,
+                  label: 'Keypad',
+                  onTap: () => _showKeypad(active),
+                ),
+                _buildControlButton(
+                  icon: Icons.call_end,
+                  label: 'Hang up',
+                  onTap: () => notifier.hangup(active.id),
+                  background: _applyOpacity(Colors.redAccent, 0.12),
+                  borderColor: Colors.redAccent,
+                  iconColor: Colors.redAccent,
+                ),
+              ],
+            ),
         ],
       ),
     );

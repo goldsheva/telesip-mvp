@@ -115,10 +115,14 @@ class CallNotifier extends Notifier<CallState> {
       timeline: logs,
     );
 
-    final activeCallId =
-        status == CallStatus.ended && state.activeCallId == event.callId
-        ? null
-        : state.activeCallId ?? event.callId;
+    var activeCallId = state.activeCallId;
+    if (status == CallStatus.ended) {
+      if (activeCallId == event.callId) {
+        activeCallId = null;
+      }
+    } else {
+      activeCallId ??= event.callId;
+    }
 
     state = state.copyWith(calls: updated, activeCallId: activeCallId);
   }
