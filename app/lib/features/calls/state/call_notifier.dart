@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:app/core/providers/sip_providers.dart';
 import 'package:app/sip/sip_engine.dart';
-
-import 'sip_engine_providers.dart';
 
 enum CallStatus { dialing, ringing, connected, ended }
 
@@ -96,15 +95,19 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _onEvent(SipEvent event) {
+    if (event.type == SipEventType.registration) return;
+    final callId = event.callId;
+    if (callId == null) return;
+
     final status = _mapStatus(event.type);
-    final previous = state.calls[event.callId];
+    final previous = state.calls[callId];
     final destination = previous?.destination ?? event.message ?? 'call';
     final logs = List<String>.from(previous?.timeline ?? [])
       ..add(_describe(event));
 
     final updated = Map<String, CallInfo>.from(state.calls);
-    updated[event.callId] = CallInfo(
-      id: event.callId,
+    updated[callId] = CallInfo(
+      id: callId,
       destination: destination,
       status: status,
       createdAt: previous?.createdAt ?? event.timestamp,
@@ -117,11 +120,11 @@ class CallNotifier extends Notifier<CallState> {
 
     var activeCallId = state.activeCallId;
     if (status == CallStatus.ended) {
-      if (activeCallId == event.callId) {
+      if (activeCallId == callId) {
         activeCallId = null;
       }
     } else {
-      activeCallId ??= event.callId;
+      activeCallId ??= callId;
     }
 
     state = state.copyWith(calls: updated, activeCallId: activeCallId);
@@ -139,6 +142,10 @@ class CallNotifier extends Notifier<CallState> {
         return CallStatus.ended;
       case SipEventType.dtmf:
         return CallStatus.connected;
+      case SipEventType.registration:
+        return CallStatus.ended;
+      case SipEventType.error:
+        return CallStatus.ended;
     }
   }
 

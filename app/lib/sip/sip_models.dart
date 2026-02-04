@@ -22,11 +22,13 @@ enum SipEventType {
   connected,
   ended,
   dtmf,
+  registration,
+  error,
 }
 
 class SipEvent {
   final SipEventType type;
-  final String callId;
+  final String? callId;
   final DateTime timestamp;
   final String? message;
   final String? digit;
@@ -35,7 +37,7 @@ class SipEvent {
 
   SipEvent({
     required this.type,
-    required this.callId,
+    this.callId,
     DateTime? timestamp,
     this.message,
     this.digit,
