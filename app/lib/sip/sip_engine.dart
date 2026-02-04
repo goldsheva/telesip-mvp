@@ -1,298 +1,206 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
 
-/// Настройки SIP-коннекта для исходящего и входящего вызовов.
-class SipConfig {
-  const SipConfig({
-    required this.domain,
-    required this.port,
-    required this.transport,
-    required this.username,
-    required this.password,
-    this.outboundProxy,
-    this.dtmfMode = 'rfc2833',
-    this.stun,
-    this.turn,
-  });
-
-  final String domain;
-  final int port;
-  final SipTransport transport;
-  final String username;
-  final String password;
-  final String? outboundProxy;
-  final String dtmfMode;
-  final String? stun;
-  final String? turn;
-}
-
-enum SipTransport { udp, tcp, tls }
-
-enum SipEventType { dialing, ringing, connected, ended, dtmf }
-
-class SipEvent {
-  SipEvent({
-    required this.callId,
-    required this.type,
-    required this.timestamp,
-    this.message,
-  });
-
-  final String callId;
-  final SipEventType type;
-  final DateTime timestamp;
-  final String? message;
-}
+import 'sip_models.dart';
+export 'sip_models.dart';
 
 abstract class SipEngine {
-  /// События движка (регистрация, вызовы, DTMF).
-  Stream<SipEvent> get events;
-
-  Future<void> initialize(SipConfig config);
-  Future<void> register();
+  Future<void> init();
+  Future<void> register({
+    required String uri,
+    required String password,
+    required String wsUrl,
+    String? displayName,
+  });
   Future<void> unregister();
-
+  Future<String> makeCall(String number);
   Future<String> startCall(String destination);
-  Future<void> acceptCall(String callId);
-  Future<void> declineCall(String callId);
   Future<void> hangup(String callId);
-  Future<void> setMute(String callId, bool mute);
-  Future<void> setHold(String callId, bool hold);
-  Future<void> setSpeaker(bool enable);
   Future<void> sendDtmf(String callId, String digits);
-
-  void dispose();
+  Future<void> dispose();
+  Stream<SipEvent> get events;
 }
 
-class FakeSipEngine implements SipEngine {
-  FakeSipEngine({
-    this.dialingDelay = const Duration(seconds: 1),
-    this.ringingDelay = const Duration(seconds: 2),
-    this.connectedDelay = const Duration(seconds: 5),
-  });
+class SipUaEngine implements SipEngine {
+  final StreamController<SipEvent> _eventController =
+      StreamController<SipEvent>.broadcast();
 
-  final Duration dialingDelay;
-  final Duration ringingDelay;
-  final Duration connectedDelay;
-
-  final _events = StreamController<SipEvent>.broadcast();
-  final _timers = <String, List<Timer>>{};
+  bool _initialized = false;
+  SipRegistrationState _registrationState = SipRegistrationState.none;
+  SipCallState _callState = SipCallState.none;
+  String? _currentCallId;
 
   @override
-  Stream<SipEvent> get events => _events.stream;
+  Stream<SipEvent> get events => _eventController.stream;
 
-  @override
-  Future<void> initialize(SipConfig config) async {
-    // Расширение будет нужно при интеграции настоящего движка.
+  void _emit(SipEvent event) {
+    if (_eventController.isClosed) return;
+    _eventController.add(event);
+  }
+
+  void _emitCall(SipEventType type, String message) {
+    _callState = _callStateFromEvent(type);
     _emit(
-      'fake-init',
-      SipEventType.dialing,
-      message: 'initialized ${config.username}',
-    );
-    await Future.delayed(const Duration(milliseconds: 10));
-  }
-
-  @override
-  Future<void> register() async {}
-
-  @override
-  Future<void> unregister() async {}
-
-  @override
-  Future<String> startCall(String destination) async {
-    final callId = 'fake-${DateTime.now().millisecondsSinceEpoch}';
-
-    _emit(callId, SipEventType.dialing, message: destination);
-
-    _schedule(callId, dialingDelay, SipEventType.ringing, message: destination);
-    _schedule(
-      callId,
-      dialingDelay + ringingDelay,
-      SipEventType.connected,
-      message: destination,
-    );
-    _schedule(
-      callId,
-      dialingDelay + ringingDelay + connectedDelay,
-      SipEventType.ended,
-      message: 'call ended',
-    );
-
-    return callId;
-  }
-
-  @override
-  Future<void> hangup(String callId) async {
-    _cancelTimers(callId);
-    _emit(callId, SipEventType.ended, message: 'ended by local user');
-  }
-
-  @override
-  Future<void> acceptCall(String callId) async {}
-
-  @override
-  Future<void> declineCall(String callId) async {}
-
-  @override
-  Future<void> setMute(String callId, bool mute) async {
-    _emit(callId, SipEventType.dtmf, message: 'mute ${mute ? 'on' : 'off'}');
-  }
-
-  @override
-  Future<void> setHold(String callId, bool hold) async {
-    _emit(callId, SipEventType.dtmf, message: 'hold ${hold ? 'on' : 'off'}');
-  }
-
-  @override
-  Future<void> setSpeaker(bool enable) async {
-    _emit(
-      'speaker',
-      SipEventType.dtmf,
-      message: 'speaker ${enable ? 'on' : 'off'}',
-    );
-  }
-
-  @override
-  Future<void> sendDtmf(String callId, String digits) async {
-    _emit(callId, SipEventType.dtmf, message: 'dtmf $digits');
-  }
-
-  void _schedule(
-    String callId,
-    Duration delay,
-    SipEventType type, {
-    String? message,
-  }) {
-    final timer = Timer(delay, () => _emit(callId, type, message: message));
-    _timers.putIfAbsent(callId, () => []).add(timer);
-  }
-
-  void _cancelTimers(String callId) {
-    final timers = _timers.remove(callId);
-    timers?.forEach((timer) => timer.cancel());
-  }
-
-  void _emit(String callId, SipEventType type, {String? message}) {
-    if (_events.isClosed) return;
-    _events.add(
       SipEvent(
-        callId: callId,
         type: type,
+        callId: _currentCallId ?? message,
         timestamp: DateTime.now(),
         message: message,
+        callState: _callState,
       ),
     );
   }
 
-  @override
-  void dispose() {
-    for (final timers in _timers.values) {
-      for (final timer in timers) {
-        timer.cancel();
-      }
+  SipCallState _callStateFromEvent(SipEventType type) {
+    switch (type) {
+      case SipEventType.dialing:
+        return SipCallState.dialing;
+      case SipEventType.ringing:
+        return SipCallState.ringing;
+      case SipEventType.connected:
+        return SipCallState.connected;
+      case SipEventType.ended:
+        return SipCallState.ended;
+      case SipEventType.dtmf:
+        return _callState == SipCallState.connected
+            ? SipCallState.connected
+            : SipCallState.dialing;
     }
-    _timers.clear();
-    _events.close();
-  }
-}
-
-/// Заглушка для будущей PJSIP-реализации через MethodChannel.
-class PjsipSipEngine implements SipEngine {
-  PjsipSipEngine()
-    : _methodChannel = const MethodChannel('app/pjsip_engine'),
-      _eventChannel = const EventChannel('app/pjsip_engine_events') {
-    final rawStream = _eventChannel.receiveBroadcastStream().map((event) {
-      if (event is! Map) return null;
-      final map = event.cast<String, dynamic>();
-      return SipEvent(
-        callId: map['callId'] as String? ?? 'unknown',
-        type: _mapType(map['type'] as String?),
-        timestamp:
-            DateTime.tryParse(map['timestamp'] as String? ?? '') ??
-            DateTime.now(),
-        message: map['message'] as String?,
-      );
-    });
-
-    _eventsStream = rawStream.where((event) => event != null).cast<SipEvent>();
-  }
-
-  final MethodChannel _methodChannel;
-  final EventChannel _eventChannel;
-  late final Stream<SipEvent> _eventsStream;
-
-  @override
-  Stream<SipEvent> get events => _eventsStream;
-
-  @override
-  Future<void> initialize(SipConfig config) async {
-    await _methodChannel.invokeMethod('initialize', {
-      'domain': config.domain,
-      'port': config.port,
-      'transport': config.transport.name,
-      'username': config.username,
-      'password': config.password,
-    });
   }
 
   @override
-  Future<void> register() => _methodChannel.invokeMethod('register');
+  Future<void> init() async {
+    if (_initialized) return;
+    _initialized = true;
+    _registrationState = SipRegistrationState.none;
+  }
 
   @override
-  Future<void> unregister() => _methodChannel.invokeMethod('unregister');
+  Future<void> register({
+    required String uri,
+    required String password,
+    required String wsUrl,
+    String? displayName,
+  }) async {
+    if (_registrationState == SipRegistrationState.registering ||
+        _registrationState == SipRegistrationState.registered) {
+      return;
+    }
+
+    _registrationState = SipRegistrationState.registering;
+    await Future<void>.delayed(Duration.zero);
+    _registrationState = SipRegistrationState.registered;
+  }
+
+  @override
+  Future<void> unregister() async {
+    if (_registrationState == SipRegistrationState.none ||
+        _registrationState == SipRegistrationState.unregistered) {
+      return;
+    }
+    _registrationState = SipRegistrationState.unregistering;
+    await Future<void>.delayed(Duration.zero);
+    _registrationState = SipRegistrationState.unregistered;
+  }
+
+  Future<String> _generateCallId(String destination) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final callId = '$destination#$timestamp';
+    _currentCallId = callId;
+    return callId;
+  }
+
+  @override
+  Future<String> makeCall(String number) async {
+    final callId = await _generateCallId(number);
+    _emitCall(SipEventType.dialing, 'Набор $number');
+    await Future<void>.delayed(Duration.zero);
+    _emitCall(SipEventType.ringing, 'Звонок $number');
+    return callId;
+  }
 
   @override
   Future<String> startCall(String destination) async {
-    final callId = await _methodChannel.invokeMethod<String>('startCall', {
-      'destination': destination,
-    });
-    return callId ?? 'pjsip-${DateTime.now().millisecondsSinceEpoch}';
+    return makeCall(destination);
   }
 
   @override
-  Future<void> acceptCall(String callId) =>
-      _methodChannel.invokeMethod('acceptCall', {'callId': callId});
+  Future<void> hangup(String callId) async {
+    if (_currentCallId != callId) {
+      return;
+    }
+    _emitCall(SipEventType.ended, 'Вызов завершён');
+    await Future<void>.delayed(Duration.zero);
+    _currentCallId = null;
+    _callState = SipCallState.none;
+  }
 
   @override
-  Future<void> declineCall(String callId) =>
-      _methodChannel.invokeMethod('declineCall', {'callId': callId});
-
-  @override
-  Future<void> hangup(String callId) =>
-      _methodChannel.invokeMethod('hangup', {'callId': callId});
-
-  @override
-  Future<void> setMute(String callId, bool mute) =>
-      _methodChannel.invokeMethod('setMute', {'callId': callId, 'mute': mute});
-
-  @override
-  Future<void> setHold(String callId, bool hold) =>
-      _methodChannel.invokeMethod('setHold', {'callId': callId, 'hold': hold});
-
-  @override
-  Future<void> setSpeaker(bool enable) =>
-      _methodChannel.invokeMethod('setSpeaker', {'enable': enable});
-
-  @override
-  Future<void> sendDtmf(String callId, String digits) => _methodChannel
-      .invokeMethod('sendDtmf', {'callId': callId, 'digits': digits});
-
-  SipEventType _mapType(String? raw) {
-    switch (raw) {
-      case 'dialing':
-        return SipEventType.dialing;
-      case 'ringing':
-        return SipEventType.ringing;
-      case 'connected':
-        return SipEventType.connected;
-      case 'ended':
-        return SipEventType.ended;
-      case 'dtmf':
-      default:
-        return SipEventType.dtmf;
+  Future<void> sendDtmf(String callId, String digits) async {
+    if (_currentCallId != callId || digits.isEmpty) return;
+    for (var i = 0; i < digits.length; i++) {
+      final digit = digits[i];
+      _emit(
+        SipEvent(
+          type: SipEventType.dtmf,
+          callId: callId,
+          message: 'DTMF $digit',
+          digit: digit,
+          timestamp: DateTime.now(),
+          callState: _callState,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
     }
   }
 
   @override
-  void dispose() {}
+  Future<void> dispose() async {
+    await _eventController.close();
+    _initialized = false;
+  }
 }
+
+class FakeSipEngine implements SipEngine {
+  final SipUaEngine _delegate = SipUaEngine();
+
+  @override
+  Stream<SipEvent> get events => _delegate.events;
+
+  @override
+  Future<void> dispose() => _delegate.dispose();
+
+  @override
+  Future<void> hangup(String callId) => _delegate.hangup(callId);
+
+  @override
+  Future<String> makeCall(String number) => _delegate.makeCall(number);
+
+  @override
+  Future<void> register({
+    required String uri,
+    required String password,
+    required String wsUrl,
+    String? displayName,
+  }) =>
+      _delegate.register(
+        uri: uri,
+        password: password,
+        wsUrl: wsUrl,
+        displayName: displayName,
+      );
+
+  @override
+  Future<void> sendDtmf(String callId, String digits) =>
+      _delegate.sendDtmf(callId, digits);
+
+  @override
+  Future<void> unregister() => _delegate.unregister();
+
+  @override
+  Future<void> init() => _delegate.init();
+
+  @override
+  Future<String> startCall(String destination) => _delegate.startCall(destination);
+}
+
+class PjsipSipEngine extends FakeSipEngine {}

@@ -396,13 +396,18 @@ class _ControlButton extends StatelessWidget {
 
     final borderColor = danger
         ? Colors.redAccent
-        : (active ? accent : theme.colorScheme.onSurface.withOpacity(0.2));
+        : (active
+            ? accent
+            : theme.colorScheme.onSurface
+                .withValues(alpha: (0.2 * 255).roundToDouble()));
     final iconColor = danger
         ? Colors.redAccent
         : (active ? accent : theme.iconTheme.color ?? Colors.black87);
     final bgColor = danger
-        ? Colors.redAccent.withOpacity(0.12)
-        : (active ? accent.withOpacity(0.12) : Colors.transparent);
+        ? Colors.redAccent.withValues(alpha: (0.12 * 255).roundToDouble())
+        : (active
+            ? accent.withValues(alpha: (0.12 * 255).roundToDouble())
+            : Colors.transparent);
 
     final disabledColor = theme.disabledColor;
 
