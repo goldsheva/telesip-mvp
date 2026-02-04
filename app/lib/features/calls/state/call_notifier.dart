@@ -136,7 +136,6 @@ class CallNotifier extends StateNotifier<CallState> {
       case SipEventType.ended:
         return CallStatus.ended;
       case SipEventType.dtmf:
-      default:
         return CallStatus.connected;
     }
   }

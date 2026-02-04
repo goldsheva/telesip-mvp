@@ -36,7 +36,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       return;
     }
 
-    await ref.read(callStoreProvider.notifier).startCall(number);
+    await ref.read(callControllerProvider.notifier).startCall(number);
   }
 
   Future<void> _sendDtmf(String callId) async {
@@ -46,7 +46,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       return;
     }
 
-    await ref.read(callStoreProvider.notifier).sendDtmf(callId, digits);
+    await ref.read(callControllerProvider.notifier).sendDtmf(callId, digits);
     _dtmfController.clear();
   }
 
@@ -112,9 +112,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 6),
-                        ...active.timeline.reversed
-                            .map((event) => Text('• $event', maxLines: 2))
-                            .toList(),
+                        ...active.timeline.reversed.map(
+                          (event) => Text('• $event', maxLines: 2),
+                        ),
                         const SizedBox(height: 8),
                       ],
                       TextField(

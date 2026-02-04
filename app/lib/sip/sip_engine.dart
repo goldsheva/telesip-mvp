@@ -201,9 +201,9 @@ class PjsipSipEngine implements SipEngine {
   PjsipSipEngine()
     : _methodChannel = const MethodChannel('app/pjsip_engine'),
       _eventChannel = const EventChannel('app/pjsip_engine_events') {
-    _eventsStream = _eventChannel.receiveBroadcastStream().map((event) {
+    final rawStream = _eventChannel.receiveBroadcastStream().map((event) {
       if (event is! Map) return null;
-      final map = Map<String, dynamic>.from(event as Map);
+      final map = event.cast<String, dynamic>();
       return SipEvent(
         callId: map['callId'] as String? ?? 'unknown',
         type: _mapType(map['type'] as String?),
@@ -212,7 +212,9 @@ class PjsipSipEngine implements SipEngine {
             DateTime.now(),
         message: map['message'] as String?,
       );
-    }).whereType<SipEvent>();
+    });
+
+    _eventsStream = rawStream.where((event) => event != null).cast<SipEvent>();
   }
 
   final MethodChannel _methodChannel;

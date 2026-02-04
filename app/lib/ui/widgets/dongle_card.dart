@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:app/config/app_colors.dart';
-import 'package:app/models/dongle.dart';
+import 'package:app/features/dongles/models/dongle.dart';
 
 class DongleCard extends StatelessWidget {
   const DongleCard({super.key, required this.dongle});
@@ -137,7 +137,7 @@ class _StatusPill extends StatelessWidget {
       height: 42,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withAlpha((0.12 * 255).round()),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: border),
       ),

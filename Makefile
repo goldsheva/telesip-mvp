@@ -39,7 +39,7 @@ format:
 
 analyze:
 	@echo "🔍 Running flutter analyze..."
-	$(FLUTTER) analyze
+	cd app && $(FLUTTER) analyze
 
 # -------------------------
 # Deep static metrics (dart_code_metrics)
@@ -47,12 +47,12 @@ analyze:
 
 metrics:
 	@echo "📊 Running dart_code_metrics..."
-	$(DART) run dart_code_metrics:metrics analyze $(LIB)
+	cd app && $(DART) run dart_code_metrics:metrics analyze $(LIB) --disable-sunset-warning
 
 # -------------------------
 # Tests
 # -------------------------
 
-test:
+tests:
 	@echo "🧪 Running tests..."
-	$(FLUTTER) test
+	cd app && $(FLUTTER) test
