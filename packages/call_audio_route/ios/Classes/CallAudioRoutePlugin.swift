@@ -6,6 +6,8 @@ public class CallAudioRoutePlugin: NSObject, FlutterPlugin, FlutterStreamHandler
   private enum Constants {
     static let methodChannel = "call_audio_route/methods"
     static let eventChannel = "call_audio_route/route_changes"
+    static let configureCall = "configureForCall"
+    static let stopCallAudio = "stopCallAudio"
   }
 
   private enum AudioRoute: String {
@@ -51,6 +53,12 @@ public class CallAudioRoutePlugin: NSObject, FlutterPlugin, FlutterStreamHandler
       result(nil)
     case "getRouteInfo":
       result(routeInfo())
+    case Constants.configureCall:
+      configureForCall()
+      emitRouteInfo()
+    case Constants.stopCallAudio:
+      stopCallAudio()
+      emitRouteInfo()
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -81,6 +89,15 @@ public class CallAudioRoutePlugin: NSObject, FlutterPlugin, FlutterStreamHandler
       applyRouteOverride()
     }
     emitRouteInfo()
+  }
+
+  private func configureForCall() {
+    activateSession()
+    emitRouteInfo()
+  }
+
+  private func stopCallAudio() {
+    deactivateSession()
   }
 
   private func activateSession() {

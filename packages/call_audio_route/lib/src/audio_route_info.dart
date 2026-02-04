@@ -1,11 +1,5 @@
 /// Shared definitions that describe the available audio routes.
-enum AudioRoute {
-  earpiece,
-  speaker,
-  bluetooth,
-  wiredHeadset,
-  systemDefault,
-}
+enum AudioRoute { earpiece, speaker, bluetooth, wiredHeadset, systemDefault }
 
 /// Lightweight carrier for the current route state that is transferred
 /// over the method/event channels.
@@ -24,13 +18,20 @@ class AudioRouteInfo {
 
   factory AudioRouteInfo.fromMap(Map<Object?, Object?> map) {
     final currentRoute = _routeFromValue(map['current']);
-    final availableRoutes = (map['available'] as List<Object?>?)?.map(_routeFromValue).whereType<AudioRoute>().toList() ?? [];
+    final availableRoutes =
+        (map['available'] as List<Object?>?)
+            ?.map(_routeFromValue)
+            .whereType<AudioRoute>()
+            .toList() ??
+        [];
     final bluetooth = map['bluetoothConnected'] as bool? ?? false;
     final wired = map['wiredConnected'] as bool? ?? false;
 
     return AudioRouteInfo(
       current: currentRoute ?? AudioRoute.systemDefault,
-      available: availableRoutes.isEmpty ? const [AudioRoute.systemDefault] : availableRoutes,
+      available: availableRoutes.isEmpty
+          ? const [AudioRoute.systemDefault]
+          : availableRoutes,
       bluetoothConnected: bluetooth,
       wiredConnected: wired,
     );
@@ -48,9 +49,9 @@ class AudioRouteInfo {
   }
 
   Map<String, Object?> toMap() => {
-        'current': current.name,
-        'available': available.map((route) => route.name).toList(),
-        'bluetoothConnected': bluetoothConnected,
-        'wiredConnected': wiredConnected,
-      };
+    'current': current.name,
+    'available': available.map((route) => route.name).toList(),
+    'bluetoothConnected': bluetoothConnected,
+    'wiredConnected': wiredConnected,
+  };
 }

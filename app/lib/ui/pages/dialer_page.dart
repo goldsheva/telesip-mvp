@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:call_audio_route/call_audio_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
@@ -29,15 +32,31 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   bool _isMuted = false;
   bool _isSpeakerOn = false;
   ProviderSubscription<CallState>? _stateSubscription;
+  final CallAudioRoute _callAudioRoute = CallAudioRoute();
+  AudioRouteInfo? _routeInfo;
+  StreamSubscription<AudioRouteInfo>? _routeSubscription;
+  bool _isBluetoothPreferred = false;
+  bool _callAudioActive = false;
+  bool _awaitingBluetoothConfirmation = false;
+  Timer? _bluetoothConfirmTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _registerSipUser());
+    _routeSubscription = _callAudioRoute.routeChanges.listen(_onRouteInfo);
+    _callAudioRoute.getRouteInfo().then((info) {
+      if (!mounted) return;
+      setState(() {
+        _routeInfo = info;
+      });
+    });
+
     _stateSubscription = ref.listenManual<CallState>(callControllerProvider, (
       previous,
       next,
     ) {
+      _handleCallStateChange(previous, next);
       final message = next.errorMessage;
       if (message != null &&
           message.isNotEmpty &&
@@ -52,6 +71,23 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
   @override
   void dispose() {
+    _routeSubscription?.cancel();
+    _bluetoothConfirmTimer?.cancel();
+    if (_callAudioActive) {
+      _callAudioActive = false;
+      Future.microtask(() async {
+        try {
+          await _callAudioRoute.setRoute(AudioRoute.systemDefault);
+        } catch (_) {
+          // best-effort
+        }
+        try {
+          await _callAudioRoute.stopCallAudio();
+        } catch (_) {
+          // best-effort
+        }
+      });
+    }
     _stateSubscription?.close();
     _numberController.dispose();
     super.dispose();
@@ -103,6 +139,157 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final user = widget.sipUser;
     if (user == null) return;
     ref.read(callControllerProvider.notifier).ensureRegistered(user);
+  }
+
+  void _handleCallStateChange(CallState? previous, CallState next) {
+    Future.microtask(() async {
+      final hadActive = previous?.activeCall != null;
+      final hasActive = next.activeCall != null;
+
+      if (hasActive && !hadActive) {
+        await _startCallAudio();
+      } else if (!hasActive && hadActive) {
+        await _stopCallAudio();
+      }
+
+      final nextActive = next.activeCall;
+      if (nextActive != null &&
+          nextActive.status == CallStatus.connected &&
+          _isBluetoothPreferred) {
+        if (_routeInfo?.bluetoothConnected ?? false) {
+          _awaitingBluetoothConfirmation = false;
+          _bluetoothConfirmTimer?.cancel();
+        } else {
+          _awaitBluetoothConnection();
+        }
+      }
+    });
+  }
+
+  Future<void> _startCallAudio() async {
+    _callAudioActive = true;
+    await _callAudioRoute.configureForCall();
+    await _applyPreferredRoute();
+  }
+
+  Future<void> _stopCallAudio() async {
+    _callAudioActive = false;
+    _awaitingBluetoothConfirmation = false;
+    _bluetoothConfirmTimer?.cancel();
+    await _callAudioRoute.stopCallAudio();
+    await _callAudioRoute.setRoute(AudioRoute.systemDefault);
+    if (!mounted) return;
+    setState(() {
+      _isSpeakerOn = false;
+      _isBluetoothPreferred = false;
+    });
+  }
+
+  void _awaitBluetoothConnection() {
+    _bluetoothConfirmTimer?.cancel();
+    _awaitingBluetoothConfirmation = true;
+    _bluetoothConfirmTimer = Timer(
+      const Duration(milliseconds: 1500),
+      () async {
+        if (!_awaitingBluetoothConfirmation) return;
+        _awaitingBluetoothConfirmation = false;
+        await _callAudioRoute.setRoute(AudioRoute.earpiece);
+        if (!mounted) return;
+        setState(() {
+          _isBluetoothPreferred = false;
+          _isSpeakerOn = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bluetooth не подключился, переключаемся на трубку'),
+          ),
+        );
+      },
+    );
+  }
+
+  void _onRouteInfo(AudioRouteInfo info) {
+    final wasConnected = _routeInfo?.bluetoothConnected ?? false;
+    setState(() {
+      _routeInfo = info;
+      _isSpeakerOn = info.current == AudioRoute.speaker;
+    });
+    if (wasConnected && !info.bluetoothConnected) {
+      _showBluetoothDisconnectSnackBar();
+    }
+    if (_awaitingBluetoothConfirmation && info.bluetoothConnected) {
+      _awaitingBluetoothConfirmation = false;
+      _bluetoothConfirmTimer?.cancel();
+    }
+  }
+
+  void _showBluetoothDisconnectSnackBar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Bluetooth гарнитура отключена')),
+    );
+  }
+
+  String _routeLabel(AudioRoute route) {
+    switch (route) {
+      case AudioRoute.earpiece:
+        return 'Трубка';
+      case AudioRoute.speaker:
+        return 'Громкая связь';
+      case AudioRoute.bluetooth:
+        return 'Bluetooth';
+      case AudioRoute.wiredHeadset:
+        return 'Проводная гарнитура';
+      case AudioRoute.systemDefault:
+        return 'Системный';
+    }
+  }
+
+  Future<void> _toggleSpeaker() async {
+    final enabling = !_isSpeakerOn;
+    setState(() {
+      _isSpeakerOn = enabling;
+      if (enabling) {
+        _isBluetoothPreferred = false;
+      }
+    });
+    await _callAudioRoute.setRoute(
+      enabling ? AudioRoute.speaker : AudioRoute.earpiece,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isSpeakerOn = enabling;
+    });
+  }
+
+  Future<void> _toggleBluetooth() async {
+    final enabling = !_isBluetoothPreferred;
+    setState(() {
+      _isBluetoothPreferred = enabling;
+      if (enabling) {
+        _isSpeakerOn = false;
+      }
+    });
+    _awaitingBluetoothConfirmation = false;
+    _bluetoothConfirmTimer?.cancel();
+    await _callAudioRoute.setRoute(
+      enabling ? AudioRoute.bluetooth : AudioRoute.earpiece,
+    );
+    if (!mounted) return;
+    if (!enabling) {
+      setState(() => _isSpeakerOn = false);
+    }
+  }
+
+  Future<void> _applyPreferredRoute() async {
+    final route = _isBluetoothPreferred
+        ? AudioRoute.bluetooth
+        : (_isSpeakerOn ? AudioRoute.speaker : AudioRoute.earpiece);
+    await _callAudioRoute.setRoute(route);
+    if (!mounted) return;
+    setState(() {
+      _isSpeakerOn = route == AudioRoute.speaker;
+    });
   }
 
   @override
@@ -168,13 +355,11 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                           onToggleMute: hasActiveCall
                               ? () {
                                   setState(() => _isMuted = !_isMuted);
-                                  // TODO: подключи реальный mute в sip engine
                                 }
                               : null,
                           onToggleSpeaker: hasActiveCall
                               ? () {
-                                  setState(() => _isSpeakerOn = !_isSpeakerOn);
-                                  // TODO: подключи реальный speaker в sip engine
+                                  _toggleSpeaker();
                                 }
                               : null,
                           onOpenKeypad: hasActiveCall
@@ -184,6 +369,69 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                               ? () => notifier.hangup(active.id)
                               : null,
                         ),
+                        if (_routeInfo != null && hasActiveCall) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(18),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color.fromRGBO(0, 0, 0, 0.05),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Маршрут: ${_routeLabel(_routeInfo!.current)}',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                if (_routeInfo!.available.contains(
+                                  AudioRoute.bluetooth,
+                                ))
+                                  Text(
+                                    'Bluetooth: ${_routeInfo!.bluetoothConnected ? 'подключен' : 'доступен'}',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: Colors.grey),
+                                  ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _ControlButton(
+                                        icon: Icons.volume_up,
+                                        label: 'Громкая',
+                                        active: _isSpeakerOn,
+                                        onTap: () => _toggleSpeaker(),
+                                      ),
+                                    ),
+                                    if (_routeInfo!.available.contains(
+                                      AudioRoute.bluetooth,
+                                    )) ...[
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _ControlButton(
+                                          icon: Icons.bluetooth,
+                                          label: 'Bluetooth',
+                                          active:
+                                              _isBluetoothPreferred ||
+                                              _routeInfo!.current ==
+                                                  AudioRoute.bluetooth,
+                                          onTap: () => _toggleBluetooth(),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                       ],
                       if (state.history.isNotEmpty)

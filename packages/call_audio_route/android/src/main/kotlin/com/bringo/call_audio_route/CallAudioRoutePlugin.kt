@@ -27,6 +27,8 @@ class CallAudioRoutePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     private const val CHANNEL_EVENTS = "call_audio_route/route_changes"
     private const val METHOD_SET_ROUTE = "setRoute"
     private const val METHOD_GET_ROUTE_INFO = "getRouteInfo"
+    private const val METHOD_CONFIGURE_CALL = "configureForCall"
+    private const val METHOD_STOP_CALL_AUDIO = "stopCallAudio"
     private const val BLUETOOTH_TIMEOUT_MS = 4_000L
   }
 
@@ -135,6 +137,15 @@ class CallAudioRoutePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         result.success(null)
       }
       METHOD_GET_ROUTE_INFO -> result.success(getRouteInfoMap())
+      METHOD_CONFIGURE_CALL -> {
+        configureForCall()
+        emitRouteInfo()
+        result.success(null)
+      }
+      METHOD_STOP_CALL_AUDIO -> {
+        stopCallAudio()
+        result.success(null)
+      }
       else -> result.notImplemented()
     }
   }
@@ -198,6 +209,14 @@ class CallAudioRoutePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
       requestAudioFocus()
       callModeActive = true
     }
+  }
+
+  private fun configureForCall() {
+    ensureCallMode()
+  }
+
+  private fun stopCallAudio() {
+    releaseCallMode()
   }
 
   private fun releaseCallMode() {

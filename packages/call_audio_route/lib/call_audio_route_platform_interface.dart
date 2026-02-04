@@ -26,4 +26,8 @@ abstract class CallAudioRoutePlatform extends PlatformInterface {
   Future<AudioRouteInfo> getRouteInfo();
 
   Stream<AudioRouteInfo> get routeChanges;
+
+  Future<void> configureForCall();
+
+  Future<void> stopCallAudio();
 }
