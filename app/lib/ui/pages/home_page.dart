@@ -93,10 +93,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     final dongleMap = {for (var dongle in dongles) dongle.dongleId: dongle};
     final sortedSipClients = [...visibleSipClients];
     sortedSipClients.sort((a, b) {
-      final isCallableA =
-          dongleMap[a.dongleId!]?.isCallable ?? false;
-      final isCallableB =
-          dongleMap[b.dongleId!]?.isCallable ?? false;
+      final isCallableA = dongleMap[a.dongleId!]?.isCallable ?? false;
+      final isCallableB = dongleMap[b.dongleId!]?.isCallable ?? false;
       if (isCallableA == isCallableB) {
         return 0;
       }
@@ -143,7 +141,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                     isCallable: isCallable,
                     onCall: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => DialerPage(sipUser: sipUser),
+                        builder: (_) => DialerPage(
+                          sipUser: sipUser,
+                          dongleName: dongle?.name,
+                          dongleNumber: dongle?.number,
+                        ),
                       ),
                     ),
                   ),
@@ -237,7 +239,6 @@ class _SipUserListTile extends StatefulWidget {
 }
 
 class _SipUserListTileState extends State<_SipUserListTile> {
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -291,14 +292,20 @@ class _SipUserListTileState extends State<_SipUserListTile> {
             ],
             const SizedBox(height: 6),
             if (primaryConnection != null) ...[
-              _InfoLine(label: 'SIP Server', value: primaryConnection.pbxSipUrl),
+              _InfoLine(
+                label: 'SIP Server',
+                value: primaryConnection.pbxSipUrl,
+              ),
               const SizedBox(height: 6),
               _InfoLine(
                 label: 'SIP Port',
                 value: primaryConnection.pbxSipPort.toString(),
               ),
               const SizedBox(height: 6),
-              _InfoLine(label: 'Protocol', value: primaryConnection.pbxSipProtocol),
+              _InfoLine(
+                label: 'Protocol',
+                value: primaryConnection.pbxSipProtocol,
+              ),
             ],
             if (secondConnection != null) ...[
               const SizedBox(height: 6),
@@ -332,10 +339,7 @@ class _SipUserListTileState extends State<_SipUserListTile> {
 }
 
 class _InfoLine extends StatelessWidget {
-  const _InfoLine({
-    required this.label,
-    required this.value,
-  });
+  const _InfoLine({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -501,7 +505,11 @@ class _GeneralSettingsDialog extends StatelessWidget {
             _InfoLine(label: 'SIP Username', value: sipClient.sipLogin),
             const SizedBox(height: 6),
             _InfoLine(label: 'SIP Password', value: sipClient.sipPassword),
-            for (var i = 0; i < sipClient.sipConnections.length && i < 2; i++) ...[
+            for (
+              var i = 0;
+              i < sipClient.sipConnections.length && i < 2;
+              i++
+            ) ...[
               const SizedBox(height: 6),
               _InfoLine(
                 label: 'SIP Server',

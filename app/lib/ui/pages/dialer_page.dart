@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
+import 'package:flutter_native_contact_picker/model/contact.dart';
 
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 
 class DialerPage extends ConsumerStatefulWidget {
-  const DialerPage({super.key, this.sipUser});
+  const DialerPage({
+    super.key,
+    this.sipUser,
+    this.dongleName,
+    this.dongleNumber,
+  });
 
   final PbxSipUser? sipUser;
+  final String? dongleName;
+  final String? dongleNumber;
 
   @override
   ConsumerState<DialerPage> createState() => _DialerPageState();
@@ -16,20 +25,14 @@ class DialerPage extends ConsumerStatefulWidget {
 class _DialerPageState extends ConsumerState<DialerPage> {
   final _numberController = TextEditingController();
   final _dtmfController = TextEditingController();
+  final FlutterNativeContactPicker _contactPicker =
+      FlutterNativeContactPicker();
 
   @override
   void dispose() {
     _numberController.dispose();
     _dtmfController.dispose();
     super.dispose();
-  }
-
-  void _appendDigit(String digit) {
-    _numberController
-      ..text = '${_numberController.text}$digit'
-      ..selection = TextSelection.fromPosition(
-        TextPosition(offset: _numberController.text.length),
-      );
   }
 
   Future<void> _call() async {
@@ -66,29 +69,51 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final active = state.activeCall;
     final sipUser = widget.sipUser;
 
+    final titleText = widget.dongleName ?? sipUser?.sipLogin ?? 'Набор';
+    final subtitle = widget.dongleNumber;
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         elevation: 0,
-        title: Text(
-          sipUser != null ? 'Dialer · ${sipUser.sipLogin}' : 'Dialer',
-          style: const TextStyle(fontWeight: FontWeight.w600),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              titleText,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if (subtitle != null && subtitle.isNotEmpty)
+              Text(
+                subtitle,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+              ),
+          ],
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Text(
+              'Исходящий звонок',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 30),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(18),
                   boxShadow: const [
                     BoxShadow(
                       color: Colors.black12,
-                      blurRadius: 12,
+                      blurRadius: 10,
                       offset: Offset(0, 6),
                     ),
                   ],
@@ -96,158 +121,187 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                 child: TextField(
                   controller: _numberController,
                   keyboardType: TextInputType.phone,
+                  autofocus: true,
                   decoration: InputDecoration(
                     hintText: 'Введите номер',
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    prefixIcon: const Icon(Icons.dialpad_outlined),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        _numberController.clear();
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.close),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 18,
+                    ),
+                    prefixIcon: const Icon(Icons.phone),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: _pickContact,
+                          icon: const Icon(Icons.contacts),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            _numberController.clear();
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
                     ),
                   ),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
-              const SizedBox(height: 24),
-              _buildKeypad(),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: active != null ? null : _call,
-                  icon: const Icon(Icons.call),
-                  label: const Text('Позвонить'),
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    backgroundColor: Colors.green,
-                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              if (active != null) ...[
-                const SizedBox(height: 20),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 18,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(16),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Активный вызов · ${_describeStatus(active.status)}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Номер: ${active.destination}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      if (active.timeline.isNotEmpty) ...[
-                        Text(
-                          'События:',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 6),
-                        ...active.timeline.reversed.map(
-                          (event) => Text(
-                            '• $event',
-                            maxLines: 2,
-                            style: Theme.of(context).textTheme.bodySmall,
+                      if (active != null) ...[
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color.fromRGBO(0, 0, 0, 0.05),
+                                blurRadius: 18,
+                                offset: Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Активный вызов · ${_describeStatus(active.status)}',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Номер: ${active.destination}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              if (active.timeline.isNotEmpty) ...[
+                                Text(
+                                  'События:',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 6),
+                                ...active.timeline.reversed.map(
+                                  (event) => Text(
+                                    '• $event',
+                                    maxLines: 2,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                              TextField(
+                                controller: _dtmfController,
+                                decoration: const InputDecoration(
+                                  labelText: 'DTMF',
+                                  hintText: '123#',
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () => _sendDtmf(active.id),
+                                      child: const Text('Отправить DTMF'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: () => notifier.hangup(active.id),
+                                    icon: const Icon(Icons.call_end),
+                                    label: const Text('Сбросить'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.redAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 20),
                       ],
-                      TextField(
-                        controller: _dtmfController,
-                        decoration: const InputDecoration(
-                          labelText: 'DTMF',
-                          hintText: '123#',
+                      if (state.history.isNotEmpty) ...[
+                        Text(
+                          'История звонков',
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () => _sendDtmf(active.id),
-                              child: const Text('Отправить DTMF'),
+                        const SizedBox(height: 12),
+                        ...state.history.map(
+                          (call) => ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            tileColor: Theme.of(context).colorScheme.surface,
+                            title: Text(call.destination),
+                            subtitle: Text(_describeStatus(call.status)),
+                            trailing: Text(
+                              '${call.createdAt.hour.toString().padLeft(2, '0')}:${call.createdAt.minute.toString().padLeft(2, '0')}',
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          ElevatedButton.icon(
-                            onPressed: () => notifier.hangup(active.id),
-                            icon: const Icon(Icons.call_end),
-                            label: const Text('Сбросить'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-              ],
-              if (state.history.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                Text(
-                  'История звонков',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 12),
-                ...state.history.map(
-                  (call) => ListTile(
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: SizedBox(
+                height: 56,
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: active != null ? null : _call,
+                  style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
                     ),
-                    tileColor: Theme.of(context).colorScheme.surface,
-                    title: Text(call.destination),
-                    subtitle: Text(_describeStatus(call.status)),
-                    trailing: Text(
-                      '${call.createdAt.hour.toString().padLeft(2, '0')}:${call.createdAt.minute.toString().padLeft(2, '0')}',
-                    ),
+                    backgroundColor: Colors.green,
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
                   ),
+                  child: const Text('Позвонить'),
                 ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildKeypad() {
-    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
-
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 3,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.0,
-      children: keys
-          .map((key) => _DialerKey(
-                label: key,
-                onTap: () => _appendDigit(key),
-              ))
-          .toList(),
-    );
+  Future<void> _pickContact() async {
+    try {
+      final Contact? contact = await _contactPicker.selectPhoneNumber();
+      final number = contact?.selectedPhoneNumber;
+      if (number != null && number.isNotEmpty) {
+        final trimmed = number.trim();
+        _numberController.text = trimmed;
+        _numberController.selection = TextSelection.fromPosition(
+          TextPosition(offset: trimmed.length),
+        );
+        setState(() {});
+      }
+    } catch (error) {
+      _showMessage('Не удалось выбрать контакт: $error');
+    }
   }
 
   String _describeStatus(CallStatus status) {
@@ -261,37 +315,5 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       case CallStatus.ended:
         return 'Завершён';
     }
-  }
-}
-
-class _DialerKey extends StatelessWidget {
-  const _DialerKey({
-    required this.label,
-    required this.onTap,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.green,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        textStyle: theme.textTheme.headlineMedium?.copyWith(color: Colors.white),
-        elevation: 4,
-        shadowColor: Colors.black26,
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.headlineMedium?.copyWith(
-          color: Colors.white,
-          letterSpacing: 1,
-        ),
-      ),
-    );
   }
 }

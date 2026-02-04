@@ -35,7 +35,7 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   http: ^1.6.0
   local_auth: ^3.0.0
-
+  flutter_native_contact_picker: ^0.0.11
 dev_dependencies:
   flutter_test:
     sdk: flutter

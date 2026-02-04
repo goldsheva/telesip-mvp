@@ -32,8 +32,9 @@ class Dongle {
       ),
       displayStatus: parseOpenApiString(json['display_status']),
       isTariffPackageActive: json['is_tariff_package_active'] == true,
-      dongleCallType:
-          DongleCallType.fromValue(parseOpenApiNullableInt(json['dongle_call_type_id'])),
+      dongleCallType: DongleCallType.fromValue(
+        parseOpenApiNullableInt(json['dongle_call_type_id']),
+      ),
     );
   }
 
