@@ -1,19 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:app/core/navigation/route_observer.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
-import 'package:app/features/sip_users/models/sip_user.dart';
+import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'package:app/ui/pages/dialer_page.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
-  Future<void> _refresh(WidgetRef ref) =>
-      ref.read(sipUsersProvider.notifier).refresh();
+  @override
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> with RouteAware {
+  PageRoute<void>? _route;
+
+  Future<void> _refresh() => ref.read(sipUsersProvider.notifier).refresh();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<void> && _route != route) {
+      routeObserver.subscribe(this, route);
+      _route = route;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_route != null) {
+      routeObserver.unsubscribe(this);
+    }
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final sipUsers = ref.watch(sipUsersProvider);
 
     return Scaffold(
@@ -36,7 +66,7 @@ class HomePage extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => _refresh(ref),
+        onRefresh: _refresh,
         child: sipUsers.when(
           loading: () =>
               const _CenteredScroll(child: CircularProgressIndicator()),
@@ -163,7 +193,7 @@ class _ErrorState extends StatelessWidget {
 class _SipUserTile extends StatelessWidget {
   const _SipUserTile({required this.sipUser});
 
-  final SipUser sipUser;
+  final PbxSipUser sipUser;
 
   @override
   Widget build(BuildContext context) {

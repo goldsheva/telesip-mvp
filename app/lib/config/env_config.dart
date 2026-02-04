@@ -24,13 +24,4 @@ class EnvConfig {
         return 1;
     }
   }
-
-  static String get graphqlUrl {
-    switch (env) {
-      case Environment.dev:
-        return 'https://teleleo.k8s-stage.bringo.tel/api/';
-      case Environment.prod:
-        return 'https://teleleo.com/api/';
-    }
-  }
 }

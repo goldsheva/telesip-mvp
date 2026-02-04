@@ -5,7 +5,7 @@ import 'package:app/features/sip_users/models/sip_users_state.dart';
 import 'package:app/core/providers.dart';
 
 final sipUsersApiProvider = Provider<SipUsersApi>((ref) {
-  return SipUsersApi(ref.read(graphqlClientProvider));
+  return SipUsersApi(ref.read(apiClientProvider));
 });
 
 final sipUsersProvider = AsyncNotifierProvider<SipUsersNotifier, SipUsersState>(
