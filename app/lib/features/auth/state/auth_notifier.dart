@@ -26,8 +26,6 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> login(String email, String password) async {
-    state = const AsyncLoading();
-
     try {
       final tokens = await ref
           .read(authApiProvider)
@@ -54,8 +52,6 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> loginWithBiometrics() async {
-    state = const AsyncLoading();
-
     try {
       final storage = ref.read(authTokensStorageProvider);
       final tokens = await storage.readTokens();

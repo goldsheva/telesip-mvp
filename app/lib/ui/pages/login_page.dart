@@ -6,6 +6,7 @@ import 'package:app/core/providers.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/ui/widgets/labeled_input.dart';
+import 'package:app/ui/widgets/loading_button.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key, this.error});
@@ -26,6 +27,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   bool _biometricAvailable = false;
   bool _isAuthenticatingBiometric = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -47,6 +49,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   bool _validEmail(String v) => v.contains('@') && v.contains('.');
 
+  Future<T> _withSubmission<T>(Future<T> Function() action) async {
+    setState(() => _isSubmitting = true);
+    try {
+      return await action();
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
   Future<void> _login() async {
     final email = _email.text.trim();
     final password = _password.text;
@@ -63,7 +76,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
-    await ref.read(authNotifierProvider.notifier).login(email, password);
+    await _withSubmission(
+      () => ref.read(authNotifierProvider.notifier).login(email, password),
+    );
   }
 
   void _toast(String msg) {
@@ -86,33 +101,34 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _authenticateWithBiometrics() async {
     if (_isAuthenticatingBiometric) return;
 
-    setState(() => _isAuthenticatingBiometric = true);
-    try {
-      final didAuthenticate = await _localAuth.authenticate(
-        localizedReason: 'Авторизуйтесь по данных Face ID или отпечатка пальца',
-        biometricOnly: true,
-        persistAcrossBackgrounding: true,
-      );
+    await _withSubmission(() async {
+      setState(() => _isAuthenticatingBiometric = true);
+      try {
+        final didAuthenticate = await _localAuth.authenticate(
+          localizedReason:
+              'Авторизуйтесь по данным Face ID или отпечатка пальца',
+          biometricOnly: true,
+          persistAcrossBackgrounding: true,
+        );
 
-      if (!didAuthenticate) {
-        _toast('Биометрическая проверка не была подтверждена');
-        return;
-      }
+        if (!didAuthenticate) {
+          _toast('Биометрическая проверка не была подтверждена');
+          return;
+        }
 
-      await ref.read(authNotifierProvider.notifier).loginWithBiometrics();
-    } catch (_) {
-      _toast('Не удалось выполнить биометрическую авторизацию');
-    } finally {
-      if (mounted) {
+        await ref.read(authNotifierProvider.notifier).loginWithBiometrics();
+      } catch (_) {
+        _toast('Не удалось выполнить биометрическую авторизацию');
+      } finally {
         setState(() => _isAuthenticatingBiometric = false);
       }
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final authAsync = ref.watch(authNotifierProvider);
-    final isLoading = authAsync.isLoading;
+    final isBusy = _isSubmitting || authAsync.isLoading;
 
     // 1) ошибка из AsyncValue.error
     // 2) ошибка из AuthState.unauthenticated(error)
@@ -156,7 +172,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       focusNode: _emailFocus,
                       textInputAction: TextInputAction.next,
                       onSubmitted: (_) => _passwordFocus.requestFocus(),
-                      enabled: !isLoading,
+                      enabled: !isBusy,
                       autofillHints: const [
                         AutofillHints.username,
                         AutofillHints.email,
@@ -171,8 +187,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       obscure: true,
                       focusNode: _passwordFocus,
                       textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => isLoading ? null : _login(),
-                      enabled: !isLoading,
+                      onSubmitted: (_) => isBusy ? null : _login(),
+                      enabled: !isBusy,
                       autofillHints: const [AutofillHints.password],
                     ),
 
@@ -188,20 +204,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ],
 
                     const SizedBox(height: 14),
-                    ElevatedButton(
-                      onPressed: isLoading ? null : _login,
-                      child: isLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Log in'),
+                    LoadingButton(
+                      onPressed: isBusy ? null : _login,
+                      isLoading: _isSubmitting,
+                      child: const Text('Log in'),
                     ),
                     if (_biometricAvailable) ...[
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
-                        onPressed: isLoading || _isAuthenticatingBiometric
+                        onPressed: isBusy || _isAuthenticatingBiometric
                             ? null
                             : _authenticateWithBiometrics,
                         icon: const Icon(Icons.fingerprint),
