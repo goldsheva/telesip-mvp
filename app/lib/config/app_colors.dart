@@ -17,13 +17,4 @@ class AppColors {
   static const danger = Color(0xFFEF4444);
   static const warning = Color(0xFFF59E0B);
   static const success = Color(0xFF22C55E);
-
-  // dark (modern)
-  static const bgDark = Color(0xFF0B1220);
-  static const cardDark = Color(0xFF111A2E);
-
-  static const textDark = Color(0xFFE7ECF4);
-  static const text2Dark = Color(0xFFA3B3CC);
-
-  static const borderDark = Color(0xFF1D2A44);
 }
