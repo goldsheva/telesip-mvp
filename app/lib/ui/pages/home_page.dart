@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/state/auth/auth_controller.dart';
 import 'package:app/state/dongles/dongles_providers.dart';
+import 'package:app/ui/pages/dialer_page.dart';
 import 'package:app/ui/widgets/dongle_card.dart';
 
 class HomePage extends ConsumerWidget {
@@ -72,6 +73,12 @@ class HomePage extends ConsumerWidget {
             );
           },
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const DialerPage()),
+        ),
+        child: const Icon(Icons.dialpad),
       ),
     );
   }
