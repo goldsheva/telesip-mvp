@@ -107,11 +107,14 @@ class _DialerPageState extends ConsumerState<DialerPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 10),
-            Text(
-              'Исходящий звонок',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade400),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Исходящий звонок',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade400),
+              ),
             ),
             const SizedBox(height: 30),
             Padding(
