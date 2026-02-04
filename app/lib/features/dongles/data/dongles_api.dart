@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:app/config/env_config.dart';
 import 'package:app/core/network/api_client.dart';
 import 'package:app/core/network/api_endpoints.dart';
 import 'package:app/features/dongles/models/dongle.dart';
@@ -10,7 +11,10 @@ class DonglesApi {
   final ApiClient _apiClient;
 
   Future<List<Dongle>> fetchDongles() async {
-    final response = await _apiClient.get(ApiEndpoints.donglesList);
+    final uri = Uri.parse(ApiEndpoints.donglesList).replace(
+      queryParameters: {'site_domain_id': EnvConfig.siteDomainId.toString()},
+    );
+    final response = await _apiClient.get(uri.toString());
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(

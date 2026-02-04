@@ -57,15 +57,14 @@ class ApiClient {
       if (tokens != null) 'Authorization': 'Bearer ${tokens.accessToken}',
     };
 
+    if (_shouldLog()) {
+      _logRequest(method, apiUri, headers, body);
+    }
+
     final response = await _send(method, uri, headers: headers, body: body);
 
     if (_shouldLog()) {
-      debugPrint('ApiClient -> $method $apiUri');
-      debugPrint('Headers: $headers');
-      if (body != null && body.isNotEmpty) {
-        debugPrint('Body: $body');
-      }
-      debugPrint('ApiClient <- ${response.statusCode} ${response.body}');
+      _logResponse(method, apiUri, headers, body, response);
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -134,5 +133,28 @@ class ApiClient {
 
   bool _shouldLog() {
     return EnvConfig.env == Environment.dev;
+  }
+
+  void _logRequest(
+    String method,
+    String apiUri,
+    Map<String, String> headers,
+    Map<String, dynamic>? body,
+  ) {
+    debugPrint('ApiClient -> $method $apiUri');
+    debugPrint('Headers: $headers');
+    if (body != null && body.isNotEmpty) {
+      debugPrint('Body: $body');
+    }
+  }
+
+  void _logResponse(
+    String method,
+    String apiUri,
+    Map<String, String> headers,
+    Map<String, dynamic>? body,
+    http.Response response,
+  ) {
+    debugPrint('ApiClient <- ${response.statusCode} ${response.body}');
   }
 }

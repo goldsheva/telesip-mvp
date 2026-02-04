@@ -19,10 +19,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           ? const AuthState.unauthenticated()
           : AuthState.authenticated(tokens);
 
-      _invalidateCaches();
       return next;
     } catch (e) {
-      _invalidateCaches();
       return AuthState.unauthenticated(error: _messageFrom(e));
     }
   }
@@ -36,10 +34,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           .login(email: email, password: password);
 
       await ref.read(authTokensStorageProvider).writeTokens(tokens);
-      _invalidateCaches();
       state = AsyncData(AuthState.authenticated(tokens));
-    } catch (e) {
       _invalidateCaches();
+    } catch (e) {
       state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
     }
   }
@@ -49,10 +46,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     try {
       await ref.read(authTokensStorageProvider).clear();
-      _invalidateCaches();
       state = const AsyncData(AuthState.unauthenticated());
-    } catch (e) {
       _invalidateCaches();
+    } catch (e) {
       state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
     }
   }
