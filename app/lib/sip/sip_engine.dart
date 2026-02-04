@@ -163,6 +163,16 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     return domain.isNotEmpty ? domain : null;
   }
 
+  String? _extractSipLogin(String uri) {
+    var cleaned = uri;
+    if (cleaned.startsWith('sip:')) {
+      cleaned = cleaned.substring(4);
+    }
+    final atIndex = cleaned.indexOf('@');
+    if (atIndex <= 0) return null;
+    return cleaned.substring(0, atIndex);
+  }
+
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
     await init();
@@ -204,6 +214,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       ..webSocketUrl = wsUrl.trim()
       ..displayName = displayName
       ..transportType = TransportType.WS
+      ..authorizationUser = _extractSipLogin(normalizedUri)
       ..register = true;
 
     try {

@@ -28,22 +28,29 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
   bool _isMuted = false;
   bool _isSpeakerOn = false;
+  ProviderSubscription<CallState>? _stateSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _registerSipUser());
-    ref.listen<CallState>(callControllerProvider, (previous, next) {
-      final message = next.errorMessage;
-      if (message != null && message.isNotEmpty && message != previous?.errorMessage) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-      }
-    });
+    _stateSubscription = ref.listenManual<CallState>(
+      callControllerProvider,
+      (previous, next) {
+        final message = next.errorMessage;
+        if (message != null &&
+            message.isNotEmpty &&
+            message != previous?.errorMessage) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    _stateSubscription?.close();
     _numberController.dispose();
     super.dispose();
   }

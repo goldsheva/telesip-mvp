@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:app/config/env_config.dart';
 import 'package:app/core/providers/sip_providers.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/sip/sip_engine.dart';
@@ -114,29 +115,46 @@ class CallNotifier extends Notifier<CallState> {
     _lastKnownUser = user;
     if (_isRegistered && _registeredUserId == user.pbxSipUserId) return;
 
-    final connections = user.sipConnections;
-    if (connections.isEmpty) {
-      _setError('Нет доступных SIP серверов');
+    final wsConnections = user.sipConnections
+        .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
+        .toList();
+
+    String wsUrl;
+    String uriHost;
+
+    if (wsConnections.isNotEmpty) {
+      final connection = wsConnections.first;
+      final protocol = connection.pbxSipProtocol.toLowerCase();
+      final scheme = protocol.contains('wss')
+          ? 'wss'
+          : protocol.contains('ws')
+              ? 'ws'
+              : null;
+      if (scheme == null) {
+        _setError('Поддерживается только WS/WSS');
+        return;
+      }
+
+      wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
+      uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
+    } else {
+      final defaultWs = EnvConfig.sipWebSocketUrl;
+      if (defaultWs == null) {
+        _setError(
+          'PBX не отдает WS/WSS transport. Для sip_ua нужен SIP over WebSocket. '
+          'Ожидается WSS (например wss://pbx.teleleo.com:7443/).',
+        );
+        return;
+      }
+      wsUrl = defaultWs;
+      uriHost = Uri.tryParse(wsUrl)?.host ?? '';
+    }
+
+    if (uriHost.isEmpty) {
+      _setError('Невозможно определить домен SIP');
       return;
     }
-    final connection = connections.firstWhere(
-      (c) => c.pbxSipProtocol.toLowerCase().contains('ws'),
-      orElse: () => connections.first,
-    );
-
-    final protocol = connection.pbxSipProtocol.toLowerCase();
-    final scheme = protocol.contains('wss')
-        ? 'wss'
-        : protocol.contains('ws')
-            ? 'ws'
-            : null;
-    if (scheme == null) {
-      _setError('Поддерживается только WS/WSS');
-      return;
-    }
-
-    final wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
-    final uri = 'sip:${user.sipLogin}@${connection.pbxSipUrl}';
+    final uri = 'sip:${user.sipLogin}@$uriHost';
     try {
       _clearError();
       await _engine.register(
