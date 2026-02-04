@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:app/state/core_providers.dart';
-import 'package:app/state/dongles/dongles_providers.dart';
+import 'package:app/core/providers.dart';
+import 'package:app/features/dongles/state/dongle_list_notifier.dart';
 import 'auth_state.dart';
 
-final authControllerProvider =
-    AsyncNotifierProvider<AuthController, AuthState>(AuthController.new);
+final authNotifierProvider =
+    AsyncNotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
 
-class AuthController extends AsyncNotifier<AuthState> {
+class AuthNotifier extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
     try {

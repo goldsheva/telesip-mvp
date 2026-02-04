@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/app_theme.dart';
-import 'package:app/state/auth/auth_controller.dart';
-import 'package:app/state/auth/auth_state.dart';
+import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
 
@@ -25,7 +25,7 @@ class _AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
+    final auth = ref.watch(authNotifierProvider);
 
     return auth.when(
       loading: () => const _Splash(),

@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:app/models/auth_tokens.dart';
+
+import 'package:app/features/auth/models/auth_tokens.dart';
 import 'package:http/http.dart' as http;
 
 typedef TokensReader = Future<AuthTokens?> Function();

@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:app/config/api_endpoints.dart';
-import 'package:app/models/auth_tokens.dart';
+
+import 'package:app/core/network/api_endpoints.dart';
+import 'package:app/features/auth/models/auth_tokens.dart';
 import 'package:http/http.dart' as http;
 
 class AuthApi {

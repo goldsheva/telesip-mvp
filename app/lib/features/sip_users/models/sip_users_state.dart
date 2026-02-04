@@ -1,4 +1,4 @@
-import 'package:app/models/sip_user.dart';
+import 'package:app/features/sip_users/models/sip_user.dart';
 
 class SipUsersState {
   final int total;

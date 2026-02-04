@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:app/state/auth/auth_controller.dart';
-import 'package:app/state/dongles/dongles_providers.dart';
+import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/dongles/state/dongle_list_notifier.dart';
 import 'package:app/ui/pages/dialer_page.dart';
 import 'package:app/ui/widgets/dongle_card.dart';
 
@@ -30,7 +30,7 @@ class HomePage extends ConsumerWidget {
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+            onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
           ),
         ],

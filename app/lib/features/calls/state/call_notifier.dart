@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/sip/sip_engine.dart';
 
-import '../sip_providers.dart';
+import 'sip_engine_providers.dart';
 
 enum CallStatus { dialing, ringing, connected, ended }
 
@@ -73,8 +73,8 @@ class CallState {
   }
 }
 
-class CallStore extends StateNotifier<CallState> {
-  CallStore(this._engine) : super(CallState.initial()) {
+class CallNotifier extends StateNotifier<CallState> {
+  CallNotifier(this._engine) : super(CallState.initial()) {
     _subscription = _engine.events.listen(_onEvent);
   }
 
@@ -149,7 +149,7 @@ class CallStore extends StateNotifier<CallState> {
   }
 }
 
-final callStoreProvider = StateNotifierProvider<CallStore, CallState>((ref) {
+final callControllerProvider = StateNotifierProvider<CallNotifier, CallState>((ref) {
   final engine = ref.watch(sipEngineProvider);
-  return CallStore(engine);
+  return CallNotifier(engine);
 });

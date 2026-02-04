@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'package:app/config/api_endpoints.dart';
-import 'package:app/models/dongle.dart';
-import 'package:app/services/api_client.dart';
+
+import 'package:app/core/network/api_client.dart';
+import 'package:app/core/network/api_endpoints.dart';
+import 'package:app/features/dongles/models/dongle.dart';
 
 class DonglesApi {
   const DonglesApi(this._apiClient);

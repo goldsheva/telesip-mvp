@@ -1,14 +1,16 @@
 import 'dart:convert';
-import 'package:app/config/api_endpoints.dart';
-import 'package:app/models/sip_user.dart';
-import 'package:app/services/api_client.dart';
+
+import 'package:app/core/network/api_client.dart';
+import 'package:app/core/network/api_endpoints.dart';
+import 'package:app/features/sip_users/models/sip_user.dart';
+import 'package:app/features/sip_users/models/sip_users_state.dart';
 
 class SipUsersApi {
   const SipUsersApi(this._apiClient);
 
   final ApiClient _apiClient;
 
-  Future<List<SipUser>> fetchSipUsers() async {
+  Future<SipUsersState> fetchSipUsersState() async {
     final response = await _apiClient.get(ApiEndpoints.sipUsersList);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -25,34 +27,27 @@ class SipUsersApi {
       throw Exception('Missing "data" object: ${response.body}');
     }
 
-    final sipUsersWrap = data['sipUsers'];
-    if (sipUsersWrap is! Map<String, dynamic>) {
+    final wrap = data['sipUsers'];
+    if (wrap is! Map<String, dynamic>) {
       throw Exception('Missing "data.sipUsers" object: ${response.body}');
     }
 
-    final list = sipUsersWrap['sipUsers'];
+    final list = wrap['sipUsers'];
     if (list is! List) {
       throw Exception('Missing "data.sipUsers.sipUsers" list: ${response.body}');
     }
 
-    return list
+    final items = list
         .whereType<Map<String, dynamic>>()
         .map(SipUser.fromJson)
         .toList();
+
+    final total = (wrap['total'] as num?)?.toInt() ?? 0;
+
+    return SipUsersState(total: total, items: items);
   }
 
-  Future<int> fetchTotal() async {
-    final response = await _apiClient.get(ApiEndpoints.sipUsersList);
+  Future<List<SipUser>> fetchSipUsers() => fetchSipUsersState().then((state) => state.items);
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('SipUsers failed: ${response.statusCode} ${response.body}');
-    }
-
-    final decoded = jsonDecode(response.body);
-    final data = (decoded is Map<String, dynamic>) ? decoded['data'] : null;
-    final wrap = (data is Map<String, dynamic>) ? data['sipUsers'] : null;
-    final total = (wrap is Map<String, dynamic>) ? wrap['total'] : null;
-
-    return (total as num?)?.toInt() ?? 0;
-  }
+  Future<int> fetchTotal() => fetchSipUsersState().then((state) => state.total);
 }

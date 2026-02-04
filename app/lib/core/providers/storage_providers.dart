@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:app/services/auth_api.dart';
-import 'package:app/services/auth_tokens_storage.dart';
+import 'package:app/features/auth/data/auth_api.dart';
+import 'package:app/core/storage/auth_tokens_storage.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage();

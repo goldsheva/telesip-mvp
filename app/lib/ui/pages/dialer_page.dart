@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:app/state/call/call_store.dart';
+import 'package:app/features/calls/state/call_notifier.dart';
 
 class DialerPage extends ConsumerStatefulWidget {
   const DialerPage({super.key});
@@ -56,8 +56,8 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(callStoreProvider);
-    final notifier = ref.read(callStoreProvider.notifier);
+    final state = ref.watch(callControllerProvider);
+    final notifier = ref.read(callControllerProvider.notifier);
     final active = state.activeCall;
 
     return Scaffold(

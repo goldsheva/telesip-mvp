@@ -1,4 +1,4 @@
-import 'package:app/models/sip_connection.dart';
+import 'package:app/features/sip_users/models/sip_connection.dart';
 
 class SipUser {
   final int sipUserId;

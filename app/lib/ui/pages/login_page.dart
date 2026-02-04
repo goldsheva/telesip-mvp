@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:app/state/auth/auth_controller.dart';
-import 'package:app/state/auth/auth_state.dart';
+import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/ui/widgets/labeled_input.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -54,7 +54,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).login(email, password);
+    await ref.read(authNotifierProvider.notifier).login(email, password);
   }
 
   void _toast(String msg) {
@@ -63,7 +63,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authAsync = ref.watch(authControllerProvider);
+    final authAsync = ref.watch(authNotifierProvider);
     final isLoading = authAsync.isLoading;
 
     // 1) ошибка из AsyncValue.error

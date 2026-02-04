@@ -1,4 +1,4 @@
-import 'package:app/models/auth_tokens.dart';
+import 'package:app/features/auth/models/auth_tokens.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthTokensStorage {
