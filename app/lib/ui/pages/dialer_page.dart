@@ -24,24 +24,10 @@ class DialerPage extends ConsumerStatefulWidget {
 
 class _DialerPageState extends ConsumerState<DialerPage> {
   final _numberController = TextEditingController();
-  final FlutterNativeContactPicker _contactPicker =
-      FlutterNativeContactPicker();
+  final _contactPicker = FlutterNativeContactPicker();
+
   bool _isMuted = false;
   bool _isSpeakerOn = false;
-  static const List<String> _keypadKeys = [
-    '1',
-    '2',
-    '3',
-    '4',
-    '5',
-    '6',
-    '7',
-    '8',
-    '9',
-    '*',
-    '0',
-    '#',
-  ];
 
   @override
   void dispose() {
@@ -51,240 +37,275 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
   Future<void> _call() async {
     final number = _numberController.text.trim();
-    if (number.isEmpty) {
-      _showMessage('Введите номер');
-      return;
-    }
-
+    if (number.isEmpty) return;
     await ref.read(callControllerProvider.notifier).startCall(number);
   }
 
-  Future<void> _sendDtmfDigits(String callId, String digits) async {
-    final trimmed = digits.trim();
-    if (trimmed.isEmpty) return;
-    await ref.read(callControllerProvider.notifier).sendDtmf(callId, trimmed);
+  Future<void> _pickContact() async {
+    try {
+      final Contact? contact = await _contactPicker.selectPhoneNumber();
+      final number = contact?.selectedPhoneNumber?.trim();
+      if (number == null || number.isEmpty) return;
+
+      _numberController.text = number;
+      _numberController.selection = TextSelection.fromPosition(
+        TextPosition(offset: number.length),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось выбрать контакт: $error')),
+      );
+    }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  Future<void> _openKeypad(CallInfo active) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _InCallKeypadSheet(
+        title: active.destination,
+        statusText: _status(active.status),
+        onKey: (k) => ref.read(callControllerProvider.notifier).sendDtmf(active.id, k),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(callControllerProvider);
     final notifier = ref.read(callControllerProvider.notifier);
-    final active = state.activeCall;
-    final hasActiveCall =
-        active != null && active.status != CallStatus.ended;
-    final sipUser = widget.sipUser;
 
-    final titleText = widget.dongleName ?? sipUser?.sipLogin ?? 'Набор';
+    final active = state.activeCall;
+    final hasActiveCall = active != null && active.status != CallStatus.ended;
+
+    final titleText = widget.dongleName ?? widget.sipUser?.sipLogin ?? 'Набор';
     final subtitle = widget.dongleNumber;
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              titleText,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (subtitle != null && subtitle.isNotEmpty)
-              Text(
-                subtitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.white70),
-              ),
-          ],
-        ),
+        title: _AppBarTitle(title: titleText, subtitle: subtitle),
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'Исходящий звонок',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade400),
-              ),
-            ),
-            const SizedBox(height: 30),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _numberController,
-                  keyboardType: TextInputType.phone,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Введите номер',
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 18,
-                    ),
-                    prefixIcon: const Icon(Icons.phone),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: _pickContact,
-                          icon: const Icon(Icons.contacts),
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            _numberController.clear();
-                            setState(() {});
-                          },
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 10),
+
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Text(
+                    'Исходящий звонок',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey.shade400,
+                        ),
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // Поле номера
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _NumberInputCard(
+                    controller: _numberController,
+                    onPickContact: _pickContact,
+                    onClear: _numberController.clear,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Контент
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                     children: [
                       if (active != null) ...[
-                        _buildActiveCallSection(active, notifier),
-                        const SizedBox(height: 24),
+                        _ActiveCallCard(
+                          active: active,
+                          isMuted: _isMuted,
+                          isSpeakerOn: _isSpeakerOn,
+                          onToggleMute: hasActiveCall
+                              ? () {
+                                  setState(() => _isMuted = !_isMuted);
+                                  // TODO: подключи реальный mute в sip engine
+                                }
+                              : null,
+                          onToggleSpeaker: hasActiveCall
+                              ? () {
+                                  setState(() => _isSpeakerOn = !_isSpeakerOn);
+                                  // TODO: подключи реальный speaker в sip engine
+                                }
+                              : null,
+                          onOpenKeypad: hasActiveCall ? () => _openKeypad(active) : null,
+                          onHangup: hasActiveCall ? () => notifier.hangup(active.id) : null,
+                        ),
+                        const SizedBox(height: 16),
                       ],
                       if (state.history.isNotEmpty)
-                        _buildHistorySection(state.history),
+                        _HistorySection(history: state.history),
                     ],
                   ),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: SizedBox(
-                height: 56,
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: hasActiveCall ? null : _call,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    backgroundColor: Colors.green,
-                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
+
+                // Кнопка звонка
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _numberController,
+                    builder: (context, value, _) {
+                      final canCall = value.text.trim().isNotEmpty && !hasActiveCall;
+                      return SizedBox(
+                        height: 56,
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: canCall ? _call : null,
+                          style: ElevatedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            backgroundColor: Colors.green,
+                            textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          child: const Text('Позвонить'),
+                        ),
+                      );
+                    },
                   ),
-                  child: const Text('Позвонить'),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _showKeypad(CallInfo active) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        var sequence = '';
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (sequence.isNotEmpty)
-                    Text(
-                      'DTMF: $sequence',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  if (sequence.isNotEmpty) const SizedBox(height: 12),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.1,
-                    children: _keypadKeys.map((key) {
-                      return ElevatedButton(
-                        onPressed: () async {
-                          await _sendDtmfDigits(active.id, key);
-                          setSheetState(() {
-                            sequence += key;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          backgroundColor: Colors.grey.shade200,
-                          foregroundColor: Colors.black87,
-                          textStyle: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(key),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+  static String _status(CallStatus status) {
+    switch (status) {
+      case CallStatus.dialing:
+        return 'Идёт набор';
+      case CallStatus.ringing:
+        return 'Звонит';
+      case CallStatus.connected:
+        return 'В разговоре';
+      case CallStatus.ended:
+        return 'Завершён';
+    }
+  }
+}
+
+class _AppBarTitle extends StatelessWidget {
+  const _AppBarTitle({required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = this.subtitle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        if (subtitle != null && subtitle.isNotEmpty)
+          Text(
+            subtitle,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70),
+          ),
+      ],
     );
   }
+}
 
-  Widget _buildActiveCallSection(CallInfo active, CallNotifier notifier) {
+class _NumberInputCard extends StatelessWidget {
+  const _NumberInputCard({
+    required this.controller,
+    required this.onPickContact,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onPickContact;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.phone,
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: 'Введите номер или выберите контакт',
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          prefixIcon: const Icon(Icons.phone),
+          suffixIcon: SizedBox(
+            width: 96,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(onPressed: onPickContact, icon: const Icon(Icons.contacts)),
+                IconButton(onPressed: onClear, icon: const Icon(Icons.close)),
+              ],
+            ),
+          ),
+        ),
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+}
+
+class _ActiveCallCard extends StatelessWidget {
+  const _ActiveCallCard({
+    required this.active,
+    required this.isMuted,
+    required this.isSpeakerOn,
+    required this.onToggleMute,
+    required this.onToggleSpeaker,
+    required this.onOpenKeypad,
+    required this.onHangup,
+  });
+
+  final CallInfo active;
+  final bool isMuted;
+  final bool isSpeakerOn;
+
+  final VoidCallback? onToggleMute;
+  final VoidCallback? onToggleSpeaker;
+  final VoidCallback? onOpenKeypad;
+  final VoidCallback? onHangup;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final events = active.timeline.reversed.take(8).toList();
+
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -302,161 +323,43 @@ class _DialerPageState extends ConsumerState<DialerPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Активный вызов · ${_describeStatus(active.status)}',
+            'Активный вызов · ${_status(active.status)}',
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          Text(
-            'Номер: ${active.destination}',
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text('Номер: ${active.destination}', style: theme.textTheme.bodyMedium),
           const SizedBox(height: 8),
-          if (active.timeline.isNotEmpty) ...[
-            Text('События:', style: theme.textTheme.bodySmall),
-            const SizedBox(height: 6),
-            ...active.timeline.reversed.map(
-              (event) => Text(
-                '• $event',
-                maxLines: 2,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (active.status != CallStatus.ended)
-            Row(
+
+          if (events.isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('Подробности'),
               children: [
-                _buildControlButton(
-                  icon: Icons.mic_off,
-                  label: 'Mute',
-                  active: _isMuted,
-                  onTap: () => setState(() => _isMuted = !_isMuted),
-                ),
-                _buildControlButton(
-                  icon: Icons.volume_up,
-                  label: 'Speaker',
-                  active: _isSpeakerOn,
-                  onTap: () => setState(() => _isSpeakerOn = !_isSpeakerOn),
-                ),
-                _buildControlButton(
-                  icon: Icons.dialpad,
-                  label: 'Keypad',
-                  onTap: () => _showKeypad(active),
-                ),
-                _buildControlButton(
-                  icon: Icons.call_end,
-                  label: 'Hang up',
-                  onTap: () => notifier.hangup(active.id),
-                  background: _applyOpacity(Colors.redAccent, 0.12),
-                  borderColor: Colors.redAccent,
-                  iconColor: Colors.redAccent,
-                ),
+                for (final e in events)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• $e', style: theme.textTheme.bodySmall),
+                  ),
               ],
             ),
+
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              _ControlButton(icon: Icons.mic_off, label: 'Mute', active: isMuted, onTap: onToggleMute),
+              _ControlButton(icon: Icons.volume_up, label: 'Speaker', active: isSpeakerOn, onTap: onToggleSpeaker),
+              _ControlButton(icon: Icons.dialpad, label: 'Keypad', onTap: onOpenKeypad),
+              _ControlButton(icon: Icons.call_end, label: 'Hang up', danger: true, onTap: onHangup),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHistorySection(List<CallInfo> history) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ExpansionTile(
-          title: const Text('История звонков'),
-          childrenPadding: EdgeInsets.zero,
-          tilePadding: EdgeInsets.zero,
-          children: history.map((call) {
-            return ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              tileColor: Theme.of(context).colorScheme.surface,
-              title: Text(call.destination),
-              subtitle: Text(_describeStatus(call.status)),
-              trailing: Text(
-                '${call.createdAt.hour.toString().padLeft(2, '0')}:${call.createdAt.minute.toString().padLeft(2, '0')}',
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool active = false,
-    Color? background,
-    Color? borderColor,
-    Color? iconColor,
-  }) {
-    final theme = Theme.of(context);
-    final accent = Colors.green;
-    final resolvedBorder =
-        borderColor ??
-        (active ? accent : _applyOpacity(theme.colorScheme.onSurface, 0.2));
-    final resolvedBackground =
-        background ??
-        (active ? _applyOpacity(accent, 0.12) : Colors.transparent);
-    final resolvedIconColor =
-        iconColor ?? (active ? accent : theme.iconTheme.color);
-    final labelStyle = theme.textTheme.bodySmall?.copyWith(
-      fontWeight: FontWeight.w600,
-      color: resolvedIconColor,
-    );
-
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: resolvedBackground,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: resolvedBorder),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: resolvedIconColor),
-                const SizedBox(height: 4),
-                Text(label, style: labelStyle),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _applyOpacity(Color color, double opacity) {
-    return color.withAlpha((opacity * 255).round());
-  }
-
-  Future<void> _pickContact() async {
-    try {
-      final Contact? contact = await _contactPicker.selectPhoneNumber();
-      final number = contact?.selectedPhoneNumber;
-      if (number != null && number.isNotEmpty) {
-        final trimmed = number.trim();
-        _numberController.text = trimmed;
-        _numberController.selection = TextSelection.fromPosition(
-          TextPosition(offset: trimmed.length),
-        );
-        setState(() {});
-      }
-    } catch (error) {
-      _showMessage('Не удалось выбрать контакт: $error');
-    }
-  }
-
-  String _describeStatus(CallStatus status) {
+  static String _status(CallStatus status) {
     switch (status) {
       case CallStatus.dialing:
         return 'Идёт набор';
@@ -467,5 +370,271 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       case CallStatus.ended:
         return 'Завершён';
     }
+  }
+}
+
+class _ControlButton extends StatelessWidget {
+  const _ControlButton({
+    required this.icon,
+    required this.label,
+    this.active = false,
+    this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = Colors.green;
+    final enabled = onTap != null;
+
+    final borderColor = danger
+        ? Colors.redAccent
+        : (active ? accent : theme.colorScheme.onSurface.withOpacity(0.2));
+    final iconColor = danger
+        ? Colors.redAccent
+        : (active ? accent : theme.iconTheme.color ?? Colors.black87);
+    final bgColor = danger
+        ? Colors.redAccent.withOpacity(0.12)
+        : (active ? accent.withOpacity(0.12) : Colors.transparent);
+
+    final disabledColor = theme.disabledColor;
+
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: enabled ? bgColor : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: enabled ? borderColor : disabledColor),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: enabled ? iconColor : disabledColor),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? iconColor : disabledColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistorySection extends StatelessWidget {
+  const _HistorySection({required this.history});
+
+  final List<CallInfo> history;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      title: const Text('История звонков'),
+      childrenPadding: EdgeInsets.zero,
+      tilePadding: EdgeInsets.zero,
+      children: history.map((call) {
+        return ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          tileColor: Theme.of(context).colorScheme.surface,
+          title: Text(call.destination),
+          subtitle: Text(_status(call.status)),
+          trailing: Text(
+            '${call.createdAt.hour.toString().padLeft(2, '0')}:${call.createdAt.minute.toString().padLeft(2, '0')}',
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  static String _status(CallStatus status) {
+    switch (status) {
+      case CallStatus.dialing:
+        return 'Идёт набор';
+      case CallStatus.ringing:
+        return 'Звонит';
+      case CallStatus.connected:
+        return 'В разговоре';
+      case CallStatus.ended:
+        return 'Завершён';
+    }
+  }
+}
+
+/// ------------------------------
+/// "Как телефон": sheet с верхом (номер/статус) + responsive keypad
+/// ------------------------------
+class _InCallKeypadSheet extends StatefulWidget {
+  const _InCallKeypadSheet({
+    required this.title,
+    required this.statusText,
+    required this.onKey,
+  });
+
+  final String title;
+  final String statusText;
+  final Future<void> Function(String key) onKey;
+
+  @override
+  State<_InCallKeypadSheet> createState() => _InCallKeypadSheetState();
+}
+
+class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
+  static const _keys = <String>[
+    '1','2','3',
+    '4','5','6',
+    '7','8','9',
+    '*','0','#',
+  ];
+
+  String _sequence = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: LayoutBuilder(
+          builder: (context, c) {
+            const cols = 3;
+            const cross = 12.0;
+            const main = 12.0;
+            const rows = 4;
+
+            final cellW = (c.maxWidth - cross * (cols - 1)) / cols;
+
+            // Высота header части (handle + номер + статус + отступы)
+            final headerH = 4 + 10 + 12 + 22 + 8 + 18 + 12; // примерно
+            final dtmfH = _sequence.isNotEmpty ? (18 + 10) : 0;
+
+            final availableForGrid = (c.maxHeight - headerH - dtmfH)
+                .clamp(220.0, c.maxHeight);
+
+            final cellH = ((availableForGrid - main * (rows - 1)) / rows)
+                .clamp(56.0, cellW * 1.05);
+
+            final aspect = cellW / cellH;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Верх как у телефона: номер + статус
+                Text(
+                  widget.title,
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.statusText,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                  textAlign: TextAlign.center,
+                ),
+
+                if (_sequence.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('DTMF: $_sequence', style: theme.textTheme.bodySmall),
+                  ),
+                ],
+
+                const SizedBox(height: 12),
+
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _keys.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: cross,
+                    mainAxisSpacing: main,
+                    childAspectRatio: aspect,
+                  ),
+                  itemBuilder: (context, i) {
+                    final key = _keys[i];
+                    return _KeypadButton(
+                      label: key,
+                      onTap: () async {
+                        await widget.onKey(key);
+                        if (!mounted) return;
+                        setState(() {
+                          if (_sequence.length < 32) _sequence += key;
+                        });
+                      },
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _KeypadButton extends StatelessWidget {
+  const _KeypadButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenW = MediaQuery.of(context).size.width;
+    final fontSize = (screenW / 14).clamp(18.0, 26.0);
+
+    return Material(
+      color: Colors.grey.shade200,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
