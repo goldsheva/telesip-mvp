@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/app_theme.dart';
-import 'package:app/core/navigation/route_observer.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/ui/pages/login_page.dart';
@@ -16,7 +15,6 @@ class App extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      navigatorObservers: [routeObserver],
       home: const _AuthGate(),
     );
   }

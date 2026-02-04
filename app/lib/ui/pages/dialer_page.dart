@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/features/calls/state/call_notifier.dart';
+import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 
 class DialerPage extends ConsumerStatefulWidget {
-  const DialerPage({super.key});
+  const DialerPage({super.key, this.sipUser});
+
+  final PbxSipUser? sipUser;
 
   @override
   ConsumerState<DialerPage> createState() => _DialerPageState();
@@ -61,9 +64,14 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final state = ref.watch(callControllerProvider);
     final notifier = ref.read(callControllerProvider.notifier);
     final active = state.activeCall;
+    final sipUser = widget.sipUser;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dialer')),
+      appBar: AppBar(
+        title: Text(
+          sipUser != null ? 'Dialer · ${sipUser.sipLogin}' : 'Dialer',
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -151,6 +159,16 @@ class _DialerPageState extends ConsumerState<DialerPage> {
               ),
               const SizedBox(height: 16),
             ],
+            if (sipUser != null) ...[
+              const SizedBox(height: 16),
+              Text('Contacts', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              _ContactList(
+                onSelect: (value) {
+                  _numberController.text = value;
+                },
+              ),
+            ],
             if (state.history.isNotEmpty) ...[
               Text(
                 'История звонков',
@@ -207,5 +225,36 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       case CallStatus.ended:
         return 'Завершён';
     }
+  }
+}
+
+class _ContactList extends StatelessWidget {
+  const _ContactList({required this.onSelect});
+
+  final ValueChanged<String> onSelect;
+
+  static const _contacts = [
+    {'name': 'Office', 'number': '+74951234567'},
+    {'name': 'Support', 'number': '+74959876543'},
+    {'name': 'Client', 'number': '+74955667788'},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: _contacts.map((contact) {
+        final number = contact['number']!;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: OutlinedButton(
+            onPressed: () => onSelect(number),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [Text('${contact['name']}'), Text(number)],
+            ),
+          ),
+        );
+      }).toList(),
+    );
   }
 }

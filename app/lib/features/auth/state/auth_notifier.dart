@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/core/network/api_exception.dart';
 import 'package:app/core/providers.dart';
+import 'package:app/features/dongles/state/dongles_provider.dart';
 import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'auth_state.dart';
 
@@ -75,6 +76,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   void _invalidateCaches() {
     ref.invalidate(sipUsersProvider);
+    ref.invalidate(donglesProvider);
   }
 
   String _messageFrom(Object error) {

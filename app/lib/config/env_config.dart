@@ -1,4 +1,4 @@
-enum Environment { dev, prod }
+enum Environment { dev, preprod, prod }
 
 class EnvConfig {
   static late final Environment env;
@@ -11,6 +11,8 @@ class EnvConfig {
     switch (env) {
       case Environment.dev:
         return 'https://teleleo.k8s-stage.bringo.tel/react_api';
+      case Environment.preprod:
+        return 'https://teleleo-pp.k8s-stage.bringo.tel/react_api';
       case Environment.prod:
         return 'https://teleleo.com/react_api';
     }
@@ -19,6 +21,8 @@ class EnvConfig {
   static int get siteDomainId {
     switch (env) {
       case Environment.dev:
+        return 1;
+      case Environment.preprod:
         return 1;
       case Environment.prod:
         return 1;

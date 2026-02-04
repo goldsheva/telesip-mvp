@@ -1,9 +1,13 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:app/core/navigation/route_observer.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/dongles/models/dongle.dart';
+import 'package:app/features/dongles/state/dongles_provider.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
+import 'package:app/features/sip_users/models/sip_users_state.dart';
 import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'package:app/ui/pages/dialer_page.dart';
 
@@ -14,93 +18,404 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> with RouteAware {
-  PageRoute<void>? _route;
-
-  Future<void> _refresh() => ref.read(sipUsersProvider.notifier).refresh();
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route is PageRoute<void> && _route != route) {
-      routeObserver.subscribe(this, route);
-      _route = route;
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_route != null) {
-      routeObserver.unsubscribe(this);
-    }
-    super.dispose();
-  }
-
-  @override
-  void didPopNext() {
-    _refresh();
+class _HomePageState extends ConsumerState<HomePage> {
+  Future<void> _refresh() async {
+    await Future.wait([
+      ref.read(sipUsersProvider.notifier).refresh(),
+      ref.read(donglesProvider.notifier).refresh(),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     final sipUsers = ref.watch(sipUsersProvider);
+    final dongles = ref.watch(donglesProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'SIP Users',
+          'SIP',
           style: Theme.of(
             context,
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
         ),
         actions: [
-          IconButton(
-            onPressed: () => ref.read(sipUsersProvider.notifier).refresh(),
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
           IconButton(
             onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: sipUsers.when(
+      body: sipUsers.when(
+        loading: () =>
+            const _CenteredScroll(child: CircularProgressIndicator()),
+        error: (e, _) => _CenteredScroll(
+          child: _ErrorState(message: e.toString(), onRetry: _refresh),
+        ),
+        data: (state) => dongles.when(
           loading: () =>
               const _CenteredScroll(child: CircularProgressIndicator()),
           error: (e, _) => _CenteredScroll(
-            child: _ErrorState(
-              message: e.toString(),
-              onRetry: () => ref.read(sipUsersProvider.notifier).refresh(),
-            ),
+            child: _ErrorState(message: e.toString(), onRetry: _refresh),
           ),
-          data: (state) {
-            if (state.items.isEmpty) {
-              return _CenteredScroll(
-                child: _EmptyState(
-                  onRefresh: () =>
-                      ref.read(sipUsersProvider.notifier).refresh(),
-                ),
-              );
-            }
-
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: state.items.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (_, index) =>
-                  _SipUserTile(sipUser: state.items[index]),
-            );
-          },
+          data: (dongleList) => _buildContent(context, state, dongleList),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const DialerPage())),
-        child: const Icon(Icons.dialpad),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    SipUsersState state,
+    List<Dongle> dongles,
+  ) {
+    if (state.items.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        child: _CenteredScroll(child: _EmptyState(onRefresh: _refresh)),
+      );
+    }
+
+    final generalUser = state.items.firstWhere(
+      (user) => user.dongleId == null,
+      orElse: () => state.items.first,
+    );
+    final visibleUsers = state.items
+        .where((user) => user.dongleId != null)
+        .toList();
+
+    if (visibleUsers.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        child: _CenteredScroll(child: _EmptyState(onRefresh: _refresh)),
+      );
+    }
+
+    final dongleMap = {for (var dongle in dongles) dongle.dongleId: dongle};
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            sliver: SliverToBoxAdapter(
+              child: _GeneralSettingsCard(
+                totalItems: visibleUsers.length,
+                generalUser: generalUser,
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            sliver: SliverToBoxAdapter(
+              child: Text(
+                '${visibleUsers.length} SIP users',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final sipUser = visibleUsers[index];
+                final dongle = sipUser.dongleId != null
+                    ? dongleMap[sipUser.dongleId!]
+                    : null;
+                final isCallable = dongle?.isCallable ?? false;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _SipUserListTile(
+                    sipUser: sipUser,
+                    dongle: dongle,
+                    isCallable: isCallable,
+                    onCall: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DialerPage(sipUser: sipUser),
+                      ),
+                    ),
+                  ),
+                );
+              }, childCount: visibleUsers.length),
+            ),
+          ),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
+        ],
+      ),
+    );
+  }
+}
+
+class _GeneralSettingsCard extends StatelessWidget {
+  const _GeneralSettingsCard({
+    required this.totalItems,
+    required this.generalUser,
+  });
+
+  final int totalItems;
+  final PbxSipUser generalUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor(theme.shadowColor, 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'General settings',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Manage ${totalItems > 1 ? 'all' : 'the'} $totalItems SIP user${totalItems == 1 ? '' : 's'}',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+          ),
+          OutlinedButton.icon(
+            onPressed: () {
+              showDialog<void>(
+                context: context,
+                builder: (_) => _GeneralSettingsDialog(user: generalUser),
+              );
+            },
+            icon: const Icon(Icons.info_outline),
+            label: const Text('Details'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SipUserListTile extends StatefulWidget {
+  const _SipUserListTile({
+    required this.sipUser,
+    required this.dongle,
+    required this.isCallable,
+    required this.onCall,
+  });
+
+  final PbxSipUser sipUser;
+  final Dongle? dongle;
+  final bool isCallable;
+  final VoidCallback onCall;
+
+  @override
+  State<_SipUserListTile> createState() => _SipUserListTileState();
+}
+
+class _SipUserListTileState extends State<_SipUserListTile> {
+  bool _hidePassword = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryConnection = widget.sipUser.sipConnections.isNotEmpty
+        ? widget.sipUser.sipConnections.first
+        : null;
+    final secondConnection = widget.sipUser.sipConnections.length > 1
+        ? widget.sipUser.sipConnections[1]
+        : null;
+    final displayName =
+        widget.dongle?.name ?? 'Dongle ${widget.sipUser.sipLogin}';
+    final displayNumber = widget.dongle?.number;
+
+    Widget connectionLine(String label, String value) =>
+        _InfoLine(label: label, value: value);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor(theme.shadowColor, 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    displayName,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _InfoLine(label: 'SIP Username', value: widget.sipUser.sipLogin),
+            const SizedBox(height: 6),
+            _PasswordLine(
+              label: 'SIP Password',
+              password: widget.sipUser.sipPassword,
+              hidden: _hidePassword,
+              onToggle: () => setState(() => _hidePassword = !_hidePassword),
+            ),
+            if (displayNumber != null && displayNumber.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(displayNumber, style: theme.textTheme.bodySmall),
+            ],
+            const SizedBox(height: 6),
+            if (primaryConnection != null) ...[
+              connectionLine('SIP Server', primaryConnection.pbxSipUrl),
+              const SizedBox(height: 6),
+              connectionLine(
+                'SIP Port',
+                primaryConnection.pbxSipPort.toString(),
+              ),
+              const SizedBox(height: 6),
+              connectionLine('Protocol', primaryConnection.pbxSipProtocol),
+            ],
+            if (secondConnection != null) ...[
+              const SizedBox(height: 6),
+              _InfoLine(label: 'SIP Server', value: secondConnection.pbxSipUrl),
+              const SizedBox(height: 6),
+              _InfoLine(
+                label: 'SIP Port',
+                value: secondConnection.pbxSipPort.toString(),
+              ),
+              const SizedBox(height: 6),
+              _InfoLine(
+                label: 'Protocol',
+                value: secondConnection.pbxSipProtocol,
+              ),
+            ],
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: widget.isCallable ? widget.onCall : null,
+              icon: const Icon(Icons.call),
+              label: const Text('Call'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                backgroundColor: widget.isCallable ? Colors.green : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoLine extends StatelessWidget {
+  const _InfoLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('$label:', style: theme.textTheme.bodySmall),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PasswordLine extends StatelessWidget {
+  const _PasswordLine({
+    required this.label,
+    required this.password,
+    required this.hidden,
+    required this.onToggle,
+  });
+
+  final String label;
+  final String password;
+  final bool hidden;
+  final VoidCallback onToggle;
+
+  String get _obscured {
+    if (password.isEmpty) return '';
+    final count = min(password.length, 12);
+    return List.filled(count, '•').join();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('$label:', style: theme.textTheme.bodySmall),
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    hidden ? _obscured : password,
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: onToggle,
+                  icon: Icon(
+                    hidden ? Icons.visibility : Icons.visibility_off,
+                    size: 18,
+                  ),
+                  splashRadius: 18,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -190,36 +505,79 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-class _SipUserTile extends StatelessWidget {
-  const _SipUserTile({required this.sipUser});
+Color _shadowColor(Color color, double opacity) {
+  return color.withAlpha((opacity * 255).round());
+}
 
-  final PbxSipUser sipUser;
+class _GeneralSettingsDialog extends StatelessWidget {
+  const _GeneralSettingsDialog({required this.user});
+
+  final PbxSipUser user;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
 
-    return ListTile(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    Widget row(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'SIP General settings',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Use these credentials to connect to any external SIP client',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            row('SIP Username:', user.sipLogin),
+            row('SIP Password:', user.sipPassword),
+            for (var i = 0; i < user.sipConnections.length && i < 2; i++) ...[
+              const SizedBox(height: 12),
+              row('SIP Server:', user.sipConnections[i].pbxSipUrl),
+              row('SIP Port:', user.sipConnections[i].pbxSipPort.toString()),
+              row('Protocol:', user.sipConnections[i].pbxSipProtocol),
+            ],
+          ],
         ),
       ),
-      tileColor: Theme.of(context).colorScheme.surface,
-      title: Text(
-        sipUser.sipLogin,
-        style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('ID: ${sipUser.sipUserId}', style: t.bodySmall),
-          if (sipUser.dongleId != null)
-            Text('Dongle #: ${sipUser.dongleId}', style: t.bodySmall),
-        ],
-      ),
-      trailing: const Icon(Icons.chevron_right),
     );
   }
 }
