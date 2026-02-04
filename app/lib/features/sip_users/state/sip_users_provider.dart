@@ -8,6 +8,23 @@ final sipUsersApiProvider = Provider<SipUsersApi>((ref) {
   return SipUsersApi(ref.read(graphqlClientProvider));
 });
 
-final sipUsersProvider = FutureProvider<SipUsersState>((ref) async {
-  return ref.read(sipUsersApiProvider).fetchSipUsersState();
-});
+final sipUsersProvider = AsyncNotifierProvider<SipUsersNotifier, SipUsersState>(
+  SipUsersNotifier.new,
+);
+
+class SipUsersNotifier extends AsyncNotifier<SipUsersState> {
+  @override
+  Future<SipUsersState> build() async {
+    return _fetch();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(_fetch);
+  }
+
+  Future<SipUsersState> _fetch() async {
+    final api = ref.read(sipUsersApiProvider);
+    return api.fetchSipUsersState();
+  }
+}

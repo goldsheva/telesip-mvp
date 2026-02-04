@@ -9,10 +9,8 @@ import 'package:app/ui/pages/dialer_page.dart';
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
-  Future<void> _refresh(WidgetRef ref) async {
-    ref.invalidate(sipUsersProvider);
-    await ref.read(sipUsersProvider.future);
-  }
+  Future<void> _refresh(WidgetRef ref) =>
+      ref.read(sipUsersProvider.notifier).refresh();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,7 +26,7 @@ class HomePage extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () => ref.invalidate(sipUsersProvider),
+            onPressed: () => ref.read(sipUsersProvider.notifier).refresh(),
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
@@ -45,14 +43,15 @@ class HomePage extends ConsumerWidget {
           error: (e, _) => _CenteredScroll(
             child: _ErrorState(
               message: e.toString(),
-              onRetry: () => ref.invalidate(sipUsersProvider),
+              onRetry: () => ref.read(sipUsersProvider.notifier).refresh(),
             ),
           ),
           data: (state) {
             if (state.items.isEmpty) {
               return _CenteredScroll(
                 child: _EmptyState(
-                  onRefresh: () => ref.invalidate(sipUsersProvider),
+                  onRefresh: () =>
+                      ref.read(sipUsersProvider.notifier).refresh(),
                 ),
               );
             }
