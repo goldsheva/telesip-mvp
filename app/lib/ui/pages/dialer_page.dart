@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
@@ -238,36 +240,55 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   if (sequence.isNotEmpty) const SizedBox(height: 12),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.1,
-                    children: _keypadKeys.map((key) {
-                      return ElevatedButton(
-                        onPressed: () async {
-                          await _sendDtmfDigits(active.id, key);
-                          setSheetState(() {
-                            sequence += key;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          backgroundColor: Colors.grey.shade200,
-                          foregroundColor: Colors.black87,
-                          textStyle: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          elevation: 0,
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const minKeySize = 92.0;
+                      final columns = math.max(
+                        3,
+                        math.min(
+                          4,
+                          (constraints.maxWidth / minKeySize).floor(),
                         ),
-                        child: Text(key),
                       );
-                    }).toList(),
+                      return SizedBox(
+                        height: constraints.maxHeight,
+                        child: GridView.builder(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 1.1,
+                              ),
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _keypadKeys.length,
+                          itemBuilder: (context, index) {
+                            final key = _keypadKeys[index];
+                            return ElevatedButton(
+                              onPressed: () async {
+                                await _sendDtmfDigits(active.id, key);
+                                setSheetState(() {
+                                  sequence += key;
+                                });
+                              },
+                              style: ElevatedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                backgroundColor: Colors.grey.shade200,
+                                foregroundColor: Colors.black87,
+                                textStyle: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                elevation: 0,
+                              ),
+                              child: Text(key),
+                            );
+                          },
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
