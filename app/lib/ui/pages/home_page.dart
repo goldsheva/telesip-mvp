@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -227,7 +225,6 @@ class _SipUserListTile extends StatefulWidget {
 }
 
 class _SipUserListTileState extends State<_SipUserListTile> {
-  bool _hidePassword = true;
 
   @override
   Widget build(BuildContext context) {
@@ -241,9 +238,6 @@ class _SipUserListTileState extends State<_SipUserListTile> {
     final displayName =
         widget.dongle?.name ?? 'Dongle ${widget.sipUser.sipLogin}';
     final displayNumber = widget.dongle?.number;
-
-    Widget connectionLine(String label, String value) =>
-        _InfoLine(label: label, value: value);
 
     return Container(
       decoration: BoxDecoration(
@@ -278,26 +272,21 @@ class _SipUserListTileState extends State<_SipUserListTile> {
             const SizedBox(height: 12),
             _InfoLine(label: 'SIP Username', value: widget.sipUser.sipLogin),
             const SizedBox(height: 6),
-            _PasswordLine(
-              label: 'SIP Password',
-              password: widget.sipUser.sipPassword,
-              hidden: _hidePassword,
-              onToggle: () => setState(() => _hidePassword = !_hidePassword),
-            ),
+            _InfoLine(label: 'SIP Password', value: widget.sipUser.sipPassword),
             if (displayNumber != null && displayNumber.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(displayNumber, style: theme.textTheme.bodySmall),
             ],
             const SizedBox(height: 6),
             if (primaryConnection != null) ...[
-              connectionLine('SIP Server', primaryConnection.pbxSipUrl),
+              _InfoLine(label: 'SIP Server', value: primaryConnection.pbxSipUrl),
               const SizedBox(height: 6),
-              connectionLine(
-                'SIP Port',
-                primaryConnection.pbxSipPort.toString(),
+              _InfoLine(
+                label: 'SIP Port',
+                value: primaryConnection.pbxSipPort.toString(),
               ),
               const SizedBox(height: 6),
-              connectionLine('Protocol', primaryConnection.pbxSipProtocol),
+              _InfoLine(label: 'Protocol', value: primaryConnection.pbxSipProtocol),
             ],
             if (secondConnection != null) ...[
               const SizedBox(height: 6),
@@ -331,7 +320,10 @@ class _SipUserListTileState extends State<_SipUserListTile> {
 }
 
 class _InfoLine extends StatelessWidget {
-  const _InfoLine({required this.label, required this.value});
+  const _InfoLine({
+    required this.label,
+    required this.value,
+  });
 
   final String label;
   final String value;
@@ -342,75 +334,22 @@ class _InfoLine extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text('$label:', style: theme.textTheme.bodySmall),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PasswordLine extends StatelessWidget {
-  const _PasswordLine({
-    required this.label,
-    required this.password,
-    required this.hidden,
-    required this.onToggle,
-  });
-
-  final String label;
-  final String password;
-  final bool hidden;
-  final VoidCallback onToggle;
-
-  String get _obscured {
-    if (password.isEmpty) return '';
-    final count = min(password.length, 12);
-    return List.filled(count, '•').join();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('$label:', style: theme.textTheme.bodySmall),
+          const SizedBox(width: 8),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Flexible(
                   child: Text(
-                    hidden ? _obscured : password,
+                    value,
                     textAlign: TextAlign.end,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: onToggle,
-                  icon: Icon(
-                    hidden ? Icons.visibility : Icons.visibility_off,
-                    size: 18,
-                  ),
-                  splashRadius: 18,
                 ),
               ],
             ),
@@ -518,26 +457,6 @@ class _GeneralSettingsDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    Widget row(String label, String value) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
-            Expanded(
-              child: Text(
-                value,
-                textAlign: TextAlign.end,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
@@ -567,13 +486,25 @@ class _GeneralSettingsDialog extends StatelessWidget {
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
-            row('SIP Username:', user.sipLogin),
-            row('SIP Password:', user.sipPassword),
+            _InfoLine(label: 'SIP Username', value: user.sipLogin),
+            const SizedBox(height: 6),
+            _InfoLine(label: 'SIP Password', value: user.sipPassword),
             for (var i = 0; i < user.sipConnections.length && i < 2; i++) ...[
-              const SizedBox(height: 12),
-              row('SIP Server:', user.sipConnections[i].pbxSipUrl),
-              row('SIP Port:', user.sipConnections[i].pbxSipPort.toString()),
-              row('Protocol:', user.sipConnections[i].pbxSipProtocol),
+              const SizedBox(height: 6),
+              _InfoLine(
+                label: 'SIP Server',
+                value: user.sipConnections[i].pbxSipUrl,
+              ),
+              const SizedBox(height: 6),
+              _InfoLine(
+                label: 'SIP Port',
+                value: user.sipConnections[i].pbxSipPort.toString(),
+              ),
+              const SizedBox(height: 6),
+              _InfoLine(
+                label: 'Protocol',
+                value: user.sipConnections[i].pbxSipProtocol,
+              ),
             ],
           ],
         ),
