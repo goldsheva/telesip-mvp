@@ -53,6 +53,30 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
+  Future<void> loginWithBiometrics() async {
+    state = const AsyncLoading();
+
+    try {
+      final storage = ref.read(authTokensStorageProvider);
+      final tokens = await storage.readTokens();
+      if (tokens == null) {
+        throw ApiException.network(
+          'Сначала войдите по логину и паролю, чтобы включить биометрию',
+        );
+      }
+
+      final refreshed = await ref
+          .read(authApiProvider)
+          .refreshToken(refreshToken: tokens.refreshToken);
+
+      await storage.writeTokens(refreshed);
+      state = AsyncData(AuthState.authenticated(refreshed));
+      _invalidateCaches();
+    } catch (e) {
+      state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
+    }
+  }
+
   void _invalidateCaches() {
     ref.invalidate(sipUsersProvider);
   }

@@ -22,7 +22,8 @@ class PbxSipUser {
   });
 
   factory PbxSipUser.fromJson(Map<String, dynamic> json) {
-    final connections = (json['pbx_sip_connections'] as List?)
+    final connections =
+        (json['pbx_sip_connections'] as List?)
             ?.whereType<Map<String, dynamic>>()
             .map(PbxSipConnection.fromJson)
             .toList() ??

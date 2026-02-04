@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
 
+import 'package:app/core/providers.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/ui/widgets/labeled_input.dart';
@@ -20,13 +22,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   final _emailFocus = FocusNode();
   final _passwordFocus = FocusNode();
+  final _localAuth = LocalAuthentication();
+
+  bool _biometricAvailable = false;
+  bool _isAuthenticatingBiometric = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _emailFocus.requestFocus(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _emailFocus.requestFocus();
+      _checkBiometricSupport();
+    });
   }
 
   @override
@@ -61,6 +68,45 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   void _toast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _checkBiometricSupport() async {
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final isSupported = await _localAuth.isDeviceSupported();
+      final tokens = await ref.read(authTokensStorageProvider).readTokens();
+      final available = (canCheck || isSupported) && tokens != null;
+      if (!mounted) return;
+      setState(() => _biometricAvailable = available);
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    if (_isAuthenticatingBiometric) return;
+
+    setState(() => _isAuthenticatingBiometric = true);
+    try {
+      final didAuthenticate = await _localAuth.authenticate(
+        localizedReason: 'Авторизуйтесь по данных Face ID или отпечатка пальца',
+        biometricOnly: true,
+        persistAcrossBackgrounding: true,
+      );
+
+      if (!didAuthenticate) {
+        _toast('Биометрическая проверка не была подтверждена');
+        return;
+      }
+
+      await ref.read(authNotifierProvider.notifier).loginWithBiometrics();
+    } catch (_) {
+      _toast('Не удалось выполнить биометрическую авторизацию');
+    } finally {
+      if (mounted) {
+        setState(() => _isAuthenticatingBiometric = false);
+      }
+    }
   }
 
   @override
@@ -152,6 +198,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             )
                           : const Text('Log in'),
                     ),
+                    if (_biometricAvailable) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: isLoading || _isAuthenticatingBiometric
+                            ? null
+                            : _authenticateWithBiometrics,
+                        icon: const Icon(Icons.fingerprint),
+                        label: Text(
+                          _isAuthenticatingBiometric
+                              ? 'Ждём биометрию…'
+                              : 'Войти по Face ID/отпечатку',
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
