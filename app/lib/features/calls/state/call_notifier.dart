@@ -99,10 +99,12 @@ class CallNotifier extends Notifier<CallState> {
   int? _registeredUserId;
   PbxSipUser? _lastKnownUser;
   Timer? _dialTimeoutTimer;
+  String? _dialTimeoutCallId;
   CallWebRtcWatchdog? _webRtcWatchdog;
   String? _watchdogCallId;
   Timer? _watchdogFailureTimer;
   String? _failureTimerCallId;
+  String? _pendingCallId;
   bool _userInitiatedRetry = false;
   Timer? _retrySuppressionTimer;
   bool _watchdogErrorActive = false;
@@ -117,6 +119,7 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     final callId = await _engine.startCall(trimmed);
+    _pendingCallId = callId;
     _startDialTimeout(callId);
     _clearError();
     state = state.copyWith(activeCallId: callId);
@@ -223,7 +226,9 @@ class CallNotifier extends Notifier<CallState> {
     if (callId == null) return;
 
     final status = _mapStatus(event.type);
-    final previous = state.calls[callId];
+    final pendingCallId = _pendingCallId;
+    final previous = state.calls[callId] ??
+        (pendingCallId != null ? state.calls[pendingCallId] : null);
     final destination = previous?.destination ?? event.message ?? 'call';
     final logs = List<String>.from(previous?.timeline ?? [])
       ..add(_describe(event));
@@ -240,18 +245,28 @@ class CallNotifier extends Notifier<CallState> {
       endedAt: status == CallStatus.ended ? event.timestamp : previous?.endedAt,
       timeline: logs,
     );
+    if (pendingCallId != null && pendingCallId != callId) {
+      updated.remove(pendingCallId);
+    }
 
     var activeCallId = state.activeCallId;
     if (status == CallStatus.ended) {
-      if (activeCallId == callId) {
+      if (activeCallId == callId || activeCallId == pendingCallId) {
         activeCallId = null;
       }
       _cancelDialTimeout();
+      _pendingCallId = null;
     } else {
       if (status != CallStatus.dialing) {
         _cancelDialTimeout();
       }
-      activeCallId ??= callId;
+      activeCallId = callId;
+      if (_dialTimeoutCallId != null) {
+        _dialTimeoutCallId = callId;
+      }
+      if (pendingCallId != null && pendingCallId != callId) {
+        _pendingCallId = null;
+      }
     }
 
     final errorMessage = event.type == SipEventType.error
@@ -302,10 +317,13 @@ class CallNotifier extends Notifier<CallState> {
 
   void _startDialTimeout(String callId) {
     _cancelDialTimeout();
+    _dialTimeoutCallId = callId;
     _dialTimeoutTimer = Timer(_dialTimeout, () async {
-      if (state.activeCallId != callId) return;
+      final targetCallId = _dialTimeoutCallId;
+      if (targetCallId == null) return;
+      if (state.activeCallId != targetCallId) return;
       _setError('Вызов не был принят, завершаем');
-      await _engine.hangup(callId);
+      await _engine.hangup(targetCallId);
       _cancelDialTimeout();
     });
   }
@@ -313,6 +331,7 @@ class CallNotifier extends Notifier<CallState> {
   void _cancelDialTimeout() {
     _dialTimeoutTimer?.cancel();
     _dialTimeoutTimer = null;
+    _dialTimeoutCallId = null;
   }
 
   void _handleWatchdogActivation(CallState previous, CallState next) {
