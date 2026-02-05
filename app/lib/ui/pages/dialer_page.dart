@@ -236,6 +236,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     setState(() {
       _routeInfo = info;
       _isSpeakerOn = info.current == AudioRoute.speaker;
+      _isBluetoothPreferred = info.current == AudioRoute.bluetooth;
     });
     if (wasConnected && !info.bluetoothConnected) {
       _showBluetoothDisconnectSnackBar();
@@ -270,12 +271,11 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
   Future<void> _toggleSpeaker() async {
     final enabling = !_isSpeakerOn;
-    setState(() {
-      _isSpeakerOn = enabling;
-      if (enabling) {
+    if (enabling) {
+      setState(() {
         _isBluetoothPreferred = false;
-      }
-    });
+      });
+    }
     await _callAudioRoute.setRoute(
       enabling ? AudioRoute.speaker : AudioRoute.earpiece,
     );
@@ -299,6 +299,10 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       if (!mounted) return;
       setState(() {
         _routeInfo = info as AudioRouteInfo?;
+        if (_routeInfo != null) {
+          _isSpeakerOn = _routeInfo!.current == AudioRoute.speaker;
+          _isBluetoothPreferred = _routeInfo!.current == AudioRoute.bluetooth;
+        }
       });
     } catch (_) {
       // best effort
