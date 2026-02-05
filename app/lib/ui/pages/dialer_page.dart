@@ -405,28 +405,24 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
-                                    Expanded(
-                                      child: _ControlButton(
-                                        icon: Icons.volume_up,
-                                        label: 'Громкая',
-                                        active: _isSpeakerOn,
-                                        onTap: () => _toggleSpeaker(),
-                                      ),
+                                    _ControlButton(
+                                      icon: Icons.volume_up,
+                                      label: 'Громкая',
+                                      active: _isSpeakerOn,
+                                      onTap: () => _toggleSpeaker(),
                                     ),
                                     if (_routeInfo!.available.contains(
                                       AudioRoute.bluetooth,
                                     )) ...[
                                       const SizedBox(width: 8),
-                                      Expanded(
-                                        child: _ControlButton(
-                                          icon: Icons.bluetooth,
-                                          label: 'Bluetooth',
-                                          active:
-                                              _isBluetoothPreferred ||
-                                              _routeInfo!.current ==
-                                                  AudioRoute.bluetooth,
-                                          onTap: () => _toggleBluetooth(),
-                                        ),
+                                      _ControlButton(
+                                        icon: Icons.bluetooth,
+                                        label: 'Bluetooth',
+                                        active:
+                                            _isBluetoothPreferred ||
+                                            _routeInfo!.current ==
+                                                AudioRoute.bluetooth,
+                                        onTap: () => _toggleBluetooth(),
                                       ),
                                     ],
                                   ],

@@ -389,10 +389,7 @@ class CallAudioRoutePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { device ->
       when (device.type) {
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP_HEADPHONES,
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP_SPEAKER,
-        AudioDeviceInfo.TYPE_BLUETOOTH_BLE -> true
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> true
         else -> false
       }
     }
