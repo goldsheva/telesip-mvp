@@ -51,12 +51,11 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     final currentRoute = _info?.current.name ?? 'unknown';
-    final availableRoutes = _info?.available.map((it) => it.name).join(', ') ?? 'waiting...';
+    final availableRoutes =
+        _info?.available.map((it) => it.name).join(', ') ?? 'waiting...';
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(
-          title: const Text('call_audio_route example'),
-        ),
+        appBar: AppBar(title: const Text('call_audio_route example')),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -66,7 +65,9 @@ class _MyAppState extends State<MyApp> {
               const SizedBox(height: 8),
               Text('Available routes: $availableRoutes'),
               const SizedBox(height: 8),
-              Text('Bluetooth connected: ${_info?.bluetoothConnected ?? false}'),
+              Text(
+                'Bluetooth connected: ${_info?.bluetoothConnected ?? false}',
+              ),
               Text('Wired connected: ${_info?.wiredConnected ?? false}'),
               const SizedBox(height: 24),
               Text('Call lifecycle helpers'),

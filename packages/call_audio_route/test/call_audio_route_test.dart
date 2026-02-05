@@ -7,23 +7,46 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 class MockCallAudioRoutePlatform
     with MockPlatformInterfaceMixin
     implements CallAudioRoutePlatform {
+  @override
+  Future<void> configureForCall() async {}
 
   @override
-  Future<String?> getPlatformVersion() => Future.value('42');
+  Future<AudioRouteInfo> getRouteInfo() async => const AudioRouteInfo(
+    current: AudioRoute.systemDefault,
+    available: [AudioRoute.systemDefault],
+    bluetoothConnected: false,
+    wiredConnected: false,
+  );
+
+  @override
+  Stream<AudioRouteInfo> get routeChanges => const Stream.empty();
+
+  @override
+  Future<void> setRoute(AudioRoute route) async {}
+
+  @override
+  Future<void> stopCallAudio() async {}
 }
 
 void main() {
-  final CallAudioRoutePlatform initialPlatform = CallAudioRoutePlatform.instance;
+  final CallAudioRoutePlatform initialPlatform =
+      CallAudioRoutePlatform.instance;
+
+  tearDown(() {
+    CallAudioRoutePlatform.instance = initialPlatform;
+  });
 
   test('$MethodChannelCallAudioRoute is the default instance', () {
     expect(initialPlatform, isInstanceOf<MethodChannelCallAudioRoute>());
   });
 
-  test('getPlatformVersion', () async {
-    CallAudioRoute callAudioRoutePlugin = CallAudioRoute();
-    MockCallAudioRoutePlatform fakePlatform = MockCallAudioRoutePlatform();
+  test('getRouteInfo forwards to platform', () async {
+    final CallAudioRoute callAudioRoutePlugin = CallAudioRoute();
+    final MockCallAudioRoutePlatform fakePlatform =
+        MockCallAudioRoutePlatform();
     CallAudioRoutePlatform.instance = fakePlatform;
 
-    expect(await callAudioRoutePlugin.getPlatformVersion(), '42');
+    final info = await callAudioRoutePlugin.getRouteInfo();
+    expect(info.current, AudioRoute.systemDefault);
   });
 }

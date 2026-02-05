@@ -6,20 +6,15 @@
 // For more information about Flutter integration tests, please see
 // https://flutter.dev/to/integration-testing
 
-
+import 'package:call_audio_route/call_audio_route.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-
-import 'package:call_audio_route/call_audio_route.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('getPlatformVersion test', (WidgetTester tester) async {
+  testWidgets('create plugin instance', (WidgetTester tester) async {
     final CallAudioRoute plugin = CallAudioRoute();
-    final String? version = await plugin.getPlatformVersion();
-    // The version string depends on the host platform running the test, so
-    // just assert that some non-empty string is returned.
-    expect(version?.isNotEmpty, true);
+    expect(plugin, isA<CallAudioRoute>());
   });
 }
