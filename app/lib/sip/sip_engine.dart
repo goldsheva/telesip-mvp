@@ -198,8 +198,8 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     _emitRegistration(
       SipRegistrationState.registering,
       message: displayName != null && displayName.isNotEmpty
-          ? 'Регистрируемся как $displayName'
-          : 'Регистрируемся...',
+          ? 'Registering as $displayName'
+          : 'Registering...',
     );
 
     final settings = UaSettings()
@@ -216,7 +216,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       _helper.register();
     } catch (error) {
       _emitRegistration(SipRegistrationState.failed, message: error.toString());
-      _emitError('Ошибка регистрации SIP: $error');
+      _emitError('SIP registration failed: $error');
     }
   }
 
@@ -229,14 +229,14 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     _registrationState = SipRegistrationState.unregistering;
     _emitRegistration(
       SipRegistrationState.unregistering,
-      message: 'Отмена регистрации...',
+      message: 'Deregistering...',
     );
     try {
       await _helper.unregister();
       _registrationState = SipRegistrationState.unregistered;
       _emitRegistration(
         SipRegistrationState.unregistered,
-        message: 'Регистрация снята',
+        message: 'Deregistration complete',
       );
     } catch (error) {
       _registrationState = SipRegistrationState.failed;
@@ -253,16 +253,20 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     final callId = _buildCallId();
     _currentCallId = callId;
     _callState = SipCallState.dialing;
-    _emitCall(SipEventType.dialing, callId: callId, message: 'Набор $target');
+    _emitCall(SipEventType.dialing, callId: callId, message: 'Dialing $target');
     if (_registrationState != SipRegistrationState.registered) {
-      _emitError('SIP не зарегистрирован', callId: callId);
+      _emitError('SIP is not registered', callId: callId);
       _cleanupCall(callId, callId);
       return callId;
     }
     final started = await _helper.call(target, voiceOnly: true);
     if (!started) {
-      _emitError('Не удалось начать вызов', callId: callId);
-      _emitCall(SipEventType.ended, callId: callId, message: 'Вызов не пошёл');
+      _emitError('Failed to start call', callId: callId);
+      _emitCall(
+        SipEventType.ended,
+        callId: callId,
+        message: 'Call failed to start',
+      );
       _cleanupCall(callId, callId);
     }
     return callId;

@@ -4,6 +4,6 @@ import 'package:app/app.dart';
 import 'package:app/config/env_config.dart';
 
 void main() {
-  EnvConfig.init(Environment.prod);
+  EnvConfig.init(Environment.preprod);
   runApp(const ProviderScope(child: App()));
 }

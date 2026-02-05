@@ -113,7 +113,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось выбрать контакт: $error')),
+        SnackBar(content: Text('Failed to select contact: $error')),
       );
     }
   }
@@ -202,7 +202,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Bluetooth не подключился, переключаемся на трубку'),
+            content: Text('Bluetooth failed to connect, switching to handset'),
           ),
         );
       },
@@ -227,22 +227,22 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   void _showBluetoothDisconnectSnackBar() {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bluetooth гарнитура отключена')),
+      const SnackBar(content: Text('Bluetooth headset disconnected')),
     );
   }
 
   String _routeLabel(AudioRoute route) {
     switch (route) {
       case AudioRoute.earpiece:
-        return 'Трубка';
+        return 'Handset';
       case AudioRoute.speaker:
-        return 'Громкая связь';
+        return 'Speaker';
       case AudioRoute.bluetooth:
         return 'Bluetooth';
       case AudioRoute.wiredHeadset:
-        return 'Проводная гарнитура';
+        return 'Wired headset';
       case AudioRoute.systemDefault:
-        return 'Системный';
+        return 'System default';
     }
   }
 
@@ -302,7 +302,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final hasActiveCall = active != null && active.status != CallStatus.ended;
     final watchdogState = state.watchdogState;
 
-    final titleText = widget.dongleName ?? widget.sipUser?.sipLogin ?? 'Набор';
+    final titleText = widget.dongleName ?? widget.sipUser?.sipLogin ?? 'Dialer';
     final subtitle = widget.dongleNumber;
     final theme = Theme.of(context);
 
@@ -311,7 +311,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       onPopInvokedWithResult: (didPop, _) {
         if (hasActiveCall && !didPop) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Сначала завершите вызов')),
+            const SnackBar(content: Text('Please finish the call first')),
           );
         }
       },
@@ -333,7 +333,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
-                      'Исходящий звонок',
+                      'Outgoing call',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.grey.shade400,
                       ),
@@ -342,7 +342,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
                   const SizedBox(height: 18),
 
-                  // Поле номера
+                  // Number field
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _NumberInputCard(
@@ -354,7 +354,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
                   const SizedBox(height: 12),
 
-                  // Контент
+                  // Content
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -400,7 +400,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Маршрут: ${_routeLabel(_routeInfo!.current)}',
+                                    'Route: ${_routeLabel(_routeInfo!.current)}',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodyMedium,
@@ -409,7 +409,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                     AudioRoute.bluetooth,
                                   ))
                                     Text(
-                                      'Bluetooth: ${_routeInfo!.bluetoothConnected ? 'подключен' : 'доступен'}',
+                                      'Bluetooth: ${_routeInfo!.bluetoothConnected ? 'connected' : 'available'}',
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall
@@ -420,7 +420,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                     children: [
                                       _ControlButton(
                                         icon: Icons.volume_up,
-                                        label: 'Громкая',
+                                        label: 'Speaker',
                                         active: _isSpeakerOn,
                                         onTap: () => _toggleSpeaker(),
                                       ),
@@ -480,7 +480,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                     ),
                   ),
 
-                  // Кнопка звонка
+                  // Call button
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: ValueListenableBuilder<TextEditingValue>(
@@ -504,7 +504,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            child: const Text('Позвонить'),
+                            child: const Text('Call'),
                           ),
                         );
                       },
@@ -522,13 +522,13 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   static String _status(CallStatus status) {
     switch (status) {
       case CallStatus.dialing:
-        return 'Идёт набор';
+        return 'Dialing';
       case CallStatus.ringing:
-        return 'Звонит';
+        return 'Ringing';
       case CallStatus.connected:
-        return 'В разговоре';
+        return 'In call';
       case CallStatus.ended:
-        return 'Завершён';
+        return 'Ended';
     }
   }
 }
@@ -589,7 +589,7 @@ class _NumberInputCard extends StatelessWidget {
         keyboardType: TextInputType.phone,
         autofocus: true,
         decoration: InputDecoration(
-          hintText: 'Введите номер или выберите контакт',
+          hintText: 'Enter a number or select a contact',
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -660,12 +660,12 @@ class _ActiveCallCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Активный вызов · ${_status(active.status)}',
+            'Active call · ${_status(active.status)}',
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
           Text(
-            'Номер: ${active.destination}',
+            'Number: ${active.destination}',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
@@ -674,7 +674,7 @@ class _ActiveCallCard extends StatelessWidget {
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: EdgeInsets.zero,
-              title: const Text('Подробности'),
+              title: const Text('Details'),
               children: [
                 for (final e in events)
                   Padding(
@@ -721,13 +721,13 @@ class _ActiveCallCard extends StatelessWidget {
   static String _status(CallStatus status) {
     switch (status) {
       case CallStatus.dialing:
-        return 'Идёт набор';
+        return 'Dialing';
       case CallStatus.ringing:
-        return 'Звонит';
+        return 'Ringing';
       case CallStatus.connected:
-        return 'В разговоре';
+        return 'In call';
       case CallStatus.ended:
-        return 'Завершён';
+        return 'Ended';
     }
   }
 }
@@ -813,7 +813,7 @@ class _HistorySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ExpansionTile(
-      title: const Text('История звонков'),
+      title: const Text('Call history'),
       childrenPadding: EdgeInsets.zero,
       tilePadding: EdgeInsets.zero,
       children: history.map((call) {
@@ -835,19 +835,19 @@ class _HistorySection extends StatelessWidget {
   static String _status(CallStatus status) {
     switch (status) {
       case CallStatus.dialing:
-        return 'Идёт набор';
+        return 'Dialing';
       case CallStatus.ringing:
-        return 'Звонит';
+        return 'Ringing';
       case CallStatus.connected:
-        return 'В разговоре';
+        return 'In call';
       case CallStatus.ended:
-        return 'Завершён';
+        return 'Ended';
     }
   }
 }
 
 /// ------------------------------
-/// "Как телефон": sheet с верхом (номер/статус) + responsive keypad
+/// "Phone-style": sheet with top section (number/status) + responsive keypad
 /// ------------------------------
 class _InCallKeypadSheet extends StatefulWidget {
   const _InCallKeypadSheet({
@@ -899,8 +899,8 @@ class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
 
             final cellW = (c.maxWidth - cross * (cols - 1)) / cols;
 
-            // Высота header части (handle + номер + статус + отступы)
-            final headerH = 4 + 10 + 12 + 22 + 8 + 18 + 12; // примерно
+            // Height of the header section (handle + number + status + paddings)
+            final headerH = 4 + 10 + 12 + 22 + 8 + 18 + 12; // approximate
             final dtmfH = _sequence.isNotEmpty ? (18 + 10) : 0;
 
             final availableForGrid = (c.maxHeight - headerH - dtmfH).clamp(
@@ -928,7 +928,7 @@ class _InCallKeypadSheetState extends State<_InCallKeypadSheet> {
                 ),
                 const SizedBox(height: 10),
 
-                // Верх как у телефона: номер + статус
+                // Top like a phone: number + status
                 Text(
                   widget.title,
                   style: theme.textTheme.titleLarge?.copyWith(

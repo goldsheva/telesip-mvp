@@ -12,14 +12,14 @@ class CallWatchdogState {
 
   const CallWatchdogState(this.status, this.message);
 
-  factory CallWatchdogState.ok([String message = 'Соединение стабильно']) =>
+  factory CallWatchdogState.ok([String message = 'Connection is stable']) =>
       CallWatchdogState(CallWatchdogStatus.ok, message);
 
   factory CallWatchdogState.reconnecting([
-    String message = 'Перезапуск ICE...',
+    String message = 'Restarting ICE...',
   ]) => CallWatchdogState(CallWatchdogStatus.reconnecting, message);
 
-  factory CallWatchdogState.failed([String message = 'Сеть нестабильна']) =>
+  factory CallWatchdogState.failed([String message = 'Network is unstable']) =>
       CallWatchdogState(CallWatchdogStatus.failed, message);
 }
 
@@ -130,7 +130,7 @@ class CallWebRtcWatchdog {
     _lastRestartAt = now;
     _setState(
       CallWatchdogState.reconnecting(
-        'Перезапуск ICE (#$_restartAttempts): $reason',
+        'ICE restart (#$_restartAttempts): $reason',
       ),
     );
     _restartInProgress = true;
@@ -166,7 +166,7 @@ class CallWebRtcWatchdog {
   }
 
   Future<void> manualRestart() async {
-    await _attemptRestart('ручная попытка');
+    await _attemptRestart('manual attempt');
   }
 
   String _stateLabel(RTCIceConnectionState? state) {

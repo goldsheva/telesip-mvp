@@ -123,7 +123,7 @@ class CallNotifier extends Notifier<CallState> {
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return;
     if (!_isRegistered) {
-      _setError('SIP не зарегистрирован');
+      _setError('SIP is not registered');
       return;
     }
     final callId = await _engine.startCall(trimmed);
@@ -162,7 +162,7 @@ class CallNotifier extends Notifier<CallState> {
           ? 'ws'
           : null;
       if (scheme == null) {
-        _setError('Поддерживается только WS/WSS');
+        _setError('Only WS/WSS transports are supported');
         return;
       }
 
@@ -172,8 +172,8 @@ class CallNotifier extends Notifier<CallState> {
       final defaultWs = EnvConfig.sipWebSocketUrl;
       if (defaultWs == null) {
         _setError(
-          'PBX не отдает WS/WSS transport. Для sip_ua нужен SIP over WebSocket. '
-          'Ожидается WSS (например wss://pbx.teleleo.com:7443/).',
+          'PBX does not offer WS/WSS transport. Sip_ua requires SIP over WebSocket. '
+          'Expected WSS (e.g., wss://pbx.teleleo.com:7443/).',
         );
         return;
       }
@@ -182,7 +182,7 @@ class CallNotifier extends Notifier<CallState> {
     }
 
     if (uriHost.isEmpty) {
-      _setError('Невозможно определить домен SIP');
+      _setError('Unable to determine SIP domain');
       return;
     }
     final uri = 'sip:${user.sipLogin}@$uriHost';
@@ -195,7 +195,7 @@ class CallNotifier extends Notifier<CallState> {
         displayName: user.sipLogin,
       );
     } catch (error) {
-      _setError('Ошибка регистрации SIP: $error');
+      _setError('SIP registration failed: $error');
     }
   }
 
@@ -225,7 +225,7 @@ class CallNotifier extends Notifier<CallState> {
         _clearError();
       } else if (registrationState == SipRegistrationState.failed) {
         _isRegistered = false;
-        _handleRegistrationFailure(event.message ?? 'Ошибка регистрации SIP');
+        _handleRegistrationFailure(event.message ?? 'SIP registration failed');
       } else if (registrationState == SipRegistrationState.unregistered ||
           registrationState == SipRegistrationState.none) {
         _isRegistered = false;
@@ -336,7 +336,7 @@ class CallNotifier extends Notifier<CallState> {
         _pendingRegistrationError = null;
         return;
       }
-      _setError(_pendingRegistrationError ?? 'Ошибка регистрации SIP');
+      _setError(_pendingRegistrationError ?? 'SIP registration failed');
     });
   }
 
@@ -352,7 +352,7 @@ class CallNotifier extends Notifier<CallState> {
       final targetCallId = _dialTimeoutCallId;
       if (targetCallId == null) return;
       if (state.activeCallId != targetCallId) return;
-      _setError('Вызов не был принят, завершаем');
+      _setError('Call was not answered, ending');
       await _engine.hangup(targetCallId);
       _cancelDialTimeout();
     });
@@ -419,7 +419,7 @@ class CallNotifier extends Notifier<CallState> {
     debugPrint('Watchdog failure triggered for $callId');
     _watchdogErrorActive = true;
     state = state.copyWith(
-      errorMessage: 'Сеть нестабильна',
+      errorMessage: 'Network is unstable',
       watchdogState: CallWatchdogState.failed(),
     );
   }
@@ -438,7 +438,7 @@ class CallNotifier extends Notifier<CallState> {
       }
       debugPrint('Watchdog hangup timer expired for $callId');
       _watchdogErrorActive = true;
-      _setError('Сеть нестабильна, завершаем вызов');
+      _setError('Network is unstable, ending call');
       _engine.hangup(callId);
     });
     debugPrint('Watchdog failure timer started for $callId');
@@ -479,8 +479,8 @@ class CallNotifier extends Notifier<CallState> {
 
   void _clearWatchdogError() {
     if (_watchdogErrorActive &&
-        (state.errorMessage == 'Сеть нестабильна' ||
-            state.errorMessage == 'Сеть нестабильна, завершаем вызов')) {
+        (state.errorMessage == 'Network is unstable' ||
+            state.errorMessage == 'Network is unstable, ending call')) {
       state = state.copyWith(errorMessage: null);
     }
     _watchdogErrorActive = false;

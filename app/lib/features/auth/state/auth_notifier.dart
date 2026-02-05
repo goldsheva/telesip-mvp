@@ -58,7 +58,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final tokens = await storage.readTokens();
       if (tokens == null) {
         throw ApiException.network(
-          'Сначала войдите по логину и паролю, чтобы включить биометрию',
+          'Please log in with credentials before enabling biometrics',
         );
       }
 

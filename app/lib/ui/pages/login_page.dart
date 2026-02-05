@@ -105,20 +105,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       setState(() => _isAuthenticatingBiometric = true);
       try {
         final didAuthenticate = await _localAuth.authenticate(
-          localizedReason:
-              'Авторизуйтесь по данным Face ID или отпечатка пальца',
+          localizedReason: 'Please authenticate with Face ID or fingerprint',
           biometricOnly: true,
           persistAcrossBackgrounding: true,
         );
 
         if (!didAuthenticate) {
-          _toast('Биометрическая проверка не была подтверждена');
+          _toast('Biometric check was not confirmed');
           return;
         }
 
         await ref.read(authNotifierProvider.notifier).loginWithBiometrics();
       } catch (_) {
-        _toast('Не удалось выполнить биометрическую авторизацию');
+        _toast('Failed to perform biometric authentication');
       } finally {
         setState(() => _isAuthenticatingBiometric = false);
       }
@@ -130,9 +129,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authAsync = ref.watch(authNotifierProvider);
     final isBusy = _isSubmitting || authAsync.isLoading;
 
-    // 1) ошибка из AsyncValue.error
-    // 2) ошибка из AuthState.unauthenticated(error)
-    // 3) ошибка, проброшенная сверху
+    // 1) error from AsyncValue.error
+    // 2) error from AuthState.unauthenticated(error)
+    // 3) error passed from the parent
     String? error = widget.error;
 
     authAsync.when(
@@ -218,8 +217,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         icon: const Icon(Icons.fingerprint),
                         label: Text(
                           _isAuthenticatingBiometric
-                              ? 'Ждём биометрию…'
-                              : 'Войти по Face ID/отпечатку',
+                              ? 'Waiting for biometrics…'
+                              : 'Log in with Face ID/fingerprint',
                         ),
                       ),
                     ],
