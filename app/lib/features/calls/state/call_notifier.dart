@@ -118,7 +118,8 @@ class CallNotifier extends Notifier<CallState> {
   static const Duration _dialTimeout = Duration(seconds: 25);
 
   Future<void> startCall(String destination) async {
-    if (state.activeCallId != null) return;
+    final activeCall = state.activeCall;
+    if (activeCall != null && activeCall.status != CallStatus.ended) return;
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return;
     if (!_isRegistered) {
