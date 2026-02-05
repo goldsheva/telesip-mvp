@@ -59,18 +59,21 @@ class CallState {
     this.activeCallId,
     this.errorMessage,
     required this.watchdogState,
+    required this.isRegistered,
   });
 
   factory CallState.initial() => CallState(
     calls: {},
     errorMessage: null,
     watchdogState: CallWatchdogState.ok(),
+    isRegistered: false,
   );
 
   final Map<String, CallInfo> calls;
   final String? activeCallId;
   final String? errorMessage;
   final CallWatchdogState watchdogState;
+  final bool isRegistered;
 
   CallInfo? get activeCall => activeCallId != null ? calls[activeCallId] : null;
 
@@ -82,12 +85,14 @@ class CallState {
     String? activeCallId,
     String? errorMessage,
     CallWatchdogState? watchdogState,
+    bool? isRegistered,
   }) {
     return CallState(
       calls: calls ?? this.calls,
       activeCallId: activeCallId ?? this.activeCallId,
       errorMessage: errorMessage ?? this.errorMessage,
       watchdogState: watchdogState ?? this.watchdogState,
+      isRegistered: isRegistered ?? this.isRegistered,
     );
   }
 }
@@ -220,6 +225,7 @@ class CallNotifier extends Notifier<CallState> {
         _isRegistered = false;
         _registeredUserId = null;
       }
+      state = state.copyWith(isRegistered: _isRegistered);
       return;
     }
     final callId = event.callId;

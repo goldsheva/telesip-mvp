@@ -475,8 +475,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                   child: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _numberController,
                     builder: (context, value, _) {
-                      final canCall =
-                          value.text.trim().isNotEmpty && !hasActiveCall;
+                      final canCall = value.text.trim().isNotEmpty &&
+                          !hasActiveCall &&
+                          state.isRegistered;
                       return SizedBox(
                         height: 56,
                         width: double.infinity,
