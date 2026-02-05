@@ -282,25 +282,6 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     await _refreshRouteInfo();
   }
 
-  Future<void> _toggleBluetooth() async {
-    final enabling = !_isBluetoothPreferred;
-    setState(() {
-      _isBluetoothPreferred = enabling;
-      if (enabling) {
-        _isSpeakerOn = false;
-      }
-    });
-    _awaitingBluetoothConfirmation = false;
-    _bluetoothConfirmTimer?.cancel();
-    await _callAudioRoute.setRoute(
-      enabling ? AudioRoute.bluetooth : AudioRoute.earpiece,
-    );
-    if (!mounted) return;
-    if (!enabling) {
-      setState(() => _isSpeakerOn = false);
-    }
-  }
-
   Future<void> _applyPreferredRoute() async {
     final route = _isBluetoothPreferred
         ? AudioRoute.bluetooth
@@ -421,19 +402,10 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                           ),
                           if (_routeInfo != null && hasActiveCall) ...[
                             const SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color.fromRGBO(0, 0, 0, 0.05),
-                                    blurRadius: 18,
-                                    offset: Offset(0, 10),
-                                  ),
-                                ],
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
                               ),
-                              padding: const EdgeInsets.all(12),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -453,31 +425,6 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                           .bodySmall
                                           ?.copyWith(color: Colors.grey),
                                     ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      _ControlButton(
-                                        icon: Icons.volume_up,
-                                        label: 'Speaker',
-                                        active: _isSpeakerOn,
-                                        onTap: () => _toggleSpeaker(),
-                                      ),
-                                      if (_routeInfo!.available.contains(
-                                        AudioRoute.bluetooth,
-                                      )) ...[
-                                        const SizedBox(width: 8),
-                                        _ControlButton(
-                                          icon: Icons.bluetooth,
-                                          label: 'Bluetooth',
-                                          active:
-                                              _isBluetoothPreferred ||
-                                              _routeInfo!.current ==
-                                                  AudioRoute.bluetooth,
-                                          onTap: () => _toggleBluetooth(),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
                                   if (watchdogState.status ==
                                       CallWatchdogStatus.reconnecting) ...[
                                     const SizedBox(height: 6),
