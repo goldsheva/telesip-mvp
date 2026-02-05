@@ -110,6 +110,8 @@ class CallNotifier extends Notifier<CallState> {
   Timer? _watchdogFailureTimer;
   String? _failureTimerCallId;
   String? _pendingCallId;
+  Timer? _registrationErrorTimer;
+  String? _pendingRegistrationError;
   bool _userInitiatedRetry = false;
   Timer? _retrySuppressionTimer;
   bool _watchdogErrorActive = false;
@@ -206,6 +208,7 @@ class CallNotifier extends Notifier<CallState> {
     ref.onDispose(() {
       _eventSubscription?.close();
       _disposeWatchdog();
+      _cancelRegistrationErrorTimer();
     });
     return CallState.initial();
   }
@@ -216,10 +219,14 @@ class CallNotifier extends Notifier<CallState> {
       if (registrationState == SipRegistrationState.registered) {
         _isRegistered = true;
         _registeredUserId = _lastKnownUser?.pbxSipUserId;
+        _cancelRegistrationErrorTimer();
+        _pendingRegistrationError = null;
         _clearError();
       } else if (registrationState == SipRegistrationState.failed) {
         _isRegistered = false;
-        _setError(event.message ?? 'Ошибка регистрации SIP');
+        _handleRegistrationFailure(
+          event.message ?? 'Ошибка регистрации SIP',
+        );
       } else if (registrationState == SipRegistrationState.unregistered ||
           registrationState == SipRegistrationState.none) {
         _isRegistered = false;
@@ -319,6 +326,23 @@ class CallNotifier extends Notifier<CallState> {
     if (state.errorMessage != null) {
       state = state.copyWith(errorMessage: null);
     }
+  }
+
+  void _handleRegistrationFailure(String message) {
+    _pendingRegistrationError = message;
+    _cancelRegistrationErrorTimer();
+    _registrationErrorTimer = Timer(const Duration(seconds: 2), () {
+      if (_isRegistered) {
+        _pendingRegistrationError = null;
+        return;
+      }
+      _setError(_pendingRegistrationError ?? 'Ошибка регистрации SIP');
+    });
+  }
+
+  void _cancelRegistrationErrorTimer() {
+    _registrationErrorTimer?.cancel();
+    _registrationErrorTimer = null;
   }
 
   void _startDialTimeout(String callId) {
