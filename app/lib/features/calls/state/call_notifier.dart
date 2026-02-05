@@ -195,7 +195,10 @@ class CallNotifier extends Notifier<CallState> {
       sipEventsProvider,
       (previous, next) => next.whenData(_onEvent),
     );
-    ref.onDispose(() => _eventSubscription?.close());
+    ref.onDispose(() {
+      _eventSubscription?.close();
+      _disposeWatchdog();
+    });
     return CallState.initial();
   }
 
@@ -453,12 +456,6 @@ class CallNotifier extends Notifier<CallState> {
     _cancelFailureTimer();
     _startRetrySuppressionTimer();
     await _webRtcWatchdog!.manualRestart();
-  }
-
-  @override
-  void dispose() {
-    _disposeWatchdog();
-    super.dispose();
   }
 }
 

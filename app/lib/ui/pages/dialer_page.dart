@@ -49,7 +49,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     _callAudioRoute.getRouteInfo().then((info) {
       if (!mounted) return;
       setState(() {
-        _routeInfo = info;
+        _routeInfo = info as AudioRouteInfo?;
       });
     });
 

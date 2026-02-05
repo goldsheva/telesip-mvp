@@ -2,6 +2,8 @@ library call_audio_route;
 
 export 'src/audio_route_info.dart';
 
+import 'package:call_audio_route/src/audio_route_info.dart';
+
 import 'call_audio_route_platform_interface.dart';
 
 /// Entry point for the plugin.
