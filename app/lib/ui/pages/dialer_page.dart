@@ -313,10 +313,13 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final state = ref.watch(callControllerProvider);
     final notifier = ref.read(callControllerProvider.notifier);
 
-    final active = state.activeCall;
+    final rawActiveCall = state.activeCall;
+    final dongleId = widget.sipUser?.dongleId;
+    final active = dongleId == null || rawActiveCall?.dongleId == dongleId
+        ? rawActiveCall
+        : null;
     final hasActiveCall = active != null && active.status != CallStatus.ended;
     final watchdogState = state.watchdogState;
-    final dongleId = widget.sipUser?.dongleId;
     final history = dongleId == null
         ? state.history
         : state.history.where((call) => call.dongleId == dongleId).toList();
@@ -609,7 +612,7 @@ class _NumberInputCard extends StatelessWidget {
         autofocus: true,
         inputFormatters: [_PhoneNumberInputFormatter()],
         decoration: InputDecoration(
-          hintText: 'Enter a number or select a contact',
+          hintText: 'Enter a number',
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
