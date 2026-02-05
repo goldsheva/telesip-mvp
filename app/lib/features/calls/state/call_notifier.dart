@@ -224,9 +224,7 @@ class CallNotifier extends Notifier<CallState> {
         _clearError();
       } else if (registrationState == SipRegistrationState.failed) {
         _isRegistered = false;
-        _handleRegistrationFailure(
-          event.message ?? 'Ошибка регистрации SIP',
-        );
+        _handleRegistrationFailure(event.message ?? 'Ошибка регистрации SIP');
       } else if (registrationState == SipRegistrationState.unregistered ||
           registrationState == SipRegistrationState.none) {
         _isRegistered = false;
@@ -240,7 +238,8 @@ class CallNotifier extends Notifier<CallState> {
 
     final status = _mapStatus(event.type);
     final pendingCallId = _pendingCallId;
-    final previous = state.calls[callId] ??
+    final previous =
+        state.calls[callId] ??
         (pendingCallId != null ? state.calls[pendingCallId] : null);
     final destination = previous?.destination ?? event.message ?? 'call';
     final logs = List<String>.from(previous?.timeline ?? [])

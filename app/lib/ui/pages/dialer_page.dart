@@ -306,199 +306,212 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final subtitle = widget.dongleNumber;
     final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(
-        elevation: 0,
-        title: _AppBarTitle(title: titleText, subtitle: subtitle),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 10),
+    return PopScope(
+      canPop: !hasActiveCall,
+      onPopInvokedWithResult: (didPop, _) {
+        if (hasActiveCall && !didPop) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Сначала завершите вызов')),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        appBar: AppBar(
+          elevation: 0,
+          title: _AppBarTitle(title: titleText, subtitle: subtitle),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 10),
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    'Исходящий звонок',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade400,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Исходящий звонок',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade400,
+                      ),
                     ),
                   ),
-                ),
 
-                const SizedBox(height: 18),
+                  const SizedBox(height: 18),
 
-                // Поле номера
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _NumberInputCard(
-                    controller: _numberController,
-                    onPickContact: _pickContact,
-                    onClear: _numberController.clear,
+                  // Поле номера
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _NumberInputCard(
+                      controller: _numberController,
+                      onPickContact: _pickContact,
+                      onClear: _numberController.clear,
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                // Контент
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                    children: [
-                      if (active != null) ...[
-                        _ActiveCallCard(
-                          active: active,
-                          isMuted: _isMuted,
-                          isSpeakerOn: _isSpeakerOn,
-                          onToggleMute: hasActiveCall
-                              ? () {
-                                  setState(() => _isMuted = !_isMuted);
-                                }
-                              : null,
-                          onToggleSpeaker: hasActiveCall
-                              ? () {
-                                  _toggleSpeaker();
-                                }
-                              : null,
-                          onOpenKeypad: hasActiveCall
-                              ? () => _openKeypad(active)
-                              : null,
-                          onHangup: hasActiveCall
-                              ? () => notifier.hangup(active.id)
-                              : null,
-                        ),
-                        if (_routeInfo != null && hasActiveCall) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: BorderRadius.circular(18),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color.fromRGBO(0, 0, 0, 0.05),
-                                  blurRadius: 18,
-                                  offset: Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Маршрут: ${_routeLabel(_routeInfo!.current)}',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                if (_routeInfo!.available.contains(
-                                  AudioRoute.bluetooth,
-                                ))
-                                  Text(
-                                    'Bluetooth: ${_routeInfo!.bluetoothConnected ? 'подключен' : 'доступен'}',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: Colors.grey),
+                  // Контент
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                      children: [
+                        if (active != null) ...[
+                          _ActiveCallCard(
+                            active: active,
+                            isMuted: _isMuted,
+                            isSpeakerOn: _isSpeakerOn,
+                            onToggleMute: hasActiveCall
+                                ? () {
+                                    setState(() => _isMuted = !_isMuted);
+                                  }
+                                : null,
+                            onToggleSpeaker: hasActiveCall
+                                ? () {
+                                    _toggleSpeaker();
+                                  }
+                                : null,
+                            onOpenKeypad: hasActiveCall
+                                ? () => _openKeypad(active)
+                                : null,
+                            onHangup: hasActiveCall
+                                ? () => notifier.hangup(active.id)
+                                : null,
+                          ),
+                          if (_routeInfo != null && hasActiveCall) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color.fromRGBO(0, 0, 0, 0.05),
+                                    blurRadius: 18,
+                                    offset: Offset(0, 10),
                                   ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    _ControlButton(
-                                      icon: Icons.volume_up,
-                                      label: 'Громкая',
-                                      active: _isSpeakerOn,
-                                      onTap: () => _toggleSpeaker(),
+                                ],
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Маршрут: ${_routeLabel(_routeInfo!.current)}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                  if (_routeInfo!.available.contains(
+                                    AudioRoute.bluetooth,
+                                  ))
+                                    Text(
+                                      'Bluetooth: ${_routeInfo!.bluetoothConnected ? 'подключен' : 'доступен'}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(color: Colors.grey),
                                     ),
-                                    if (_routeInfo!.available.contains(
-                                      AudioRoute.bluetooth,
-                                    )) ...[
-                                      const SizedBox(width: 8),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
                                       _ControlButton(
-                                        icon: Icons.bluetooth,
-                                        label: 'Bluetooth',
-                                        active:
-                                            _isBluetoothPreferred ||
-                                            _routeInfo!.current ==
-                                                AudioRoute.bluetooth,
-                                        onTap: () => _toggleBluetooth(),
+                                        icon: Icons.volume_up,
+                                        label: 'Громкая',
+                                        active: _isSpeakerOn,
+                                        onTap: () => _toggleSpeaker(),
                                       ),
+                                      if (_routeInfo!.available.contains(
+                                        AudioRoute.bluetooth,
+                                      )) ...[
+                                        const SizedBox(width: 8),
+                                        _ControlButton(
+                                          icon: Icons.bluetooth,
+                                          label: 'Bluetooth',
+                                          active:
+                                              _isBluetoothPreferred ||
+                                              _routeInfo!.current ==
+                                                  AudioRoute.bluetooth,
+                                          onTap: () => _toggleBluetooth(),
+                                        ),
+                                      ],
                                     ],
+                                  ),
+                                  if (watchdogState.status ==
+                                      CallWatchdogStatus.reconnecting) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      watchdogState.message,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: Colors.orange),
+                                    ),
                                   ],
-                                ),
-                                if (watchdogState.status ==
-                                    CallWatchdogStatus.reconnecting) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    watchdogState.message,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: Colors.orange,
+                                  if (watchdogState.status ==
+                                      CallWatchdogStatus.failed) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      watchdogState.message,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: Colors.redAccent),
                                     ),
-                                  ),
+                                    const SizedBox(height: 4),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: hasActiveCall
+                                            ? () => notifier.retryCallAudio()
+                                            : null,
+                                        child: const Text('Retry audio'),
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                                if (watchdogState.status ==
-                                    CallWatchdogStatus.failed) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    watchdogState.message,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: Colors.redAccent,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      onPressed: hasActiveCall
-                                          ? () => notifier.retryCallAudio()
-                                          : null,
-                                      child: const Text('Retry audio'),
-                                    ),
-                                  ),
-                                ],
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
+                          const SizedBox(height: 16),
                         ],
-                        const SizedBox(height: 16),
+                        if (state.history.isNotEmpty)
+                          _HistorySection(history: state.history),
                       ],
-                      if (state.history.isNotEmpty)
-                        _HistorySection(history: state.history),
-                    ],
+                    ),
                   ),
-                ),
 
-                // Кнопка звонка
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _numberController,
-                    builder: (context, value, _) {
-                      final canCall = value.text.trim().isNotEmpty &&
-                          !hasActiveCall &&
-                          state.isRegistered;
-                      return SizedBox(
-                        height: 56,
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: canCall ? _call : null,
-                          style: ElevatedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
+                  // Кнопка звонка
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _numberController,
+                      builder: (context, value, _) {
+                        final canCall =
+                            value.text.trim().isNotEmpty &&
+                            !hasActiveCall &&
+                            state.isRegistered;
+                        return SizedBox(
+                          height: 56,
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: canCall ? _call : null,
+                            style: ElevatedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              backgroundColor: Colors.green,
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            backgroundColor: Colors.green,
-                            textStyle: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            child: const Text('Позвонить'),
                           ),
-                          child: const Text('Позвонить'),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
