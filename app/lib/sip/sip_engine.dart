@@ -253,7 +253,7 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     final callId = _buildCallId();
     _currentCallId = callId;
     _callState = SipCallState.dialing;
-    _emitCall(SipEventType.dialing, callId: callId, message: 'Dialing $target');
+    _emitCall(SipEventType.dialing, callId: callId, message: target);
     if (_registrationState != SipRegistrationState.registered) {
       _emitError('SIP is not registered', callId: callId);
       _cleanupCall(callId, callId);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:call_audio_route/call_audio_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:flutter_native_contact_picker/model/contact.dart';
@@ -95,9 +96,23 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   }
 
   Future<void> _call() async {
-    final number = _numberController.text.trim();
+    final raw = _numberController.text;
+    final number = _normalizeNumber(raw);
     if (number.isEmpty) return;
+    if (number != raw) {
+      _numberController.text = number;
+      _numberController.selection = TextSelection.fromPosition(
+        TextPosition(offset: number.length),
+      );
+    }
     await ref.read(callControllerProvider.notifier).startCall(number);
+  }
+
+  static String _normalizeNumber(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (trimmed.startsWith('+')) return trimmed;
+    return '+$trimmed';
   }
 
   Future<void> _pickContact() async {
@@ -588,6 +603,7 @@ class _NumberInputCard extends StatelessWidget {
         controller: controller,
         keyboardType: TextInputType.phone,
         autofocus: true,
+        inputFormatters: [_PhoneNumberInputFormatter()],
         decoration: InputDecoration(
           hintText: 'Enter a number or select a contact',
           border: InputBorder.none,
@@ -614,6 +630,38 @@ class _NumberInputCard extends StatelessWidget {
           context,
         ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
       ),
+    );
+  }
+}
+
+class _PhoneNumberInputFormatter extends TextInputFormatter {
+  static final _digitMatcher = RegExp(r'\d');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final buffer = StringBuffer();
+    var plusAllowed = true;
+    for (var i = 0; i < newValue.text.length; i++) {
+      final char = newValue.text[i];
+      if (char == '+') {
+        if (buffer.isEmpty && plusAllowed) {
+          buffer.write(char);
+          plusAllowed = false;
+        }
+        continue;
+      }
+      if (_digitMatcher.hasMatch(char)) {
+        buffer.write(char);
+        plusAllowed = false;
+      }
+    }
+    final filtered = buffer.toString();
+    return TextEditingValue(
+      text: filtered,
+      selection: TextSelection.collapsed(offset: filtered.length),
     );
   }
 }
@@ -665,7 +713,7 @@ class _ActiveCallCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Number: ${active.destination}',
+            active.destination,
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
