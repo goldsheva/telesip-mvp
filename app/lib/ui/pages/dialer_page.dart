@@ -324,6 +324,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final history = dongleId == null
         ? state.history
         : state.history.where((call) => call.dongleId == dongleId).toList();
+    final detailEvents = active != null
+        ? active.timeline.reversed.take(8).toList()
+        : <String>[];
 
     final titleText = widget.dongleName ?? widget.sipUser?.sipLogin ?? 'Dialer';
     final subtitle = widget.dongleNumber;
@@ -462,6 +465,27 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                             ),
                           ],
                           const SizedBox(height: 16),
+                        ],
+                        if (active != null && detailEvents.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              childrenPadding: EdgeInsets.zero,
+                              title: const Text('Last Call Details'),
+                              children: [
+                                for (final e in detailEvents)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      '• $e',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                         if (history.isNotEmpty)
                           _HistorySection(history: history),
@@ -664,8 +688,6 @@ class _ActiveCallCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final events = active.timeline.reversed.take(8).toList();
-
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -689,20 +711,6 @@ class _ActiveCallCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(active.destination, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 8),
-
-          if (events.isNotEmpty)
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: EdgeInsets.zero,
-              title: const Text('Details'),
-              children: [
-                for (final e in events)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text('• $e', style: theme.textTheme.bodySmall),
-                  ),
-              ],
-            ),
 
           const SizedBox(height: 8),
 
