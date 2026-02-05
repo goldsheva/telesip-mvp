@@ -287,7 +287,12 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     if (call == null) return;
     for (var i = 0; i < digits.length; i++) {
       final digit = digits[i];
-      call.sendDTMF(digit);
+      try {
+        call.sendDTMF(digit);
+      } catch (_) {
+        // best-effort: ignore invalid WebRTC state after call ended
+        return;
+      }
       _emit(
         SipEvent(
           type: SipEventType.dtmf,

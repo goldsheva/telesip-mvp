@@ -42,6 +42,13 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   bool _awaitingBluetoothConfirmation = false;
   Timer? _bluetoothConfirmTimer;
 
+  String _effectiveRouteLabel() {
+    final route = _routeInfo?.current;
+    if (route != null) return _routeLabel(route);
+    if (_isBluetoothPreferred) return 'Bluetooth';
+    return _isSpeakerOn ? 'Speaker' : 'Handset';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -422,7 +429,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Route: ${_routeLabel(_routeInfo!.current)}',
+                                    'Route: ${_effectiveRouteLabel()}',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodyMedium,
