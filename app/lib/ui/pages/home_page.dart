@@ -282,14 +282,18 @@ class _SipUserListTileState extends State<_SipUserListTile> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            if (displayNumber != null && displayNumber.isNotEmpty) ...[
+              Text(
+                displayNumber,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
             _InfoLine(label: 'SIP Username', value: widget.sipUser.sipLogin),
             const SizedBox(height: 6),
             _InfoLine(label: 'SIP Password', value: widget.sipUser.sipPassword),
-            if (displayNumber != null && displayNumber.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(displayNumber, style: theme.textTheme.bodySmall),
-            ],
             const SizedBox(height: 6),
             if (primaryConnection != null) ...[
               _InfoLine(
