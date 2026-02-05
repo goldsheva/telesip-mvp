@@ -329,7 +329,7 @@ class _SipUserListTileState extends State<_SipUserListTile> {
             ElevatedButton.icon(
               onPressed: widget.isCallable ? widget.onCall : null,
               icon: const Icon(Icons.call),
-              label: const Text('Call'),
+              label: const Text('Use for call'),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
                 backgroundColor: widget.isCallable ? Colors.green : null,

@@ -531,8 +531,10 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                         return SizedBox(
                           height: 56,
                           width: double.infinity,
-                          child: ElevatedButton(
+                          child: ElevatedButton.icon(
                             onPressed: canCall ? _call : null,
+                            icon: const Icon(Icons.call),
+                            label: const Text('Call'),
                             style: ElevatedButton.styleFrom(
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(18),
@@ -542,7 +544,6 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            child: const Text('Call'),
                           ),
                         );
                       },
@@ -731,7 +732,7 @@ class _ActiveCallCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Active call · ${_status(active.status)}',
+            'Call status · ${_status(active.status)}',
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
