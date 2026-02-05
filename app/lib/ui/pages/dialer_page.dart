@@ -316,6 +316,10 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     final active = state.activeCall;
     final hasActiveCall = active != null && active.status != CallStatus.ended;
     final watchdogState = state.watchdogState;
+    final dongleId = widget.sipUser?.dongleId;
+    final history = dongleId == null
+        ? state.history
+        : state.history.where((call) => call.dongleId == dongleId).toList();
 
     final titleText = widget.dongleName ?? widget.sipUser?.sipLogin ?? 'Dialer';
     final subtitle = widget.dongleNumber;
@@ -489,8 +493,8 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                           ],
                           const SizedBox(height: 16),
                         ],
-                        if (state.history.isNotEmpty)
-                          _HistorySection(history: state.history),
+                        if (history.isNotEmpty)
+                          _HistorySection(history: history),
                       ],
                     ),
                   ),
@@ -712,10 +716,7 @@ class _ActiveCallCard extends StatelessWidget {
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          Text(
-            active.destination,
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text(active.destination, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 8),
 
           if (events.isNotEmpty)

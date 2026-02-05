@@ -21,6 +21,7 @@ class CallInfo {
     this.endedAt,
     this.timeline = const [],
     this.errorMessage,
+    this.dongleId,
   });
 
   final String id;
@@ -31,6 +32,7 @@ class CallInfo {
   final DateTime? endedAt;
   final List<String> timeline;
   final String? errorMessage;
+  final int? dongleId;
 
   CallInfo copyWith({
     String? destination,
@@ -39,6 +41,7 @@ class CallInfo {
     DateTime? endedAt,
     List<String>? timeline,
     String? errorMessage,
+    int? dongleId,
   }) {
     return CallInfo(
       id: id,
@@ -49,6 +52,7 @@ class CallInfo {
       endedAt: endedAt ?? this.endedAt,
       timeline: timeline ?? this.timeline,
       errorMessage: errorMessage ?? this.errorMessage,
+      dongleId: dongleId ?? this.dongleId,
     );
   }
 }
@@ -112,6 +116,7 @@ class CallNotifier extends Notifier<CallState> {
   String? _pendingCallId;
   Timer? _registrationErrorTimer;
   String? _pendingRegistrationError;
+  final Map<String, int?> _callDongleMap = {};
   bool _userInitiatedRetry = false;
   Timer? _retrySuppressionTimer;
   bool _watchdogErrorActive = false;
@@ -128,6 +133,7 @@ class CallNotifier extends Notifier<CallState> {
     }
     final callId = await _engine.startCall(trimmed);
     _pendingCallId = callId;
+    _callDongleMap[callId] = _lastKnownUser?.dongleId;
     _startDialTimeout(callId);
     _clearError();
     state = state.copyWith(activeCallId: callId);
@@ -245,6 +251,9 @@ class CallNotifier extends Notifier<CallState> {
     final destination = previous?.destination ?? event.message ?? 'call';
     final logs = List<String>.from(previous?.timeline ?? [])
       ..add(_describe(event));
+    final originDongleId =
+        _callDongleMap[callId] ??
+        (pendingCallId != null ? _callDongleMap[pendingCallId] : null);
 
     final updated = Map<String, CallInfo>.from(state.calls);
     updated[callId] = CallInfo(
@@ -257,9 +266,16 @@ class CallNotifier extends Notifier<CallState> {
           : previous?.connectedAt,
       endedAt: status == CallStatus.ended ? event.timestamp : previous?.endedAt,
       timeline: logs,
+      dongleId: originDongleId,
     );
     if (pendingCallId != null && pendingCallId != callId) {
       updated.remove(pendingCallId);
+    }
+    if (originDongleId != null) {
+      _callDongleMap[callId] = originDongleId;
+    }
+    if (pendingCallId != null && pendingCallId != callId) {
+      _callDongleMap.remove(pendingCallId);
     }
 
     var activeCallId = state.activeCallId;
@@ -269,6 +285,10 @@ class CallNotifier extends Notifier<CallState> {
       }
       _cancelDialTimeout();
       _pendingCallId = null;
+      _callDongleMap.remove(callId);
+      if (pendingCallId != null) {
+        _callDongleMap.remove(pendingCallId);
+      }
     } else {
       if (status != CallStatus.dialing) {
         _cancelDialTimeout();
