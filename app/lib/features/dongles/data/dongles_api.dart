@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:app/config/env_config.dart';
 import 'package:app/core/network/api_client.dart';
+import 'package:app/core/network/api_endpoints.dart';
 import 'package:app/core/network/api_exception.dart';
 import 'package:app/features/dongles/models/dongle.dart';
 
@@ -11,8 +11,7 @@ class DonglesApi {
   final ApiClient _client;
 
   Future<List<Dongle>> fetchDongles() async {
-    final endpoint = '${EnvConfig.baseApiUrl}/dongle';
-    final response = await _client.get(endpoint);
+    final response = await _client.get(ApiEndpoints.dongleList);
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {

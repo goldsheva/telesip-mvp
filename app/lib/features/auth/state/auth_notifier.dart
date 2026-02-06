@@ -33,6 +33,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           .login(email: email, password: password);
 
       await ref.read(authTokensStorageProvider).writeTokens(tokens);
+      await ref.read(biometricTokensStorageProvider).writeTokens(tokens);
       state = AsyncData(AuthState.authenticated(tokens));
       _invalidateCaches();
     } catch (e) {
@@ -54,8 +55,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   Future<void> loginWithBiometrics() async {
     try {
-      final storage = ref.read(authTokensStorageProvider);
-      final tokens = await storage.readTokens();
+      final biometricStorage = ref.read(biometricTokensStorageProvider);
+      final tokens = await biometricStorage.readTokens();
       if (tokens == null) {
         throw ApiException.network(
           'Please log in with credentials before enabling biometrics',
@@ -66,7 +67,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           .read(authApiProvider)
           .refreshToken(refreshToken: tokens.refreshToken);
 
-      await storage.writeTokens(refreshed);
+      await ref.read(authTokensStorageProvider).writeTokens(refreshed);
+      await biometricStorage.writeTokens(refreshed);
       state = AsyncData(AuthState.authenticated(refreshed));
       _invalidateCaches();
     } catch (e) {

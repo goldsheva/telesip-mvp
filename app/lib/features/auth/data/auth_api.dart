@@ -30,7 +30,7 @@ class AuthApi {
 
   Future<AuthTokens> refreshToken({required String refreshToken}) async {
     final response = await _client.post(
-      Uri.parse(ApiEndpoints.authRefresh),
+      Uri.parse(ApiEndpoints.authLogin),
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'refresh_token': refreshToken}),
     );

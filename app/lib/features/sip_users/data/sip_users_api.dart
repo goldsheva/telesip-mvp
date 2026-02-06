@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:app/config/env_config.dart';
 import 'package:app/core/network/api_client.dart';
+import 'package:app/core/network/api_endpoints.dart';
 import 'package:app/core/network/api_exception.dart';
 import 'package:app/features/sip_users/models/sip_users_state.dart';
 
@@ -11,8 +11,7 @@ class SipUsersApi {
   final ApiClient _apiClient;
 
   Future<SipUsersState> fetchSipUsersState() async {
-    final endpoint = '${EnvConfig.baseApiUrl}/sip-user';
-    final response = await _apiClient.get(endpoint);
+    final response = await _apiClient.get(ApiEndpoints.sipUsersList);
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {

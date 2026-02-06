@@ -89,7 +89,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       final canCheck = await _localAuth.canCheckBiometrics;
       final isSupported = await _localAuth.isDeviceSupported();
-      final tokens = await ref.read(authTokensStorageProvider).readTokens();
+      final tokens = await ref
+          .read(biometricTokensStorageProvider)
+          .readTokens();
       final available = (canCheck || isSupported) && tokens != null;
       if (!mounted) return;
       setState(() => _biometricAvailable = available);
@@ -116,7 +118,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         }
 
         await ref.read(authNotifierProvider.notifier).loginWithBiometrics();
-      } catch (_) {
+      } catch (error) {
+        debugPrint('Biometric auth failed: $error');
         _toast('Failed to perform biometric authentication');
       } finally {
         setState(() => _isAuthenticatingBiometric = false);

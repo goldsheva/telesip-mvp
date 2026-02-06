@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:app/features/auth/data/auth_api.dart';
 import 'package:app/core/storage/auth_tokens_storage.dart';
+import 'package:app/core/storage/biometric_tokens_storage.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage();
@@ -10,6 +11,10 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
 
 final authTokensStorageProvider = Provider<AuthTokensStorage>((ref) {
   return AuthTokensStorage(ref.read(secureStorageProvider));
+});
+
+final biometricTokensStorageProvider = Provider<BiometricTokensStorage>((ref) {
+  return BiometricTokensStorage(ref.read(secureStorageProvider));
 });
 
 final authApiProvider = Provider<AuthApi>((ref) {
