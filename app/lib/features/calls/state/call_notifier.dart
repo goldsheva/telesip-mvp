@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/env_config.dart';
+import 'package:app/core/providers.dart';
 import 'package:app/core/providers/sip_providers.dart';
+import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/sip/sip_engine.dart';
@@ -121,6 +123,22 @@ class CallNotifier extends Notifier<CallState> {
   Timer? _retrySuppressionTimer;
   bool _watchdogErrorActive = false;
   static const Duration _dialTimeout = Duration(seconds: 25);
+  final Map<String, DateTime> _busyRejected = {};
+  static const Duration _busyRejectTtl = Duration(seconds: 90);
+  final Map<String, DateTime> _recentlyEnded = {};
+  static const Duration _recentlyEndedTtl = Duration(seconds: 90);
+  DateTime? _lastStrayRingingRejectAt;
+  static const Duration _strayRingingRejectMinGap = Duration(seconds: 2);
+  DateTime? _busyUntil;
+  static const Duration _busyGrace = Duration(seconds: 2);
+
+  bool get isBusy {
+    final baseBusy =
+        state.activeCall != null && state.activeCall!.status != CallStatus.ended;
+    final graceBusy =
+        _busyUntil != null && DateTime.now().isBefore(_busyUntil!);
+    return baseBusy || graceBusy;
+  }
 
   Future<void> startCall(String destination) async {
     final activeCall = state.activeCall;
@@ -192,6 +210,13 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     final uri = 'sip:${user.sipLogin}@$uriHost';
+    final snapshot = SipAuthSnapshot(
+      uri: uri,
+      password: user.sipPassword,
+      wsUrl: wsUrl,
+      displayName: user.sipLogin,
+      timestamp: DateTime.now(),
+    );
     try {
       _clearError();
       await _engine.register(
@@ -200,8 +225,35 @@ class CallNotifier extends Notifier<CallState> {
         wsUrl: wsUrl,
         displayName: user.sipLogin,
       );
+      await ref.read(sipAuthStorageProvider).writeSnapshot(snapshot);
     } catch (error) {
       _setError('SIP registration failed: $error');
+    }
+  }
+
+  Future<bool> registerWithSnapshot(SipAuthSnapshot snapshot) async {
+    if (_isRegistered) {
+      debugPrint(
+        '[INCOMING] already registered; treating wake hint as handled',
+      );
+      return true;
+    }
+
+    _clearError();
+    try {
+      await _engine.register(
+        uri: snapshot.uri,
+        password: snapshot.password,
+        wsUrl: snapshot.wsUrl,
+        displayName: snapshot.displayName,
+      );
+      debugPrint(
+        '[INCOMING] SIP register triggered from wake hint (uri=${snapshot.uri})',
+      );
+      return true;
+    } catch (error) {
+      _setError('SIP registration failed: $error');
+      return false;
     }
   }
 
@@ -243,6 +295,69 @@ class CallNotifier extends Notifier<CallState> {
     final callId = event.callId;
     if (callId == null) return;
 
+    final now = DateTime.now();
+    _recentlyEnded.removeWhere(
+      (_, ts) => now.difference(ts) > _recentlyEndedTtl,
+    );
+    if (_recentlyEnded.containsKey(callId)) {
+      debugPrint(
+        '[SIP] ignoring late ${event.type.name} for ended callId=$callId active=${state.activeCallId}',
+      );
+      return;
+    }
+
+    final activeId = state.activeCallId;
+    final pendingId = _pendingCallId;
+    final activeCall = state.activeCall;
+    final hasActive =
+        activeCall != null && activeCall.status != CallStatus.ended;
+    final pendingInfo = pendingId != null ? state.calls[pendingId] : null;
+    final isPendingKnown =
+        pendingId != null &&
+        (state.calls.containsKey(pendingId) || _dialTimeoutCallId == pendingId);
+    final stitchingCandidate =
+        event.type == SipEventType.ringing &&
+        pendingId != null &&
+        callId != pendingId &&
+        callId != activeId &&
+        isPendingKnown &&
+        (pendingInfo == null ||
+            now.difference(pendingInfo.createdAt) <=
+                const Duration(seconds: 10));
+    if (stitchingCandidate && !state.calls.containsKey(callId)) {
+      debugPrint(
+        '[SIP] allowing ringing as stitching candidate callId=$callId pending=$pendingId active=$activeId',
+      );
+    }
+    final allowed =
+        !hasActive ||
+        callId == activeId ||
+        (pendingId != null && (callId == pendingId || activeId == pendingId)) ||
+        stitchingCandidate;
+
+    if (!allowed) {
+      if (event.type == SipEventType.ringing && isBusy) {
+        _rejectBusyCall(callId, event.type);
+        return;
+      }
+      if (event.type == SipEventType.ringing &&
+          _busyUntil != null &&
+          now.isBefore(_busyUntil!)) {
+        final canReject = _lastStrayRingingRejectAt == null ||
+            now.difference(_lastStrayRingingRejectAt!) >
+                _strayRingingRejectMinGap;
+        if (canReject) {
+          _lastStrayRingingRejectAt = now;
+          _rejectBusyCall(callId, event.type);
+          return;
+        }
+      }
+      debugPrint(
+        '[INCOMING] ignoring stray ${event.type.name} callId=$callId active=$activeId pending=$pendingId',
+      );
+      return;
+    }
+
     final status = _mapStatus(event.type);
     final pendingCallId = _pendingCallId;
     final previous =
@@ -280,6 +395,10 @@ class CallNotifier extends Notifier<CallState> {
 
     var activeCallId = state.activeCallId;
     if (status == CallStatus.ended) {
+      _recentlyEnded[callId] = now;
+      if (pendingCallId != null && pendingCallId != callId) {
+        _recentlyEnded[pendingCallId] = now;
+      }
       if (activeCallId == callId || activeCallId == pendingCallId) {
         activeCallId = null;
       }
@@ -289,7 +408,9 @@ class CallNotifier extends Notifier<CallState> {
       if (pendingCallId != null) {
         _callDongleMap.remove(pendingCallId);
       }
+      _busyUntil = now.add(_busyGrace);
     } else {
+      _busyUntil = null;
       if (status != CallStatus.dialing) {
         _cancelDialTimeout();
       }
@@ -340,6 +461,26 @@ class CallNotifier extends Notifier<CallState> {
 
   void _setError(String message) {
     state = state.copyWith(errorMessage: message);
+  }
+
+  void _rejectBusyCall(String callId, SipEventType type) {
+    final now = DateTime.now();
+    _busyRejected.removeWhere((_, ts) => now.difference(ts) > _busyRejectTtl);
+    if (_busyRejected.containsKey(callId)) {
+      debugPrint(
+        '[INCOMING] already rejected callId=$callId, skipping duplicate (event=${type.name})',
+      );
+      return;
+    }
+    _busyRejected[callId] = now;
+    final active = state.activeCall;
+    final activeInfo = active != null
+        ? '${active.id}/${active.status.name}'
+        : '<none>';
+    debugPrint(
+      '[INCOMING] busy rejecting callId=$callId event=${type.name} active=$activeInfo (fallback hangup)',
+    );
+    unawaited(_engine.hangup(callId));
   }
 
   void _clearError() {

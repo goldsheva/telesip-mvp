@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/config/app_theme.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
+import 'package:app/features/calls/incoming/incoming_wake_coordinator.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
 
@@ -20,11 +21,26 @@ class App extends ConsumerWidget {
   }
 }
 
-class _AuthGate extends ConsumerWidget {
+class _AuthGate extends ConsumerStatefulWidget {
   const _AuthGate();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends ConsumerState<_AuthGate>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
 
     return auth.when(
@@ -38,6 +54,19 @@ class _AuthGate extends ConsumerWidget {
         };
       },
     );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
+    }
   }
 }
 

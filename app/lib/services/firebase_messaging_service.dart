@@ -1,7 +1,7 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:ui' show DartPluginRegistrant;
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:app/core/storage/fcm_storage.dart';
@@ -32,6 +32,16 @@ class FirebaseMessagingService {
 
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     FirebaseMessaging.onMessage.listen(_handleIncomingHint);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleIncomingHint);
+    final initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) {
+      await _handleIncomingHint(initialMessage);
+    }
+
+    FirebaseMessaging.onTokenRefresh.listen((token) async {
+      debugPrint('[FCM] token refreshed');
+      await FcmStorage.saveToken(token);
+    });
 
     final token = await messaging.getToken();
     if (token != null) {

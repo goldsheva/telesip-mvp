@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:app/features/auth/data/auth_api.dart';
 import 'package:app/core/storage/auth_tokens_storage.dart';
 import 'package:app/core/storage/biometric_tokens_storage.dart';
+import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/core/storage/general_sip_credentials_storage.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
@@ -16,6 +17,10 @@ final authTokensStorageProvider = Provider<AuthTokensStorage>((ref) {
 
 final biometricTokensStorageProvider = Provider<BiometricTokensStorage>((ref) {
   return BiometricTokensStorage(ref.read(secureStorageProvider));
+});
+
+final sipAuthStorageProvider = Provider<SipAuthStorage>((ref) {
+  return SipAuthStorage(ref.read(secureStorageProvider));
 });
 
 final generalSipCredentialsStorageProvider =
