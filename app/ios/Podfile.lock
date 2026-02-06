@@ -1,0 +1,61 @@
+PODS:
+  - call_audio_route (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+  - flutter_native_contact_picker (0.0.1):
+    - Flutter
+  - flutter_secure_storage_darwin (10.0.0):
+    - Flutter
+    - FlutterMacOS
+  - flutter_webrtc (1.2.0):
+    - Flutter
+    - WebRTC-SDK (= 137.7151.04)
+  - local_auth_darwin (0.0.1):
+    - Flutter
+    - FlutterMacOS
+  - permission_handler_apple (9.3.0):
+    - Flutter
+  - WebRTC-SDK (137.7151.04)
+
+DEPENDENCIES:
+  - call_audio_route (from `.symlinks/plugins/call_audio_route/ios`)
+  - Flutter (from `Flutter`)
+  - flutter_native_contact_picker (from `.symlinks/plugins/flutter_native_contact_picker/ios`)
+  - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
+  - flutter_webrtc (from `.symlinks/plugins/flutter_webrtc/ios`)
+  - local_auth_darwin (from `.symlinks/plugins/local_auth_darwin/darwin`)
+  - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+
+SPEC REPOS:
+  trunk:
+    - WebRTC-SDK
+
+EXTERNAL SOURCES:
+  call_audio_route:
+    :path: ".symlinks/plugins/call_audio_route/ios"
+  Flutter:
+    :path: Flutter
+  flutter_native_contact_picker:
+    :path: ".symlinks/plugins/flutter_native_contact_picker/ios"
+  flutter_secure_storage_darwin:
+    :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
+  flutter_webrtc:
+    :path: ".symlinks/plugins/flutter_webrtc/ios"
+  local_auth_darwin:
+    :path: ".symlinks/plugins/local_auth_darwin/darwin"
+  permission_handler_apple:
+    :path: ".symlinks/plugins/permission_handler_apple/ios"
+
+SPEC CHECKSUMS:
+  call_audio_route: f651154e204580d64ee987b16933f584b34a3e1a
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_native_contact_picker: 22508d3ab5a583068d4a588cb37c0e0b8764722d
+  flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
+  flutter_webrtc: c3e21fc0dcd9d8eb246ae4d5256fcbeb2f5ecd22
+  local_auth_darwin: c3ee6cce0a8d56be34c8ccb66ba31f7f180aaebb
+  permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  WebRTC-SDK: 40d4f5ba05cadff14e4db5614aec402a633f007e
+
+PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
+
+COCOAPODS: 1.16.2
