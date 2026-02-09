@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class SipForegroundService : Service() {
@@ -23,13 +24,27 @@ class SipForegroundService : Service() {
     createNotificationChannel()
   }
 
+  private var isRunning = false
+
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
       ACTION_START -> {
-        startForeground(NOTIF_ID, buildNotification())
+        if (isRunning) {
+          debugLog("duplicate start ignored")
+          return START_STICKY
+        }
+        isRunning = true
+        debugLog("service start")
+        startForeground(
+          NOTIF_ID,
+          getNotification(),
+          FOREGROUND_SERVICE_TYPE_DATA_SYNC or FOREGROUND_SERVICE_TYPE_MICROPHONE,
+        )
         return START_STICKY
       }
       ACTION_STOP -> {
+        debugLog("service stop")
+        isRunning = false
         stopForeground(true)
         stopSelf()
         return START_NOT_STICKY
@@ -39,7 +54,9 @@ class SipForegroundService : Service() {
   }
 
   override fun onDestroy() {
+    isRunning = false
     stopForeground(true)
+    debugLog("service destroyed")
     super.onDestroy()
   }
 
@@ -57,8 +74,11 @@ class SipForegroundService : Service() {
     manager?.createNotificationChannel(channel)
   }
 
-  private fun buildNotification(): Notification {
-    return NotificationCompat.Builder(this, CHANNEL_ID)
+  private var cachedNotification: Notification? = null
+
+  private fun getNotification(): Notification {
+    cachedNotification?.let { return it }
+    val notification = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle("SIP service active")
         .setContentText("Ready to receive calls")
         .setSmallIcon(R.mipmap.ic_launcher)
@@ -66,5 +86,11 @@ class SipForegroundService : Service() {
         .setOnlyAlertOnce(true)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .build()
+    cachedNotification = notification
+    return notification
+  }
+
+  private fun debugLog(message: String) {
+    android.util.Log.d("SipForegroundService", message)
   }
 }
