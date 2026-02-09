@@ -87,4 +87,4 @@ tests:
 	cd app && $(FLUTTER) test
 
 build:
-    cd app && flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
+	cd app && $(FLUTTER) build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
