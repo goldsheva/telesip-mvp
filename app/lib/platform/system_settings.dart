@@ -11,4 +11,16 @@ class SystemSettings {
       debugPrint('Battery optimization settings unavailable: $error');
     }
   }
+
+  static Future<bool> isIgnoringBatteryOptimizations() async {
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'isIgnoringBatteryOptimizations',
+      );
+      return result ?? false;
+    } catch (error) {
+      debugPrint('Battery optimization query failed: $error');
+      return false;
+    }
+  }
 }

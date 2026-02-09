@@ -18,6 +18,7 @@ import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/platform/foreground_service.dart';
 import 'package:app/services/audio_focus_service.dart';
 import 'package:app/services/audio_route_service.dart';
+import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
 import 'package:call_audio_route/call_audio_route.dart';
 import 'package:app/sip/sip_engine.dart';
@@ -487,6 +488,11 @@ class CallNotifier extends Notifier<CallState> {
     return false;
   }
 
+  Future<bool> isBatteryOptimizationDisabled() async {
+    if (!Platform.isAndroid) return true;
+    return await SystemSettings.isIgnoringBatteryOptimizations();
+  }
+
   Future<void> _ensureStoredIncomingCredentialsLoaded() async {
     if (_storedIncomingCredentialsLoaded) return;
     _storedIncomingCredentialsLoaded = true;
@@ -903,7 +909,8 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _syncForegroundServiceState() {
-    final hasActiveCall = state.activeCall != null &&
+    final hasActiveCall =
+        state.activeCall != null &&
         state.activeCall!.status != CallStatus.ended;
     final shouldRun = state.isRegistered || hasActiveCall;
     if (shouldRun && !_foregroundRequested) {
@@ -917,7 +924,9 @@ class CallNotifier extends Notifier<CallState> {
 
   bool maybeSuggestBatteryOptimization() {
     if (!Platform.isAndroid) return false;
-    return state.isRegistered || (state.activeCall != null && state.activeCall!.status != CallStatus.ended);
+    return state.isRegistered ||
+        (state.activeCall != null &&
+            state.activeCall!.status != CallStatus.ended);
   }
 
   Future<void> _drainPendingCallActions() async {

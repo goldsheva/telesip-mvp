@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.os.PowerManager
 
 class MainActivity : FlutterFragmentActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -33,26 +34,36 @@ class MainActivity : FlutterFragmentActivity() {
       }
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.system_settings")
       .setMethodCallHandler { call, result ->
-        if (call.method == "openIgnoreBatteryOptimizations") {
-          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            result.success(null)
-            return@setMethodCallHandler
-          }
-          try {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            intent.data = Uri.parse("package:$packageName")
-            startActivity(intent)
-            result.success(null)
-          } catch (error: Exception) {
-            try {
-              startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        when (call.method) {
+          "openIgnoreBatteryOptimizations" -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
               result.success(null)
-            } catch (fallback: Exception) {
-              result.error("UNAVAILABLE", "Battery optimizations intent failed", null)
+              return@setMethodCallHandler
+            }
+            try {
+              val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+              intent.data = Uri.parse("package:$packageName")
+              startActivity(intent)
+              result.success(null)
+            } catch (error: Exception) {
+              try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                result.success(null)
+              } catch (fallback: Exception) {
+                result.error("UNAVAILABLE", "Battery optimizations intent failed", null)
+              }
             }
           }
-        } else {
-          result.notImplemented()
+          "isIgnoringBatteryOptimizations" -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+              result.success(true)
+              return@setMethodCallHandler
+            }
+            val pm = getSystemService(PowerManager::class.java)
+            val ignoring = pm?.isIgnoringBatteryOptimizations(packageName) ?: false
+            result.success(ignoring)
+          }
+          else -> result.notImplemented()
         }
       }
   }
