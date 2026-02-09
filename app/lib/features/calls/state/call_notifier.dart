@@ -15,6 +15,7 @@ import 'package:app/features/sip_users/models/pbx_sip_connection.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/services/audio_focus_service.dart';
 import 'package:app/services/audio_route_service.dart';
+import 'package:app/services/permissions_service.dart';
 import 'package:call_audio_route/call_audio_route.dart';
 import 'package:app/sip/sip_engine.dart';
 
@@ -567,6 +568,11 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint(
         '[CALLS] answerFromNotification aborted: registration not ready',
       );
+      return;
+    }
+    final micOk = await PermissionsService.ensureMicrophonePermission();
+    if (!micOk) {
+      debugPrint('[CALLS] answerFromNotification aborted: microphone denied');
       return;
     }
     var call = _engine.getCall(callId);
