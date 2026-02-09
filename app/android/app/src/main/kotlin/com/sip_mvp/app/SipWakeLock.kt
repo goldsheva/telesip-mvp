@@ -16,9 +16,14 @@ object SipWakeLock {
       Log.d(TAG, "wakeLock already held")
       return
     }
-    wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, LOCK_TAG)
-    wakeLock?.acquire(TIMEOUT_MS)
-    Log.d(TAG, "wakeLock acquired")
+    try {
+      wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, LOCK_TAG)
+      wakeLock?.acquire(TIMEOUT_MS)
+      Log.d(TAG, "wakeLock acquired")
+    } catch (error: Throwable) {
+      Log.d(TAG, "wakeLock acquire failed: $error")
+      wakeLock = null
+    }
   }
 
   fun release() {

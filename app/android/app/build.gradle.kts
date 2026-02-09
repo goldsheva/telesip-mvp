@@ -27,7 +27,7 @@ val hasReleaseKeystore =
 
 android {
     namespace = "com.sip_mvp.app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -45,7 +45,7 @@ android {
         // ✅ Support Android 5.0+ (including Android 7.1.1 / API 25)
         minSdk = flutter.minSdkVersion
 
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -88,6 +88,8 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
+    implementation("com.google.firebase:firebase-messaging")
     // ✅ MultiDex runtime support for pre-Lollipop / large method counts
     implementation("androidx.multidex:multidex:2.0.1")
 }

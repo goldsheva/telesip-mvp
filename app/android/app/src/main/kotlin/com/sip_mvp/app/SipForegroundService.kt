@@ -4,8 +4,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.app.Service.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-import android.app.Service.FOREGROUND_SERVICE_TYPE_MICROPHONE
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -61,8 +59,8 @@ class SipForegroundService : Service() {
             startForeground(
               NOTIF_ID,
               getNotification(),
-              FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                  FOREGROUND_SERVICE_TYPE_MICROPHONE
+              Service.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                  Service.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
           } else {
             debugLog("startForeground: no types (<Q)")
