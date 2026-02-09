@@ -27,9 +27,14 @@ object SipWakeLock {
       wakeLock = null
       return
     }
-    current.release()
-    Log.d(TAG, "wakeLock released")
-    wakeLock = null
+    try {
+      current.release()
+      Log.d(TAG, "wakeLock released")
+    } catch (error: Throwable) {
+      Log.d(TAG, "wakeLock release failed: $error")
+    } finally {
+      wakeLock = null
+    }
   }
 
   fun isHeld(): Boolean {
