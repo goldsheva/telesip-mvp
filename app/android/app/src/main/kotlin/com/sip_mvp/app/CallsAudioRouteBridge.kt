@@ -46,6 +46,14 @@ class CallsAudioRouteBridge(
           AudioRouteHelper.setRoute(context, route)
           result.success(null)
         }
+        "startBluetoothSco" -> {
+          AudioManagerHelper.startBluetoothSco(context)
+          result.success(null)
+        }
+        "stopBluetoothSco" -> {
+          AudioManagerHelper.stopBluetoothSco(context)
+          result.success(null)
+        }
         else -> result.notImplemented()
       }
     }

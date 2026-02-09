@@ -40,4 +40,20 @@ class AudioRouteService {
       debugPrint('[AUDIO_ROUTE] routeChanges error: $error');
     });
   }
+
+  static Future<void> startBluetoothSco() async {
+    try {
+      await _methodChannel.invokeMethod('startBluetoothSco');
+    } catch (error) {
+      debugPrint('[AUDIO_ROUTE] startBluetoothSco failed: $error');
+    }
+  }
+
+  static Future<void> stopBluetoothSco() async {
+    try {
+      await _methodChannel.invokeMethod('stopBluetoothSco');
+    } catch (error) {
+      debugPrint('[AUDIO_ROUTE] stopBluetoothSco failed: $error');
+    }
+  }
 }

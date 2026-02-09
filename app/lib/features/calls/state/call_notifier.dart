@@ -11,6 +11,8 @@ import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/services/audio_focus_service.dart';
+import 'package:app/services/audio_route_service.dart';
+import 'package:call_audio_route/call_audio_route.dart';
 import 'package:app/sip/sip_engine.dart';
 
 CallNotifier? _globalCallNotifierInstance;
@@ -146,6 +148,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _watchdogErrorActive = false;
   bool _audioFocusHeld = false;
   String? _focusedCallId;
+  bool _scoActive = false;
   _CallPhase _phase = _CallPhase.idle;
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -393,6 +396,20 @@ class CallNotifier extends Notifier<CallState> {
       _audioFocusHeld = false;
       _focusedCallId = null;
     }
+  }
+
+  Future<void> _maybeStartBluetoothSco() async {
+    if (_scoActive) return;
+    final info = await AudioRouteService.getRouteInfo();
+    if (info?.current != AudioRoute.bluetooth) return;
+    await AudioRouteService.startBluetoothSco();
+    _scoActive = true;
+  }
+
+  Future<void> _maybeStopBluetoothSco() async {
+    if (!_scoActive) return;
+    await AudioRouteService.stopBluetoothSco();
+    _scoActive = false;
   }
 
   Future<void> answerFromNotification(String callId) async {
@@ -651,8 +668,11 @@ class CallNotifier extends Notifier<CallState> {
     _phase = next;
     if (next == _CallPhase.ringing || next == _CallPhase.connecting) {
       unawaited(_ensureAudioFocus(callId));
+    } else if (next == _CallPhase.active) {
+      unawaited(_maybeStartBluetoothSco());
     } else if (next == _CallPhase.ending) {
       unawaited(_releaseAudioFocus());
+      unawaited(_maybeStopBluetoothSco());
       Future.microtask(() {
         if (_phase == _CallPhase.ending) {
           _phase = _CallPhase.idle;
