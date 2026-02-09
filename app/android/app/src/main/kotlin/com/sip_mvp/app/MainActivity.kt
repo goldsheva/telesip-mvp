@@ -1,5 +1,6 @@
 package com.sip_mvp.app
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -64,6 +65,16 @@ class MainActivity : FlutterFragmentActivity() {
             result.success(ignoring)
           }
           else -> result.notImplemented()
+        }
+      }
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.boot_state")
+      .setMethodCallHandler { call, result ->
+        if (call.method == "wasBootCompleted") {
+          val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+          val booted = prefs.getBoolean("sip_boot_completed", false)
+          result.success(booted)
+        } else {
+          result.notImplemented()
         }
       }
   }
