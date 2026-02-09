@@ -56,19 +56,13 @@ class SipForegroundService : Service() {
         try {
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             debugLog("startForeground: types (Q+)")
-            startForeground(
-              NOTIF_ID,
-              getNotification(),
-              Service.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                  Service.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
           } else {
             debugLog("startForeground: no types (<Q)")
-            startForeground(
-              NOTIF_ID,
-              getNotification()
-            )
           }
+          startForeground(
+            NOTIF_ID,
+            getNotification()
+          )
         } catch (t: Throwable) {
           debugLog("startForeground failed: $t")
           isRunning = false
