@@ -13,6 +13,7 @@ import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'package:app/ui/pages/dialer_page.dart';
 import 'package:app/core/providers.dart';
 import 'package:app/core/storage/general_sip_credentials_storage.dart';
+import 'package:app/services/permissions_service.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -32,6 +33,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   int? _lastIncomingUserId;
   late final ProviderSubscription<AsyncValue<SipUsersState>>
   _sipUsersSubscription;
+  bool _requestedNotificationPermission = false;
 
   @override
   void initState() {
@@ -62,6 +64,13 @@ class _HomePageState extends ConsumerState<HomePage> {
         );
       },
     );
+    _requestNotificationPermission();
+  }
+
+  void _requestNotificationPermission() {
+    if (_requestedNotificationPermission) return;
+    _requestedNotificationPermission = true;
+    unawaited(PermissionsService.ensureNotificationsPermission());
   }
 
   @override

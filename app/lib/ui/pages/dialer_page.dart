@@ -10,6 +10,7 @@ import 'package:flutter_native_contact_picker/model/contact.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
+import 'package:app/services/permissions_service.dart';
 
 class DialerPage extends ConsumerStatefulWidget {
   const DialerPage({
@@ -92,6 +93,16 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       _numberController.selection = TextSelection.fromPosition(
         TextPosition(offset: number.length),
       );
+    }
+    final hasMic = await PermissionsService.ensureMicrophonePermission();
+    if (!hasMic) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission is required to make calls'),
+        ),
+      );
+      return;
     }
     await ref.read(callControllerProvider.notifier).startCall(number);
   }
