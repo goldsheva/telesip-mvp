@@ -48,6 +48,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     try {
       await ref.read(authTokensStorageProvider).clear();
+      await ref.read(generalSipCredentialsStorageProvider).clear();
       state = const AsyncData(AuthState.unauthenticated());
       _invalidateCaches();
     } catch (e) {

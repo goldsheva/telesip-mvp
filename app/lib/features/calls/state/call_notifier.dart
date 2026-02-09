@@ -8,8 +8,10 @@ import 'package:app/config/env_config.dart';
 import 'package:app/core/providers.dart';
 import 'package:app/core/providers/sip_providers.dart';
 import 'package:app/core/storage/fcm_storage.dart';
+import 'package:app/core/storage/general_sip_credentials_storage.dart';
 import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
+import 'package:app/features/sip_users/models/pbx_sip_connection.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/services/audio_focus_service.dart';
 import 'package:app/services/audio_route_service.dart';
@@ -136,6 +138,8 @@ class CallNotifier extends Notifier<CallState> {
   PbxSipUser? _lastKnownUser;
   PbxSipUser? _incomingUser;
   PbxSipUser? _outgoingUser;
+  GeneralSipCredentials? _storedIncomingCredentials;
+  bool _storedIncomingCredentialsLoaded = false;
   Timer? _dialTimeoutTimer;
   String? _dialTimeoutCallId;
   CallWebRtcWatchdog? _webRtcWatchdog;
@@ -324,6 +328,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> handleIncomingCallHintIfAny() async {
+    await _ensureStoredIncomingCredentialsLoaded();
     if (_isHandlingHint) return;
     _isHandlingHint = true;
     try {
@@ -374,16 +379,78 @@ class CallNotifier extends Notifier<CallState> {
         return;
       }
 
-      final snapshot = await ref.read(sipAuthStorageProvider).readSnapshot();
-      if (snapshot == null) {
-        debugPrint(
-          '[INCOMING] no stored SIP credentials to register (call_uuid=$callUuid)',
-        );
-        return;
-      }
-
       _lastHintAttemptAt = now;
-      debugPrint('[INCOMING] registering SIP from hint (call_uuid=$callUuid)');
+      final candidate =
+          _incomingUser ??
+          (_storedIncomingCredentials != null
+              ? _incomingUserFromStoredCredentials(_storedIncomingCredentials!)
+              : null);
+      late final SipAuthSnapshot snapshot;
+      if (candidate != null) {
+        _incomingUser = candidate;
+        final wsConnections = candidate.pbxSipConnections
+            .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
+            .toList();
+        String? wsUrl;
+        String uriHost = '';
+        if (wsConnections.isNotEmpty) {
+          final connection = wsConnections.first;
+          final protocol = connection.pbxSipProtocol.toLowerCase();
+          final scheme = protocol.contains('wss')
+              ? 'wss'
+              : protocol.contains('ws')
+              ? 'ws'
+              : null;
+          if (scheme == null) {
+            debugPrint(
+              '[INCOMING] unsupported SIP transport for incoming user, skipping hint (call_uuid=$callUuid)',
+            );
+            return;
+          }
+          wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
+          uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
+        } else {
+          final defaultWs = EnvConfig.sipWebSocketUrl;
+          if (defaultWs == null || defaultWs.isEmpty) {
+            debugPrint(
+              '[INCOMING] no WS endpoint configured for incoming user, skipping hint (call_uuid=$callUuid)',
+            );
+            return;
+          }
+          wsUrl = defaultWs;
+          uriHost = Uri.tryParse(wsUrl)?.host ?? '';
+        }
+        if (wsUrl == null || uriHost.isEmpty) {
+          debugPrint(
+            '[INCOMING] invalid WS URL for incoming user, skipping hint (call_uuid=$callUuid)',
+          );
+          return;
+        }
+        snapshot = SipAuthSnapshot(
+          uri: 'sip:${candidate.sipLogin}@$uriHost',
+          password: candidate.sipPassword,
+          wsUrl: wsUrl,
+          displayName: candidate.sipLogin,
+          timestamp: DateTime.now(),
+        );
+        debugPrint(
+          '[INCOMING] registering SIP from stored incoming user (call_uuid=$callUuid)',
+        );
+      } else {
+        final storedSnapshot = await ref
+            .read(sipAuthStorageProvider)
+            .readSnapshot();
+        if (storedSnapshot == null) {
+          debugPrint(
+            '[INCOMING] no stored SIP credentials to register (call_uuid=$callUuid)',
+          );
+          return;
+        }
+        snapshot = storedSnapshot;
+        debugPrint(
+          '[INCOMING] registering SIP from hint (call_uuid=$callUuid)',
+        );
+      }
       final registered = await registerWithSnapshot(snapshot);
       if (registered) {
         _lastHandledHintTimestamp = timestamp;
@@ -399,6 +466,31 @@ class CallNotifier extends Notifier<CallState> {
     } finally {
       _isHandlingHint = false;
     }
+  }
+
+  Future<void> _ensureStoredIncomingCredentialsLoaded() async {
+    if (_storedIncomingCredentialsLoaded) return;
+    _storedIncomingCredentialsLoaded = true;
+    final stored = await ref
+        .read(generalSipCredentialsStorageProvider)
+        .readCredentials();
+    if (stored == null) return;
+    _storedIncomingCredentials = stored;
+    _incomingUser ??= _incomingUserFromStoredCredentials(stored);
+  }
+
+  PbxSipUser _incomingUserFromStoredCredentials(
+    GeneralSipCredentials credentials,
+  ) {
+    return PbxSipUser(
+      pbxSipUserId: credentials.sipUserId,
+      userId: credentials.sipUserId,
+      sipLogin: credentials.sipLogin,
+      sipPassword: credentials.sipPassword,
+      dialplanId: 0,
+      dongleId: null,
+      pbxSipConnections: const <PbxSipConnection>[],
+    );
   }
 
   Future<void> _ensureAudioFocus(String callId) async {
@@ -454,10 +546,14 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> answerFromNotification(String callId) async {
     final callInfo = state.calls[callId];
-    if (callInfo == null || callInfo.status == CallStatus.ended) {
+    if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
     }
-    final call = _engine.getCall(callId);
+    await handleIncomingCallHintIfAny();
+    var call = _engine.getCall(callId);
+    if (call == null && state.activeCallId != null) {
+      call = _engine.getCall(state.activeCallId!);
+    }
     if (call == null) {
       debugPrint('[CALLS] answerFromNotification unknown call $callId');
       return;
@@ -473,11 +569,20 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> declineFromNotification(String callId) async {
     final callInfo = state.calls[callId];
-    if (callInfo == null || callInfo.status == CallStatus.ended) {
+    if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
     }
+    await handleIncomingCallHintIfAny();
+    var targetCallId = callId;
+    if (_engine.getCall(callId) == null && state.activeCallId != null) {
+      targetCallId = state.activeCallId!;
+    } else if (_engine.getCall(callId) == null && state.activeCallId == null) {
+      debugPrint(
+        '[CALLS] declineFromNotification call $callId missing (falling back to callId)',
+      );
+    }
     try {
-      await _engine.hangup(callId);
+      await _engine.hangup(targetCallId);
     } catch (error) {
       debugPrint('[CALLS] declineFromNotification failed: $error');
     }
@@ -487,6 +592,7 @@ class CallNotifier extends Notifier<CallState> {
   CallState build() {
     _registerGlobalCallNotifierInstance(this);
     _engine = ref.read(sipEngineProvider);
+    unawaited(_ensureStoredIncomingCredentialsLoaded());
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
       (previous, next) => next.whenData(_onEvent),
@@ -549,10 +655,28 @@ class CallNotifier extends Notifier<CallState> {
     }
 
     final activeId = state.activeCallId;
-    final pendingId = _pendingCallId;
+    var pendingId = _pendingCallId;
     final activeCall = state.activeCall;
     final hasActive =
         activeCall != null && activeCall.status != CallStatus.ended;
+    var callIdUnknown =
+        !state.calls.containsKey(callId) &&
+        callId != activeId &&
+        (pendingId == null || callId != pendingId);
+    final shouldAdoptIncoming =
+        event.type == SipEventType.ringing &&
+        callIdUnknown &&
+        !hasActive &&
+        _phase == _CallPhase.idle &&
+        !isBusy;
+    if (shouldAdoptIncoming) {
+      debugPrint(
+        '[INCOMING] adopting incoming callId=$callId while idle (no active call)',
+      );
+      _pendingCallId = callId;
+      pendingId = callId;
+      callIdUnknown = false;
+    }
     if (!_isRelevantCall(callId, activeId)) {
       debugPrint(
         '[SIP] ignoring event for non-active callId=$callId active=$activeId pending=$pendingId',
@@ -577,10 +701,6 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] allowing ringing as stitching candidate callId=$callId pending=$pendingId active=$activeId',
       );
     }
-    final callIdUnknown =
-        !state.calls.containsKey(callId) &&
-        callId != activeId &&
-        (pendingId == null || callId != pendingId);
     if (event.type == SipEventType.ringing &&
         callIdUnknown &&
         _busyUntil != null &&
@@ -695,6 +815,11 @@ class CallNotifier extends Notifier<CallState> {
     );
     _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, state);
+    if (status == CallStatus.ended) {
+      Future.microtask(() {
+        unawaited(handleIncomingCallHintIfAny());
+      });
+    }
   }
 
   _CallPhase _phaseForStatus(CallStatus status) {
@@ -733,6 +858,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _drainPendingCallActions() async {
+    await handleIncomingCallHintIfAny();
     final raw = await _notificationsChannel.invokeMethod<List<dynamic>>(
       'drainPendingCallActions',
     );

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,8 @@ import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/features/sip_users/models/sip_users_state.dart';
 import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'package:app/ui/pages/dialer_page.dart';
+import 'package:app/core/providers.dart';
+import 'package:app/core/storage/general_sip_credentials_storage.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -51,6 +55,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         _lastIncomingUserId = general.pbxSipUserId;
         unawaited(
           ref.read(callControllerProvider.notifier).setIncomingSipUser(general),
+        );
+        unawaited(
+          ref
+              .read(generalSipCredentialsStorageProvider)
+              .writeCredentials(GeneralSipCredentials.fromSipUser(general)),
         );
       },
     );
