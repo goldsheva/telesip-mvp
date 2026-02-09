@@ -8,7 +8,9 @@ import 'package:flutter/services.dart';
 class FirebaseOptionsLoader {
   static const _assetPath = 'assets/firebase/firebase_options.json';
 
-  static Future<FirebaseOptions> load({Environment environment = Environment.prod}) async {
+  static Future<FirebaseOptions> load({
+    Environment environment = Environment.prod,
+  }) async {
     final raw = await rootBundle.loadString(_assetPath);
     final decoded = jsonDecode(raw);
     if (decoded is! Map<String, dynamic>) {
