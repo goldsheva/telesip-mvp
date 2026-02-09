@@ -159,7 +159,8 @@ class CallNotifier extends Notifier<CallState> {
 
   bool get isBusy {
     final baseBusy =
-        state.activeCall != null && state.activeCall!.status != CallStatus.ended;
+        state.activeCall != null &&
+        state.activeCall!.status != CallStatus.ended;
     final graceBusy =
         _busyUntil != null && DateTime.now().isBefore(_busyUntil!);
     return baseBusy || graceBusy;
@@ -443,7 +444,8 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] allowing ringing as stitching candidate callId=$callId pending=$pendingId active=$activeId',
       );
     }
-    final callIdUnknown = !state.calls.containsKey(callId) &&
+    final callIdUnknown =
+        !state.calls.containsKey(callId) &&
         callId != activeId &&
         (pendingId == null || callId != pendingId);
     if (event.type == SipEventType.ringing &&
@@ -451,7 +453,8 @@ class CallNotifier extends Notifier<CallState> {
         _busyUntil != null &&
         now.isBefore(_busyUntil!) &&
         !stitchingCandidate) {
-      final canReject = _lastStrayRingingRejectAt == null ||
+      final canReject =
+          _lastStrayRingingRejectAt == null ||
           now.difference(_lastStrayRingingRejectAt!) >
               _strayRingingRejectMinGap;
       if (canReject) {
