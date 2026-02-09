@@ -198,16 +198,34 @@ class CallNotifier extends Notifier<CallState> {
     if (activeCall != null && activeCall.status != CallStatus.ended) return;
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return;
+    if (_phase != _CallPhase.idle && _phase != _CallPhase.ending) {
+      return;
+    }
+    await _ensureStoredIncomingCredentialsLoaded();
+    final outgoingUser = _outgoingUser ?? _incomingUser;
+    if (outgoingUser == null) {
+      _setError('SIP is not registered');
+      return;
+    }
+    try {
+      await ensureRegistered(outgoingUser);
+    } catch (_) {
+      // Errors surface through notifier state; swallow here.
+    }
     if (!_isRegistered) {
       _setError('SIP is not registered');
       return;
     }
-    if (_phase != _CallPhase.idle && _phase != _CallPhase.ending) {
-      return;
+    if (outgoingUser.dongleId == null) {
+      debugPrint('[SIP] using GENERAL registration');
+    } else {
+      debugPrint(
+        '[SIP] switching to DONGLE credentials for outgoing call: ${outgoingUser.dongleId}',
+      );
     }
     final callId = await _engine.startCall(trimmed);
     _pendingCallId = callId;
-    _callDongleMap[callId] = _lastKnownUser?.dongleId;
+    _callDongleMap[callId] = outgoingUser.dongleId;
     _startDialTimeout(callId);
     _clearError();
     _commit(state.copyWith(activeCallId: callId));
@@ -238,11 +256,6 @@ class CallNotifier extends Notifier<CallState> {
     // Hold the preferred outgoing account for deterministic registration.
     if (_outgoingUser?.pbxSipUserId == user.pbxSipUserId) return;
     _outgoingUser = user;
-    try {
-      await ensureRegistered(user);
-    } catch (_) {
-      // Errors surface through notifier state; swallow here.
-    }
   }
 
   Future<void> ensureRegistered(PbxSipUser user) async {
