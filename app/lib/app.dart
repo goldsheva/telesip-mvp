@@ -5,8 +5,10 @@ import 'package:app/config/app_theme.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/features/calls/incoming/incoming_wake_coordinator.dart';
+import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/firebase_messaging_service.dart';
+import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
 
@@ -37,7 +39,10 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
+      ref
+          .read(incomingWakeCoordinatorProvider)
+          .checkPendingHint()
+          .whenComplete(() => _handlePendingCallAction());
     });
     ref.listen<AsyncValue<AuthState>>(
       authNotifierProvider,
@@ -86,8 +91,63 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     AppLifecycleTracker.update(state);
     if (state == AppLifecycleState.resumed) {
-      ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
+      ref
+          .read(incomingWakeCoordinatorProvider)
+          .checkPendingHint()
+          .whenComplete(() => _handlePendingCallAction());
     }
+  }
+
+  Future<void> _handlePendingCallAction() async {
+    final rawAction = await IncomingNotificationService.readCallAction();
+    if (rawAction == null) return;
+    final callId = rawAction['call_id']?.toString();
+    final action = rawAction['action']?.toString();
+    final timestampMillis = _timestampToMillis(rawAction['timestamp']);
+    if (callId == null || action == null || timestampMillis == null) {
+      await IncomingNotificationService.clearCallAction();
+      return;
+    }
+    final actionAge = DateTime.now().difference(
+      DateTime.fromMillisecondsSinceEpoch(timestampMillis),
+    );
+    if (actionAge > const Duration(seconds: 30)) {
+      await IncomingNotificationService.clearCallAction();
+      return;
+    }
+
+    final callState = ref.read(callControllerProvider);
+    final callInfo = callState.calls[callId];
+    final hasCall =
+        callInfo != null || callState.activeCallId == callId;
+    if (!hasCall) return;
+    if (callInfo?.status == CallStatus.ended) {
+      await IncomingNotificationService.clearCallAction();
+      return;
+    }
+
+    final notifier = ref.read(callControllerProvider.notifier);
+    var executed = false;
+    if (action == 'answer') {
+      await notifier.answerFromNotification(callId);
+      executed = true;
+    } else if (action == 'decline') {
+      await notifier.declineFromNotification(callId);
+      executed = true;
+    } else {
+      await IncomingNotificationService.clearCallAction();
+      return;
+    }
+
+    if (executed) {
+      await IncomingNotificationService.clearCallAction();
+    }
+  }
+
+  int? _timestampToMillis(Object? value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
   }
 }
 

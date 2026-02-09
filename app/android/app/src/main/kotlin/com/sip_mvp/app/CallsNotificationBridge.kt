@@ -36,6 +36,23 @@ class CallsNotificationBridge(
           )
           result.success(null)
         }
+        "readCallAction" -> {
+          val action = CallActionStore.read(context)
+          if (action == null) {
+            result.success(null)
+            return@setMethodCallHandler
+          }
+          val payload = mapOf(
+            "call_id" to action.callId,
+            "action" to action.action,
+            "timestamp" to action.timestamp
+          )
+          result.success(payload)
+        }
+        "clearCallAction" -> {
+          CallActionStore.clear(context)
+          result.success(null)
+        }
         "cancelIncoming" -> {
           val callId = call.argument<String>("callId")
           if (callId == null) {

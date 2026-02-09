@@ -29,8 +29,26 @@ class IncomingNotificationService {
       await _channel.invokeMethod('cancelIncoming', <String, dynamic>{
         'callId': callId,
       });
+      await clearCallAction();
     } catch (error) {
       debugPrint('[CALLS_NOTIF] cancelIncoming failed: $error');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> readCallAction() async {
+    try {
+      return await _channel.invokeMapMethod<String, dynamic>('readCallAction');
+    } catch (error) {
+      debugPrint('[CALLS_NOTIF] readCallAction failed: $error');
+      return null;
+    }
+  }
+
+  static Future<void> clearCallAction() async {
+    try {
+      await _channel.invokeMethod('clearCallAction');
+    } catch (error) {
+      debugPrint('[CALLS_NOTIF] clearCallAction failed: $error');
     }
   }
 

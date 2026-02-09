@@ -39,10 +39,11 @@ class IncomingFcmService : FirebaseMessagingService() {
   }
 
   private fun cancelCall(message: RemoteMessage) {
+    CallActionStore.clear(applicationContext)
     val callId = message.data["call_id"] ?: return
     NotificationHelper.cancel(notificationManager, callId)
   }
-}
+
   private fun isExpired(message: RemoteMessage): Boolean {
     val ts = message.data["ts"]?.toLongOrNull()
     val ttl = message.data["ttl_s"]?.toLongOrNull()
@@ -52,3 +53,4 @@ class IncomingFcmService : FirebaseMessagingService() {
     val now = System.currentTimeMillis() / 1000
     return now > ts + ttl + 5
   }
+}

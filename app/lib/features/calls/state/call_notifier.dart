@@ -361,6 +361,37 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  Future<void> answerFromNotification(String callId) async {
+    final callInfo = state.calls[callId];
+    if (callInfo == null || callInfo.status == CallStatus.ended) {
+      return;
+    }
+    final call = _engine.getCall(callId);
+    if (call == null) {
+      debugPrint('[CALLS] answerFromNotification unknown call $callId');
+      return;
+    }
+    try {
+      call.answer(<String, dynamic>{
+        'mediaConstraints': <String, dynamic>{'audio': true, 'video': false},
+      });
+    } catch (error) {
+      debugPrint('[CALLS] answerFromNotification failed: $error');
+    }
+  }
+
+  Future<void> declineFromNotification(String callId) async {
+    final callInfo = state.calls[callId];
+    if (callInfo == null || callInfo.status == CallStatus.ended) {
+      return;
+    }
+    try {
+      await _engine.hangup(callId);
+    } catch (error) {
+      debugPrint('[CALLS] declineFromNotification failed: $error');
+    }
+  }
+
   @override
   CallState build() {
     _registerGlobalCallNotifierInstance(this);
