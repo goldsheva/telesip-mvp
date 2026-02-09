@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/core/network/api_exception.dart';
@@ -5,6 +7,7 @@ import 'package:app/core/providers.dart';
 import 'package:app/features/dongles/state/dongles_provider.dart';
 import 'package:app/features/fcm/providers.dart';
 import 'package:app/features/sip_users/state/sip_users_provider.dart';
+import 'package:app/platform/foreground_service.dart';
 import 'auth_state.dart';
 
 final authNotifierProvider = AsyncNotifierProvider<AuthNotifier, AuthState>(
@@ -12,6 +15,7 @@ final authNotifierProvider = AsyncNotifierProvider<AuthNotifier, AuthState>(
 );
 
 class AuthNotifier extends AsyncNotifier<AuthState> {
+  bool _serviceActive = false;
   @override
   Future<AuthState> build() async {
     try {
@@ -20,6 +24,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final next = (tokens == null)
           ? const AuthState.unauthenticated()
           : AuthState.authenticated(tokens);
+      if (tokens != null) {
+        _startServiceIfNeeded();
+      }
 
       return next;
     } catch (e) {
@@ -36,6 +43,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       await ref.read(authTokensStorageProvider).writeTokens(tokens);
       await ref.read(biometricTokensStorageProvider).writeTokens(tokens);
       state = AsyncData(AuthState.authenticated(tokens));
+      _startServiceIfNeeded();
       _invalidateCaches();
       await ref.read(fcmTokenRegistrarProvider).registerStoredToken();
     } catch (e) {
@@ -50,6 +58,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       await ref.read(authTokensStorageProvider).clear();
       await ref.read(generalSipCredentialsStorageProvider).clear();
       state = const AsyncData(AuthState.unauthenticated());
+      _stopServiceIfNeeded();
       _invalidateCaches();
     } catch (e) {
       state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
@@ -91,5 +100,17 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
 
     return error.toString();
+  }
+
+  void _startServiceIfNeeded() {
+    if (_serviceActive) return;
+    _serviceActive = true;
+    unawaited(ForegroundService.startForegroundService());
+  }
+
+  void _stopServiceIfNeeded() {
+    if (!_serviceActive) return;
+    _serviceActive = false;
+    unawaited(ForegroundService.stopForegroundService());
   }
 }
