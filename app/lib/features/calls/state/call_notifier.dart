@@ -123,6 +123,8 @@ class CallState {
   }
 }
 
+enum _CallPhase { idle, ringing, connecting, active, ending }
+
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
@@ -144,6 +146,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _watchdogErrorActive = false;
   bool _audioFocusHeld = false;
   String? _focusedCallId;
+  _CallPhase _phase = _CallPhase.idle;
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
   static const Duration _busyRejectTtl = Duration(seconds: 90);
@@ -178,6 +181,9 @@ class CallNotifier extends Notifier<CallState> {
       _setError('SIP is not registered');
       return;
     }
+    if (_phase != _CallPhase.idle && _phase != _CallPhase.ending) {
+      return;
+    }
     final callId = await _engine.startCall(trimmed);
     _pendingCallId = callId;
     _callDongleMap[callId] = _lastKnownUser?.dongleId;
@@ -185,6 +191,7 @@ class CallNotifier extends Notifier<CallState> {
     _clearError();
     state = state.copyWith(activeCallId: callId);
     unawaited(_ensureAudioFocus(callId));
+    _phase = _CallPhase.connecting;
   }
 
   Future<void> hangup(String callId) async {
@@ -487,6 +494,10 @@ class CallNotifier extends Notifier<CallState> {
     final activeCall = state.activeCall;
     final hasActive =
         activeCall != null && activeCall.status != CallStatus.ended;
+    if (!_isRelevantCall(callId, activeId)) {
+      debugPrint('[SIP] ignoring event for non-active callId=$callId active=$activeId pending=$pendingId');
+      return;
+    }
     final pendingInfo = pendingId != null ? state.calls[pendingId] : null;
     final isPendingKnown =
         pendingId != null &&
@@ -542,6 +553,10 @@ class CallNotifier extends Notifier<CallState> {
     }
 
     final status = _mapStatus(event.type);
+    if (!_isPhaseEventAllowed(status)) {
+      debugPrint('[SIP] invalid phase ${_phase.name} for ${event.type.name} callId=$callId');
+      return;
+    }
     if (status == CallStatus.connected) {
       unawaited(_ensureAudioFocus(callId));
     } else if (status == CallStatus.ended) {
@@ -620,7 +635,51 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId: activeCallId,
       errorMessage: errorMessage,
     );
+    _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, state);
+  }
+
+  _CallPhase _phaseForStatus(CallStatus status) {
+    switch (status) {
+      case CallStatus.dialing:
+        return _CallPhase.connecting;
+      case CallStatus.ringing:
+        return _CallPhase.ringing;
+      case CallStatus.connected:
+        return _CallPhase.active;
+      case CallStatus.ended:
+        return _CallPhase.ending;
+    }
+  }
+
+  void _applyPhase(CallStatus status, String callId) {
+    final next = _phaseForStatus(status);
+    if (next == _phase) return;
+    _phase = next;
+    if (next == _CallPhase.ringing || next == _CallPhase.connecting) {
+      unawaited(_ensureAudioFocus(callId));
+    } else if (next == _CallPhase.ending) {
+      unawaited(_releaseAudioFocus());
+      Future.microtask(() {
+        if (_phase == _CallPhase.ending) {
+          _phase = _CallPhase.idle;
+        }
+      });
+    }
+  }
+
+  bool _isPhaseEventAllowed(CallStatus status) {
+    return switch (_phase) {
+      _CallPhase.idle => status == CallStatus.ringing || status == CallStatus.dialing,
+      _CallPhase.ringing => status == CallStatus.connected || status == CallStatus.ended,
+      _CallPhase.connecting => status == CallStatus.connected || status == CallStatus.ended,
+      _CallPhase.active => status == CallStatus.connected || status == CallStatus.ended,
+      _CallPhase.ending => status == CallStatus.ended,
+    };
+  }
+
+  bool _isRelevantCall(String callId, String? activeId) {
+    return callId == activeId || (_pendingCallId != null && callId == _pendingCallId);
   }
 
   CallStatus _mapStatus(SipEventType event) {

@@ -7,5 +7,6 @@ class MainActivity : FlutterFragmentActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
     CallsNotificationBridge.register(flutterEngine.dartExecutor.binaryMessenger, this)
+    CallsAudioRouteBridge.register(flutterEngine.dartExecutor.binaryMessenger, this)
   }
 }
