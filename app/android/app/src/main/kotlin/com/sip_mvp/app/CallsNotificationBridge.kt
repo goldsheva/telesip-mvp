@@ -36,6 +36,15 @@ class CallsNotificationBridge(
           )
           result.success(null)
         }
+        "acquireAudioFocus" -> {
+          val callId = call.argument<String>("callId") ?: "<none>"
+          AudioFocusHelper.acquire(context, callId)
+          result.success(null)
+        }
+        "releaseAudioFocus" -> {
+          AudioFocusHelper.release(context)
+          result.success(null)
+        }
         "readCallAction" -> {
           val action = CallActionStore.read(context)
           if (action == null) {

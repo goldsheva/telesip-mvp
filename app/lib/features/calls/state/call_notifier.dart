@@ -10,6 +10,7 @@ import 'package:app/core/storage/fcm_storage.dart';
 import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
+import 'package:app/services/audio_focus_service.dart';
 import 'package:app/sip/sip_engine.dart';
 
 CallNotifier? _globalCallNotifierInstance;
@@ -141,6 +142,8 @@ class CallNotifier extends Notifier<CallState> {
   bool _userInitiatedRetry = false;
   Timer? _retrySuppressionTimer;
   bool _watchdogErrorActive = false;
+  bool _audioFocusHeld = false;
+  String? _focusedCallId;
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
   static const Duration _busyRejectTtl = Duration(seconds: 90);
@@ -181,6 +184,7 @@ class CallNotifier extends Notifier<CallState> {
     _startDialTimeout(callId);
     _clearError();
     state = state.copyWith(activeCallId: callId);
+    unawaited(_ensureAudioFocus(callId));
   }
 
   Future<void> hangup(String callId) async {
@@ -361,6 +365,31 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  Future<void> _ensureAudioFocus(String callId) async {
+    if (_audioFocusHeld && _focusedCallId == callId) return;
+    try {
+      await AudioFocusService.acquire(callId: callId);
+      _audioFocusHeld = true;
+      _focusedCallId = callId;
+    } catch (error) {
+      debugPrint('[AUDIO_FOCUS] acquire failed for $callId: $error');
+      _audioFocusHeld = false;
+      _focusedCallId = null;
+    }
+  }
+
+  Future<void> _releaseAudioFocus() async {
+    if (!_audioFocusHeld && _focusedCallId == null) return;
+    try {
+      await AudioFocusService.release();
+    } catch (error) {
+      debugPrint('[AUDIO_FOCUS] release failed: $error');
+    } finally {
+      _audioFocusHeld = false;
+      _focusedCallId = null;
+    }
+  }
+
   Future<void> answerFromNotification(String callId) async {
     final callInfo = state.calls[callId];
     if (callInfo == null || callInfo.status == CallStatus.ended) {
@@ -413,6 +442,7 @@ class CallNotifier extends Notifier<CallState> {
       _eventSubscription?.close();
       _disposeWatchdog();
       _cancelRegistrationErrorTimer();
+      unawaited(_releaseAudioFocus());
       _unregisterGlobalCallNotifierInstance(this);
     });
     return CallState.initial();
@@ -512,6 +542,11 @@ class CallNotifier extends Notifier<CallState> {
     }
 
     final status = _mapStatus(event.type);
+    if (status == CallStatus.connected) {
+      unawaited(_ensureAudioFocus(callId));
+    } else if (status == CallStatus.ended) {
+      unawaited(_releaseAudioFocus());
+    }
     final pendingCallId = _pendingCallId;
     final previous =
         state.calls[callId] ??
