@@ -5,6 +5,7 @@ import 'package:app/config/app_theme.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/features/calls/incoming/incoming_wake_coordinator.dart';
+import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/firebase_messaging_service.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
@@ -83,6 +84,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    AppLifecycleTracker.update(state);
     if (state == AppLifecycleState.resumed) {
       ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
     }

@@ -8,7 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:app/config/env_config.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/core/storage/fcm_storage.dart';
+import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/firebase_options_loader.dart';
+import 'package:app/services/incoming_notification_service.dart';
 
 class FirebaseMessagingService {
   FirebaseMessagingService._();
@@ -68,25 +70,50 @@ class FirebaseMessagingService {
 }
 
 Future<void> _handleIncomingHint(RemoteMessage message) async {
+  final type = message.data['type']?.toString();
+  final callId = message.data['call_id']?.toString();
+  if (type == 'call_cancelled' && callId != null && callId.isNotEmpty) {
+    await IncomingNotificationService.cancelIncoming(callId: callId);
+  }
   final stored = await _storeIncomingHint(message);
   if (!stored) return;
+
+  await _maybeShowIncomingNotification(message.data);
   debugPrint('[FCM] pending incoming hint queued, triggering handler');
   unawaited(requestIncomingCallHintProcessing());
 }
 
 Future<bool> _storeIncomingHint(RemoteMessage message) async {
   final rawType = message.data['type']?.toString();
+  final currentTime = DateTime.now();
   debugPrint('[FCM] message received payload=$rawType data=${message.data}');
-  if (rawType != 'incoming_call') {
-    return false;
+
+  if (rawType == 'incoming_call' || rawType == 'call_cancelled') {
+    await FcmStorage.savePendingIncomingHint(message.data, currentTime);
+    if (rawType == 'incoming_call') {
+      debugPrint(
+        '[FCM] pending incoming hint stored call_uuid=${message.data['call_uuid'] ?? '<none>'} timestamp=$currentTime; app should handle it on next resume/foreground',
+      );
+    }
+    return true;
   }
 
-  final timestamp = DateTime.now();
-  await FcmStorage.savePendingIncomingHint(message.data, timestamp);
-  debugPrint(
-    '[FCM] pending incoming hint stored call_uuid=${message.data['call_uuid'] ?? '<none>'} timestamp=$timestamp; app should handle it on next resume/foreground',
+  return false;
+}
+
+Future<void> _maybeShowIncomingNotification(Map<String, dynamic> data) async {
+  if (AppLifecycleTracker.isAppInForeground) return;
+  final callId = data['call_id']?.toString();
+  final from = data['from']?.toString();
+  if (callId == null || callId.isEmpty || from == null || from.isEmpty) {
+    return;
+  }
+  final displayName = data['display_name']?.toString();
+  await IncomingNotificationService.showIncoming(
+    callId: callId,
+    from: from,
+    displayName: displayName,
   );
-  return true;
 }
 
 @pragma('vm:entry-point')
