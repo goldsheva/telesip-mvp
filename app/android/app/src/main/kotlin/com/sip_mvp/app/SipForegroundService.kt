@@ -40,12 +40,14 @@ class SipForegroundService : Service() {
           getNotification(),
           FOREGROUND_SERVICE_TYPE_DATA_SYNC or FOREGROUND_SERVICE_TYPE_MICROPHONE,
         )
+        SipWakeLock.acquire(this)
         return START_STICKY
       }
       ACTION_STOP -> {
         debugLog("service stop")
         isRunning = false
         stopForeground(true)
+        SipWakeLock.release()
         stopSelf()
         return START_NOT_STICKY
       }
@@ -56,6 +58,7 @@ class SipForegroundService : Service() {
   override fun onDestroy() {
     isRunning = false
     stopForeground(true)
+    SipWakeLock.release()
     debugLog("service destroyed")
     super.onDestroy()
   }

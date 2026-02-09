@@ -13,6 +13,7 @@ import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/sip_users/models/pbx_sip_connection.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
+import 'package:app/platform/foreground_service.dart';
 import 'package:app/services/audio_focus_service.dart';
 import 'package:app/services/audio_route_service.dart';
 import 'package:app/services/permissions_service.dart';
@@ -159,6 +160,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _scoActive = false;
   _CallPhase _phase = _CallPhase.idle;
   bool _pendingActionsDrained = false;
+  bool _foregroundRequested = false;
   static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -846,6 +848,7 @@ class CallNotifier extends Notifier<CallState> {
     );
     _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, state);
+    _syncForegroundServiceState();
     if (status == CallStatus.ended) {
       Future.microtask(() {
         unawaited(handleIncomingCallHintIfAny());
@@ -885,6 +888,19 @@ class CallNotifier extends Notifier<CallState> {
           _phase = _CallPhase.idle;
         }
       });
+    }
+  }
+
+  void _syncForegroundServiceState() {
+    final hasActiveCall = state.activeCall != null &&
+        state.activeCall!.status != CallStatus.ended;
+    final shouldRun = state.isRegistered || hasActiveCall;
+    if (shouldRun && !_foregroundRequested) {
+      _foregroundRequested = true;
+      unawaited(ForegroundService.startForegroundService());
+    } else if (!shouldRun && _foregroundRequested) {
+      _foregroundRequested = false;
+      unawaited(ForegroundService.stopForegroundService());
     }
   }
 
