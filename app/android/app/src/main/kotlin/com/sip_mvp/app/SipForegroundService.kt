@@ -153,8 +153,13 @@ class SipForegroundService : Service() {
 
   private fun stopForegroundIfRunning() {
     if (!isInForeground()) return
-    debugLog("stopForeground(true)")
-    stopForeground(true)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      debugLog("stopForeground(STOP_FOREGROUND_REMOVE)")
+      stopForeground(Service.STOP_FOREGROUND_REMOVE)
+    } else {
+      debugLog("stopForeground(true)")
+      stopForeground(true)
+    }
   }
 
   private fun isInForeground(): Boolean {
