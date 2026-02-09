@@ -667,6 +667,10 @@ class CallNotifier extends Notifier<CallState> {
       _bootstrapScheduled = true;
       final bootstrapSnapshot = CallState.initial();
       Future.microtask(() => _bootstrapIfNeeded(bootstrapSnapshot));
+      if (!_pendingActionsDrained) {
+        _pendingActionsDrained = true;
+        Future.microtask(() => _drainPendingCallActions());
+      }
       return bootstrapSnapshot;
     }
     if (!_pendingActionsDrained) {

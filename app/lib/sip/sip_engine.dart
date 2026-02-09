@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:sip_ua/sip_ua.dart';
 
 import 'sip_models.dart';
@@ -34,6 +35,8 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
   SipRegistrationState _registrationState = SipRegistrationState.none;
   SipCallState _callState = SipCallState.none;
   String? _registrationDomain;
+  Completer<void>? _socketConnectedCompleter;
+  bool _socketConnected = false;
 
   @override
   Stream<SipEvent> get events => _eventController.stream;
@@ -211,12 +214,37 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       ..authorizationUser = _extractSipLogin(normalizedUri)
       ..register = true;
 
+    const timeout = Duration(seconds: 4);
+    _resetSocketConnection();
+    TimeoutException? lastTimeout;
     try {
-      await _helper.start(settings);
-      _helper.register();
+      for (var attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) {
+          debugPrint(
+            '[SIP] websocket connect timeout for $wsUrl (attempt #${attempt + 1}), retrying',
+          );
+          try {
+            _helper.stop();
+          } catch (_) {}
+          _resetSocketConnection();
+        }
+        await _helper.start(settings);
+        try {
+          await _waitForSocketConnected(timeout: timeout);
+          _helper.register();
+          return;
+        } on TimeoutException catch (error) {
+          // let loop repeat for one retry
+          lastTimeout = error;
+        }
+      }
+      if (lastTimeout != null) {
+        throw lastTimeout;
+      }
     } catch (error) {
       _emitRegistration(SipRegistrationState.failed, message: error.toString());
       _emitError('SIP registration failed: $error');
+      rethrow;
     }
   }
 
@@ -318,7 +346,26 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
   }
 
   @override
-  void transportStateChanged(TransportState state) {}
+  void transportStateChanged(TransportState state) {
+    switch (state.state) {
+      case TransportStateEnum.CONNECTED:
+        _socketConnected = true;
+        _ensureSocketCompleter();
+        if (_socketConnectedCompleter?.isCompleted == false) {
+          _socketConnectedCompleter?.complete();
+        }
+        break;
+      case TransportStateEnum.DISCONNECTED:
+      case TransportStateEnum.NONE:
+        _socketConnected = false;
+        _socketConnectedCompleter = Completer<void>();
+        break;
+      case TransportStateEnum.CONNECTING:
+        _socketConnected = false;
+        _ensureSocketCompleter();
+        break;
+    }
+  }
 
   @override
   void registrationStateChanged(RegistrationState state) {
@@ -390,6 +437,38 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
       case RegistrationStateEnum.NONE:
       default:
         return SipRegistrationState.none;
+    }
+  }
+
+  void _resetSocketConnection() {
+    _socketConnected = false;
+    _socketConnectedCompleter = Completer<void>();
+  }
+
+  void _ensureSocketCompleter() {
+    if (_socketConnectedCompleter == null ||
+        _socketConnectedCompleter!.isCompleted) {
+      _socketConnectedCompleter = Completer<void>();
+    }
+  }
+
+  Future<void> _waitForSocketConnected({
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    if (_socketConnected) {
+      debugPrint('[SIP] websocket connected, proceeding REGISTER');
+      return;
+    }
+    _ensureSocketCompleter();
+    debugPrint('[SIP] waiting for websocket connected before REGISTER');
+    try {
+      await _socketConnectedCompleter!.future.timeout(timeout);
+      debugPrint('[SIP] websocket connected, proceeding REGISTER');
+    } on TimeoutException {
+      debugPrint(
+        '[SIP] websocket connect wait timed out after ${timeout.inSeconds}s',
+      );
+      rethrow;
     }
   }
 }
