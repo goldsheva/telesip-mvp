@@ -190,7 +190,6 @@ class CallNotifier extends Notifier<CallState> {
     _startDialTimeout(callId);
     _clearError();
     state = state.copyWith(activeCallId: callId);
-    unawaited(_ensureAudioFocus(callId));
     _phase = _CallPhase.connecting;
   }
 
@@ -373,24 +372,23 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _ensureAudioFocus(String callId) async {
+    if (_phase == _CallPhase.idle || _phase == _CallPhase.ending) return;
     if (_audioFocusHeld && _focusedCallId == callId) return;
     try {
       await AudioFocusService.acquire(callId: callId);
       _audioFocusHeld = true;
       _focusedCallId = callId;
     } catch (error) {
-      debugPrint('[AUDIO_FOCUS] acquire failed for $callId: $error');
       _audioFocusHeld = false;
       _focusedCallId = null;
     }
   }
 
   Future<void> _releaseAudioFocus() async {
-    if (!_audioFocusHeld && _focusedCallId == null) return;
+    if (!_audioFocusHeld) return;
     try {
       await AudioFocusService.release();
-    } catch (error) {
-      debugPrint('[AUDIO_FOCUS] release failed: $error');
+    } catch (_) {
     } finally {
       _audioFocusHeld = false;
       _focusedCallId = null;
@@ -556,11 +554,6 @@ class CallNotifier extends Notifier<CallState> {
     if (!_isPhaseEventAllowed(status)) {
       debugPrint('[SIP] invalid phase ${_phase.name} for ${event.type.name} callId=$callId');
       return;
-    }
-    if (status == CallStatus.connected) {
-      unawaited(_ensureAudioFocus(callId));
-    } else if (status == CallStatus.ended) {
-      unawaited(_releaseAudioFocus());
     }
     final pendingCallId = _pendingCallId;
     final previous =
