@@ -34,6 +34,8 @@ class _AuthGate extends ConsumerStatefulWidget {
 
 class _AuthGateState extends ConsumerState<_AuthGate>
     with WidgetsBindingObserver {
+  ProviderSubscription<AsyncValue<AuthState>>? _authSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -44,7 +46,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
           .checkPendingHint()
           .whenComplete(() => _handlePendingCallAction());
     });
-    ref.listen<AsyncValue<AuthState>>(
+    _authSubscription = ref.listenManual<AsyncValue<AuthState>>(
       authNotifierProvider,
       (previous, next) => _handleAuthState(next),
     );
@@ -84,6 +86,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _authSubscription?.close();
     super.dispose();
   }
 

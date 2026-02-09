@@ -92,5 +92,4 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     return error.toString();
   }
-
 }
