@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/features/dongles/models/dongle.dart';
 import 'package:app/features/dongles/state/dongles_provider.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
@@ -22,6 +24,42 @@ class _HomePageState extends ConsumerState<HomePage> {
       ref.read(sipUsersProvider.notifier).refresh(),
       ref.read(donglesProvider.notifier).refresh(),
     ]);
+  }
+
+  int? _lastIncomingUserId;
+  late final ProviderSubscription<AsyncValue<SipUsersState>>
+  _sipUsersSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _sipUsersSubscription = ref.listenManual<AsyncValue<SipUsersState>>(
+      sipUsersProvider,
+      (previous, next) {
+        final items = next.asData?.value.items;
+        if (items == null) return;
+        PbxSipUser? general;
+        for (final user in items) {
+          if (user.dongleId == null) {
+            general = user;
+            break;
+          }
+        }
+        if (general == null || general.pbxSipUserId == _lastIncomingUserId) {
+          return;
+        }
+        _lastIncomingUserId = general.pbxSipUserId;
+        unawaited(
+          ref.read(callControllerProvider.notifier).setIncomingSipUser(general),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _sipUsersSubscription.close();
+    super.dispose();
   }
 
   @override
@@ -139,15 +177,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                     sipUser: sipUser,
                     dongle: dongle,
                     isCallable: isCallable,
-                    onCall: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DialerPage(
-                          sipUser: sipUser,
-                          dongleName: dongle?.name,
-                          dongleNumber: dongle?.number,
+                    onCall: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DialerPage(
+                            sipUser: sipUser,
+                            dongleName: dongle?.name,
+                            dongleNumber: dongle?.number,
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 );
               }, childCount: visibleSipClients.length),

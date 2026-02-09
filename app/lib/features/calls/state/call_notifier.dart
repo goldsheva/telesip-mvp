@@ -134,6 +134,8 @@ class CallNotifier extends Notifier<CallState> {
   bool _isRegistered = false;
   int? _registeredUserId;
   PbxSipUser? _lastKnownUser;
+  PbxSipUser? _incomingUser;
+  PbxSipUser? _outgoingUser;
   Timer? _dialTimeoutTimer;
   String? _dialTimeoutCallId;
   CallWebRtcWatchdog? _webRtcWatchdog;
@@ -206,6 +208,28 @@ class CallNotifier extends Notifier<CallState> {
   Future<void> sendDtmf(String callId, String digits) async {
     if (digits.isEmpty) return;
     await _engine.sendDtmf(callId, digits);
+  }
+
+  Future<void> setIncomingSipUser(PbxSipUser user) async {
+    // Remember the preferred incoming account while warming up registration.
+    if (_incomingUser?.pbxSipUserId == user.pbxSipUserId) return;
+    _incomingUser = user;
+    try {
+      await ensureRegistered(user);
+    } catch (_) {
+      // Errors surface through notifier state; swallow here.
+    }
+  }
+
+  Future<void> setOutgoingSipUser(PbxSipUser user) async {
+    // Hold the preferred outgoing account for deterministic registration.
+    if (_outgoingUser?.pbxSipUserId == user.pbxSipUserId) return;
+    _outgoingUser = user;
+    try {
+      await ensureRegistered(user);
+    } catch (_) {
+      // Errors surface through notifier state; swallow here.
+    }
   }
 
   Future<void> ensureRegistered(PbxSipUser user) async {
@@ -415,6 +439,19 @@ class CallNotifier extends Notifier<CallState> {
     _scoActive = false;
   }
 
+  Future<void> setCallAudioRoute(AudioRoute route) async {
+    if (state.activeCall == null ||
+        (_phase != _CallPhase.connecting &&
+            _phase != _CallPhase.active &&
+            _phase != _CallPhase.ringing)) {
+      debugPrint(
+        '[CALLS] ignoring audio route change without an active call (phase=$_phase)',
+      );
+      return;
+    }
+    await AudioRouteService.setRoute(route);
+  }
+
   Future<void> answerFromNotification(String callId) async {
     final callInfo = state.calls[callId];
     if (callInfo == null || callInfo.status == CallStatus.ended) {
@@ -517,7 +554,9 @@ class CallNotifier extends Notifier<CallState> {
     final hasActive =
         activeCall != null && activeCall.status != CallStatus.ended;
     if (!_isRelevantCall(callId, activeId)) {
-      debugPrint('[SIP] ignoring event for non-active callId=$callId active=$activeId pending=$pendingId');
+      debugPrint(
+        '[SIP] ignoring event for non-active callId=$callId active=$activeId pending=$pendingId',
+      );
       return;
     }
     final pendingInfo = pendingId != null ? state.calls[pendingId] : null;
@@ -576,7 +615,9 @@ class CallNotifier extends Notifier<CallState> {
 
     final status = _mapStatus(event.type);
     if (!_isPhaseEventAllowed(status)) {
-      debugPrint('[SIP] invalid phase ${_phase.name} for ${event.type.name} callId=$callId');
+      debugPrint(
+        '[SIP] invalid phase ${_phase.name} for ${event.type.name} callId=$callId',
+      );
       return;
     }
     final pendingCallId = _pendingCallId;
@@ -711,16 +752,21 @@ class CallNotifier extends Notifier<CallState> {
 
   bool _isPhaseEventAllowed(CallStatus status) {
     return switch (_phase) {
-      _CallPhase.idle => status == CallStatus.ringing || status == CallStatus.dialing,
-      _CallPhase.ringing => status == CallStatus.connected || status == CallStatus.ended,
-      _CallPhase.connecting => status == CallStatus.connected || status == CallStatus.ended,
-      _CallPhase.active => status == CallStatus.connected || status == CallStatus.ended,
+      _CallPhase.idle =>
+        status == CallStatus.ringing || status == CallStatus.dialing,
+      _CallPhase.ringing =>
+        status == CallStatus.connected || status == CallStatus.ended,
+      _CallPhase.connecting =>
+        status == CallStatus.connected || status == CallStatus.ended,
+      _CallPhase.active =>
+        status == CallStatus.connected || status == CallStatus.ended,
       _CallPhase.ending => status == CallStatus.ended,
     };
   }
 
   bool _isRelevantCall(String callId, String? activeId) {
-    return callId == activeId || (_pendingCallId != null && callId == _pendingCallId);
+    return callId == activeId ||
+        (_pendingCallId != null && callId == _pendingCallId);
   }
 
   CallStatus _mapStatus(SipEventType event) {
@@ -805,7 +851,8 @@ class CallNotifier extends Notifier<CallState> {
       if (targetCallId != activeId && targetCallId != pendingId) return;
       final callInfo = state.calls[targetCallId];
       if (callInfo?.status == CallStatus.ended) return;
-      if (_phase != _CallPhase.connecting && _phase != _CallPhase.ringing) return;
+      if (_phase != _CallPhase.connecting && _phase != _CallPhase.ringing)
+        return;
       _setError('Call timed out, ending');
       await _engine.hangup(targetCallId);
       _cancelDialTimeout();

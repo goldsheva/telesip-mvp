@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:call_audio_route/call_audio_route.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:flutter_native_contact_picker/model/contact.dart';
@@ -33,73 +33,54 @@ class _DialerPageState extends ConsumerState<DialerPage> {
 
   bool _isMuted = false;
   bool _isSpeakerOn = false;
-  ProviderSubscription<CallState>? _stateSubscription;
-  final CallAudioRoute _callAudioRoute = CallAudioRoute();
-  AudioRouteInfo? _routeInfo;
-  StreamSubscription<AudioRouteInfo>? _routeSubscription;
-  bool _isBluetoothPreferred = false;
-  bool _callAudioActive = false;
-  bool _awaitingBluetoothConfirmation = false;
-  Timer? _bluetoothConfirmTimer;
+  int? _lastOutgoingUserId;
+  late final ProviderSubscription<CallState> _callStateSubscription;
 
-  String _effectiveRouteLabel() {
-    final route = _routeInfo?.current;
-    if (route != null) return _routeLabel(route);
-    if (_isBluetoothPreferred) return 'Bluetooth';
-    return _isSpeakerOn ? 'Speaker' : 'Handset';
+  @override
+  void dispose() {
+    _numberController.dispose();
+    _callStateSubscription.close();
+    super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _registerSipUser());
-    _routeSubscription = _callAudioRoute.routeChanges.listen(_onRouteInfo);
-    _callAudioRoute.getRouteInfo().then((info) {
-      if (!mounted) return;
-      setState(() {
-        _routeInfo = info as AudioRouteInfo?;
-      });
-    });
-
-    _stateSubscription = ref.listenManual<CallState>(callControllerProvider, (
-      previous,
-      next,
-    ) {
-      _handleCallStateChange(previous, next);
-      final message = next.errorMessage;
-      if (message != null &&
-          message.isNotEmpty &&
-          message != previous?.errorMessage) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    });
+    _callStateSubscription = ref.listenManual<CallState>(
+      callControllerProvider,
+      (previous, next) {
+        final message = next.errorMessage;
+        if (message != null &&
+            message.isNotEmpty &&
+            message != previous?.errorMessage) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
+        }
+      },
+    );
+    _scheduleOutgoingUser(widget.sipUser);
   }
 
   @override
-  void dispose() {
-    _routeSubscription?.cancel();
-    _bluetoothConfirmTimer?.cancel();
-    if (_callAudioActive) {
-      _callAudioActive = false;
-      Future.microtask(() async {
-        try {
-          await _callAudioRoute.setRoute(AudioRoute.systemDefault);
-        } catch (_) {
-          // best-effort
-        }
-        try {
-          await _callAudioRoute.stopCallAudio();
-        } catch (_) {
-          // best-effort
-        }
-      });
+  void didUpdateWidget(covariant DialerPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.sipUser?.pbxSipUserId != oldWidget.sipUser?.pbxSipUserId) {
+      _scheduleOutgoingUser(widget.sipUser);
     }
-    _stateSubscription?.close();
-    _numberController.dispose();
-    super.dispose();
+  }
+
+  void _scheduleOutgoingUser(PbxSipUser? user) {
+    if (user == null || user.pbxSipUserId == _lastOutgoingUserId) {
+      return;
+    }
+    _lastOutgoingUserId = user.pbxSipUserId;
+    Future.microtask(() {
+      unawaited(
+        ref.read(callControllerProvider.notifier).setOutgoingSipUser(user),
+      );
+    });
   }
 
   Future<void> _call() async {
@@ -158,155 +139,18 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     );
   }
 
-  void _registerSipUser() {
-    final user = widget.sipUser;
-    if (user == null) return;
-    ref.read(callControllerProvider.notifier).ensureRegistered(user);
-  }
-
-  void _handleCallStateChange(CallState? previous, CallState next) {
-    Future.microtask(() async {
-      final hadActive = previous?.activeCall != null;
-      final hasActive = next.activeCall != null;
-
-      if (hasActive && !hadActive) {
-        await _startCallAudio();
-      } else if (!hasActive && hadActive) {
-        await _stopCallAudio();
-      }
-
-      final nextActive = next.activeCall;
-      if (nextActive != null &&
-          nextActive.status == CallStatus.connected &&
-          _isBluetoothPreferred) {
-        if (_routeInfo?.bluetoothConnected ?? false) {
-          _awaitingBluetoothConfirmation = false;
-          _bluetoothConfirmTimer?.cancel();
-        } else {
-          _awaitBluetoothConnection();
-        }
-      }
-    });
-  }
-
-  Future<void> _startCallAudio() async {
-    _callAudioActive = true;
-    await _callAudioRoute.configureForCall();
-    await _applyPreferredRoute();
-  }
-
-  Future<void> _stopCallAudio() async {
-    _callAudioActive = false;
-    _awaitingBluetoothConfirmation = false;
-    _bluetoothConfirmTimer?.cancel();
-    await _callAudioRoute.stopCallAudio();
-    await _callAudioRoute.setRoute(AudioRoute.systemDefault);
-    if (!mounted) return;
-    setState(() {
-      _isSpeakerOn = false;
-      _isBluetoothPreferred = false;
-    });
-  }
-
-  void _awaitBluetoothConnection() {
-    _bluetoothConfirmTimer?.cancel();
-    _awaitingBluetoothConfirmation = true;
-    _bluetoothConfirmTimer = Timer(
-      const Duration(milliseconds: 1500),
-      () async {
-        if (!_awaitingBluetoothConfirmation) return;
-        _awaitingBluetoothConfirmation = false;
-        await _callAudioRoute.setRoute(AudioRoute.earpiece);
-        if (!mounted) return;
-        setState(() {
-          _isBluetoothPreferred = false;
-          _isSpeakerOn = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bluetooth failed to connect, switching to handset'),
-          ),
-        );
-      },
-    );
-  }
-
-  void _onRouteInfo(AudioRouteInfo info) {
-    final wasConnected = _routeInfo?.bluetoothConnected ?? false;
-    setState(() {
-      _routeInfo = info;
-      _isSpeakerOn = info.current == AudioRoute.speaker;
-      _isBluetoothPreferred = info.current == AudioRoute.bluetooth;
-    });
-    if (wasConnected && !info.bluetoothConnected) {
-      _showBluetoothDisconnectSnackBar();
-    }
-    if (_awaitingBluetoothConfirmation && info.bluetoothConnected) {
-      _awaitingBluetoothConfirmation = false;
-      _bluetoothConfirmTimer?.cancel();
-    }
-  }
-
-  void _showBluetoothDisconnectSnackBar() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bluetooth headset disconnected')),
-    );
-  }
-
-  String _routeLabel(AudioRoute route) {
-    switch (route) {
-      case AudioRoute.earpiece:
-        return 'Handset';
-      case AudioRoute.speaker:
-        return 'Speaker';
-      case AudioRoute.bluetooth:
-        return 'Bluetooth';
-      case AudioRoute.wiredHeadset:
-        return 'Wired headset';
-      case AudioRoute.systemDefault:
-        return 'System default';
-    }
-  }
-
-  Future<void> _toggleSpeaker() async {
+  void _toggleSpeaker() {
     final enabling = !_isSpeakerOn;
-    if (enabling) {
-      setState(() {
-        _isBluetoothPreferred = false;
-      });
-    }
-    await _callAudioRoute.setRoute(
-      enabling ? AudioRoute.speaker : AudioRoute.earpiece,
-    );
-    await _refreshRouteInfo();
-  }
-
-  Future<void> _applyPreferredRoute() async {
-    final route = _isBluetoothPreferred
-        ? AudioRoute.bluetooth
-        : (_isSpeakerOn ? AudioRoute.speaker : AudioRoute.earpiece);
-    await _callAudioRoute.setRoute(route);
-    if (!mounted) return;
     setState(() {
-      _isSpeakerOn = route == AudioRoute.speaker;
+      _isSpeakerOn = enabling;
     });
-  }
-
-  Future<void> _refreshRouteInfo() async {
-    try {
-      final info = await _callAudioRoute.getRouteInfo();
-      if (!mounted) return;
-      setState(() {
-        _routeInfo = info as AudioRouteInfo?;
-        if (_routeInfo != null) {
-          _isSpeakerOn = _routeInfo!.current == AudioRoute.speaker;
-          _isBluetoothPreferred = _routeInfo!.current == AudioRoute.bluetooth;
-        }
-      });
-    } catch (_) {
-      // best effort
-    }
+    unawaited(
+      ref
+          .read(callControllerProvider.notifier)
+          .setCallAudioRoute(
+            enabling ? AudioRoute.speaker : AudioRoute.earpiece,
+          ),
+    );
   }
 
   @override
@@ -407,7 +251,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 ? () => notifier.hangup(active.id)
                                 : null,
                           ),
-                          if (_routeInfo != null && hasActiveCall) ...[
+                          if (hasActiveCall &&
+                              watchdogState.status !=
+                                  CallWatchdogStatus.ok) ...[
                             const SizedBox(height: 8),
                             Padding(
                               padding: const EdgeInsets.symmetric(
@@ -417,38 +263,17 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Route: ${_effectiveRouteLabel()}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
+                                    watchdogState.message,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color:
+                                          watchdogState.status ==
+                                              CallWatchdogStatus.failed
+                                          ? Colors.redAccent
+                                          : Colors.orange,
+                                    ),
                                   ),
-                                  if (_routeInfo!.available.contains(
-                                    AudioRoute.bluetooth,
-                                  ))
-                                    Text(
-                                      'Bluetooth: ${_routeInfo!.bluetoothConnected ? 'connected' : 'available'}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(color: Colors.grey),
-                                    ),
-                                  if (watchdogState.status ==
-                                      CallWatchdogStatus.reconnecting) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      watchdogState.message,
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(color: Colors.orange),
-                                    ),
-                                  ],
                                   if (watchdogState.status ==
                                       CallWatchdogStatus.failed) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      watchdogState.message,
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(color: Colors.redAccent),
-                                    ),
                                     const SizedBox(height: 4),
                                     SizedBox(
                                       width: double.infinity,
