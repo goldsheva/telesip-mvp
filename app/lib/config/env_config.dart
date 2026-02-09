@@ -1,7 +1,7 @@
 enum Environment { dev, preprod, prod }
 
 class EnvConfig {
-  static late final Environment env;
+  static Environment env = Environment.prod;
 
   static void init(Environment environment) {
     env = environment;

@@ -5,14 +5,19 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:app/config/env_config.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/core/storage/fcm_storage.dart';
+import 'package:app/services/firebase_options_loader.dart';
 
 class FirebaseMessagingService {
   FirebaseMessagingService._();
 
   static Future<void> initialize() async {
-    await Firebase.initializeApp();
+    final firebaseOptions = await FirebaseOptionsLoader.load(
+      environment: EnvConfig.env,
+    );
+    await Firebase.initializeApp(options: firebaseOptions);
 
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(
@@ -80,7 +85,10 @@ Future<bool> _storeIncomingHint(RemoteMessage message) async {
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   DartPluginRegistrant.ensureInitialized();
-  await Firebase.initializeApp();
+  final firebaseOptions = await FirebaseOptionsLoader.load(
+    environment: EnvConfig.env,
+  );
+  await Firebase.initializeApp(options: firebaseOptions);
   debugPrint('[FCM][bg] background message data=${message.data}');
   await _storeIncomingHint(message);
 }
