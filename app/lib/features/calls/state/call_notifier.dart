@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -911,6 +913,11 @@ class CallNotifier extends Notifier<CallState> {
       _foregroundRequested = false;
       unawaited(ForegroundService.stopForegroundService());
     }
+  }
+
+  bool maybeSuggestBatteryOptimization() {
+    if (!Platform.isAndroid) return false;
+    return state.isRegistered || (state.activeCall != null && state.activeCall!.status != CallStatus.ended);
   }
 
   Future<void> _drainPendingCallActions() async {
