@@ -161,6 +161,7 @@ class CallNotifier extends Notifier<CallState> {
   _CallPhase _phase = _CallPhase.idle;
   bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
+  bool _bootstrapDone = false;
   static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -646,11 +647,19 @@ class CallNotifier extends Notifier<CallState> {
       unawaited(_releaseAudioFocus());
       _unregisterGlobalCallNotifierInstance(this);
     });
+    _bootstrapIfNeeded();
     if (!_pendingActionsDrained) {
       _pendingActionsDrained = true;
       unawaited(_drainPendingCallActions());
     }
     return CallState.initial();
+  }
+
+  void _bootstrapIfNeeded() {
+    if (_bootstrapDone) return;
+    _bootstrapDone = true;
+    _syncForegroundServiceState();
+    unawaited(handleIncomingCallHintIfAny());
   }
 
   void _onEvent(SipEvent event) {
