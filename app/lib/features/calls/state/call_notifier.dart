@@ -165,6 +165,9 @@ class CallNotifier extends Notifier<CallState> {
   bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
   bool _bootstrapDone = false;
+  bool _bootstrapScheduled = false;
+  bool _bootstrapScheduleLogged = false;
+  bool _bootstrapRunLogged = false;
   static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -655,7 +658,19 @@ class CallNotifier extends Notifier<CallState> {
       unawaited(_releaseAudioFocus());
       _unregisterGlobalCallNotifierInstance(this);
     });
-    _bootstrapIfNeeded();
+    if (!_bootstrapScheduled) {
+      _bootstrapScheduled = true;
+      Future.microtask(() {
+        if (!_bootstrapScheduleLogged) {
+          debugPrint(
+            '[CALLS] scheduling bootstrap '
+            '(scheduled=$_bootstrapScheduled done=$_bootstrapDone)',
+          );
+          _bootstrapScheduleLogged = true;
+        }
+        _bootstrapIfNeeded();
+      });
+    }
     if (!_pendingActionsDrained) {
       _pendingActionsDrained = true;
       unawaited(_drainPendingCallActions());
@@ -664,9 +679,15 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _bootstrapIfNeeded() {
+    if (!_bootstrapRunLogged) {
+      debugPrint(
+        '[CALLS] bootstrap foreground service state (scheduled=$_bootstrapScheduled done=$_bootstrapDone)',
+      );
+      _bootstrapRunLogged = true;
+    }
     if (_bootstrapDone) return;
     _bootstrapDone = true;
-    _syncForegroundServiceState();
+    Future.microtask(() => _syncForegroundServiceState(state));
     unawaited(handleIncomingCallHintIfAny());
   }
 
@@ -865,7 +886,7 @@ class CallNotifier extends Notifier<CallState> {
     );
     _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, state);
-    _syncForegroundServiceState();
+    _syncForegroundServiceState(state);
     if (status == CallStatus.ended) {
       Future.microtask(() {
         unawaited(handleIncomingCallHintIfAny());
@@ -908,11 +929,13 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
-  void _syncForegroundServiceState() {
+  void _syncForegroundServiceState(CallState s) {
     final hasActiveCall =
-        state.activeCall != null &&
-        state.activeCall!.status != CallStatus.ended;
-    final shouldRun = state.isRegistered || hasActiveCall;
+        s.activeCall != null && s.activeCall!.status != CallStatus.ended;
+    final shouldRun = s.isRegistered || hasActiveCall;
+    debugPrint(
+      '[CALLS] sync foreground service (shouldRun=$shouldRun requested=$_foregroundRequested)',
+    );
     if (shouldRun && !_foregroundRequested) {
       _foregroundRequested = true;
       unawaited(ForegroundService.startForegroundService());
@@ -925,8 +948,7 @@ class CallNotifier extends Notifier<CallState> {
   bool maybeSuggestBatteryOptimization() {
     if (!Platform.isAndroid) return false;
     return state.isRegistered ||
-        (state.activeCall != null &&
-            state.activeCall!.status != CallStatus.ended);
+        (state.activeCall != null && state.activeCall!.status != CallStatus.ended);
   }
 
   Future<void> _drainPendingCallActions() async {
