@@ -16,11 +16,10 @@
     "measurementId": "REPLACE_WITH_YOUR_PREPROD_MEASUREMENT_ID"
   },
   "prod": {
-    "apiKey": "REPLACE_WITH_YOUR_PROD_API_KEY",
-    "appId": "REPLACE_WITH_YOUR_PROD_APP_ID",
-    "messagingSenderId": "REPLACE_WITH_YOUR_PROD_MESSAGING_SENDER_ID",
-    "projectId": "REPLACE_WITH_YOUR_PROD_PROJECT_ID",
-    "storageBucket": "REPLACE_WITH_YOUR_PROD_STORAGE_BUCKET",
-    "measurementId": "REPLACE_WITH_YOUR_PROD_MEASUREMENT_ID"
+    "apiKey": "AIzaSyA_etxs7adeYVg5mWnBPMB30iI0PH7HMKY",
+    "appId": "1:928730123940:android:23fbceeb6569c12a9ce031",
+    "messagingSenderId": "928730123940",
+    "projectId": "sip-mvp-cc88f",
+    "storageBucket": "sip-mvp-cc88f.firebasestorage.app"
   }
 }
