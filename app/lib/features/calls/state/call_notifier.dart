@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -150,6 +151,8 @@ class CallNotifier extends Notifier<CallState> {
   String? _focusedCallId;
   bool _scoActive = false;
   _CallPhase _phase = _CallPhase.idle;
+  bool _pendingActionsDrained = false;
+  static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
   static const Duration _busyRejectTtl = Duration(seconds: 90);
@@ -467,6 +470,10 @@ class CallNotifier extends Notifier<CallState> {
       unawaited(_releaseAudioFocus());
       _unregisterGlobalCallNotifierInstance(this);
     });
+    if (!_pendingActionsDrained) {
+      _pendingActionsDrained = true;
+      unawaited(_drainPendingCallActions());
+    }
     return CallState.initial();
   }
 
@@ -681,6 +688,24 @@ class CallNotifier extends Notifier<CallState> {
           _phase = _CallPhase.idle;
         }
       });
+    }
+  }
+
+  Future<void> _drainPendingCallActions() async {
+    final raw = await _notificationsChannel.invokeMethod<List<dynamic>>(
+      'drainPendingCallActions',
+    );
+    if (raw == null || raw.isEmpty) return;
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final type = item['type']?.toString();
+      final callId = item['callId']?.toString();
+      if (type == null || callId == null) continue;
+      if (type == 'answer') {
+        await answerFromNotification(callId);
+      } else if (type == 'decline') {
+        await hangup(callId);
+      }
     }
   }
 
