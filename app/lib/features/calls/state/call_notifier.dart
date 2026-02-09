@@ -737,6 +737,14 @@ class CallNotifier extends Notifier<CallState> {
         !state.calls.containsKey(callId) &&
         callId != activeId &&
         (pendingId == null || callId != pendingId);
+    if (callIdUnknown && pendingId != null && !state.calls.containsKey(callId)) {
+      debugPrint(
+        '[CALLS] stitched sipCallId=$callId to localCallId=$pendingId',
+      );
+      _pendingCallId = callId;
+      pendingId = callId;
+      callIdUnknown = false;
+    }
     final shouldAdoptIncoming =
         event.type == SipEventType.ringing &&
         callIdUnknown &&
