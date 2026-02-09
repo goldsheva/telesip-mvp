@@ -166,8 +166,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _foregroundRequested = false;
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
-  bool _bootstrapScheduleLogged = false;
-  bool _bootstrapRunLogged = false;
+  bool _hintForegroundGuard = false;
   static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -211,7 +210,7 @@ class CallNotifier extends Notifier<CallState> {
     _callDongleMap[callId] = _lastKnownUser?.dongleId;
     _startDialTimeout(callId);
     _clearError();
-    state = state.copyWith(activeCallId: callId);
+    _commit(state.copyWith(activeCallId: callId));
     _phase = _CallPhase.connecting;
   }
 
@@ -461,17 +460,23 @@ class CallNotifier extends Notifier<CallState> {
           '[INCOMING] registering SIP from hint (call_uuid=$callUuid)',
         );
       }
-      final registered = await registerWithSnapshot(snapshot);
-      if (registered) {
-        _lastHandledHintTimestamp = timestamp;
-        await FcmStorage.clearPendingIncomingHint();
-        debugPrint(
-          '[INCOMING] pending hint handled and cleared (call_uuid=$callUuid)',
-        );
-      } else {
-        debugPrint(
-          '[INCOMING] hint handling failed, retry allowed after ${_incomingHintRetryTtl.inSeconds}s (call_uuid=$callUuid)',
-        );
+      bool registered = false;
+      try {
+        _startHintForegroundGuard();
+        registered = await registerWithSnapshot(snapshot);
+        if (registered) {
+          _lastHandledHintTimestamp = timestamp;
+          await FcmStorage.clearPendingIncomingHint();
+          debugPrint(
+            '[INCOMING] pending hint handled and cleared (call_uuid=$callUuid)',
+          );
+        } else {
+          debugPrint(
+            '[INCOMING] hint handling failed, retry allowed after ${_incomingHintRetryTtl.inSeconds}s (call_uuid=$callUuid)',
+          );
+        }
+      } finally {
+        _releaseHintForegroundGuard(registered: registered, sync: !registered);
       }
     } finally {
       _isHandlingHint = false;
@@ -660,16 +665,9 @@ class CallNotifier extends Notifier<CallState> {
     });
     if (!_bootstrapScheduled) {
       _bootstrapScheduled = true;
-      Future.microtask(() {
-        if (!_bootstrapScheduleLogged) {
-          debugPrint(
-            '[CALLS] scheduling bootstrap '
-            '(scheduled=$_bootstrapScheduled done=$_bootstrapDone)',
-          );
-          _bootstrapScheduleLogged = true;
-        }
-        _bootstrapIfNeeded();
-      });
+      final bootstrapSnapshot = CallState.initial();
+      Future.microtask(() => _bootstrapIfNeeded(bootstrapSnapshot));
+      return bootstrapSnapshot;
     }
     if (!_pendingActionsDrained) {
       _pendingActionsDrained = true;
@@ -678,17 +676,18 @@ class CallNotifier extends Notifier<CallState> {
     return CallState.initial();
   }
 
-  void _bootstrapIfNeeded() {
-    if (!_bootstrapRunLogged) {
-      debugPrint(
-        '[CALLS] bootstrap foreground service state (scheduled=$_bootstrapScheduled done=$_bootstrapDone)',
-      );
-      _bootstrapRunLogged = true;
-    }
+  void _bootstrapIfNeeded(CallState snapshot) {
     if (_bootstrapDone) return;
     _bootstrapDone = true;
-    Future.microtask(() => _syncForegroundServiceState(state));
+    _syncForegroundServiceState(snapshot);
     unawaited(handleIncomingCallHintIfAny());
+  }
+
+  void _commit(CallState next, {bool syncFgs = true}) {
+    state = next;
+    if (syncFgs) {
+      _syncForegroundServiceState(next);
+    }
   }
 
   void _onEvent(SipEvent event) {
@@ -708,7 +707,7 @@ class CallNotifier extends Notifier<CallState> {
         _isRegistered = false;
         _registeredUserId = null;
       }
-      state = state.copyWith(isRegistered: _isRegistered);
+      _commit(state.copyWith(isRegistered: _isRegistered));
       return;
     }
     final callId = event.callId;
@@ -879,14 +878,14 @@ class CallNotifier extends Notifier<CallState> {
         ? event.message ?? 'SIP error'
         : null;
     final previousState = state;
-    state = state.copyWith(
+    final next = state.copyWith(
       calls: updated,
       activeCallId: activeCallId,
       errorMessage: errorMessage,
     );
     _applyPhase(status, callId);
-    _handleWatchdogActivation(previousState, state);
-    _syncForegroundServiceState(state);
+    _handleWatchdogActivation(previousState, next);
+    _commit(next);
     if (status == CallStatus.ended) {
       Future.microtask(() {
         unawaited(handleIncomingCallHintIfAny());
@@ -945,10 +944,34 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  void _startHintForegroundGuard() {
+    if (!Platform.isAndroid || _foregroundRequested || _hintForegroundGuard) {
+      return;
+    }
+    debugPrint('[INCOMING] hint foreground guard start');
+    _hintForegroundGuard = true;
+    unawaited(ForegroundService.startForegroundService());
+  }
+
+  void _releaseHintForegroundGuard({
+    required bool registered,
+    bool sync = true,
+  }) {
+    if (!_hintForegroundGuard) return;
+    _hintForegroundGuard = false;
+    debugPrint(
+      '[INCOMING] hint foreground guard release (registered=$registered)',
+    );
+    if (sync) {
+      _syncForegroundServiceState(state);
+    }
+  }
+
   bool maybeSuggestBatteryOptimization() {
     if (!Platform.isAndroid) return false;
     return state.isRegistered ||
-        (state.activeCall != null && state.activeCall!.status != CallStatus.ended);
+        (state.activeCall != null &&
+            state.activeCall!.status != CallStatus.ended);
   }
 
   Future<void> _drainPendingCallActions() async {
