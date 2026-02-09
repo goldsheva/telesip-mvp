@@ -468,6 +468,19 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  Future<bool> _ensureIncomingReady({
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    await handleIncomingCallHintIfAny();
+    final deadline = DateTime.now().add(timeout);
+    while (!state.isRegistered && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    if (state.isRegistered) return true;
+    debugPrint('[INCOMING] registration not ready after ${timeout.inSeconds}s');
+    return false;
+  }
+
   Future<void> _ensureStoredIncomingCredentialsLoaded() async {
     if (_storedIncomingCredentialsLoaded) return;
     _storedIncomingCredentialsLoaded = true;
@@ -549,7 +562,13 @@ class CallNotifier extends Notifier<CallState> {
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
     }
-    await handleIncomingCallHintIfAny();
+    final ready = await _ensureIncomingReady();
+    if (!ready) {
+      debugPrint(
+        '[CALLS] answerFromNotification aborted: registration not ready',
+      );
+      return;
+    }
     var call = _engine.getCall(callId);
     if (call == null && state.activeCallId != null) {
       call = _engine.getCall(state.activeCallId!);
@@ -572,7 +591,13 @@ class CallNotifier extends Notifier<CallState> {
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
     }
-    await handleIncomingCallHintIfAny();
+    final ready = await _ensureIncomingReady();
+    if (!ready) {
+      debugPrint(
+        '[CALLS] declineFromNotification aborted: registration not ready',
+      );
+      return;
+    }
     var targetCallId = callId;
     if (_engine.getCall(callId) == null && state.activeCallId != null) {
       targetCallId = state.activeCallId!;
@@ -858,7 +883,13 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _drainPendingCallActions() async {
-    await handleIncomingCallHintIfAny();
+    final ready = await _ensureIncomingReady();
+    if (!ready) {
+      debugPrint(
+        '[CALLS] drainPendingCallActions aborted: registration not ready',
+      );
+      return;
+    }
     final raw = await _notificationsChannel.invokeMethod<List<dynamic>>(
       'drainPendingCallActions',
     );
