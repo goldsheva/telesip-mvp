@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/core/storage/fcm_storage.dart';
 
 class FirebaseMessagingService {
@@ -38,7 +40,7 @@ class FirebaseMessagingService {
       await _handleIncomingHint(initialMessage);
     }
 
-    FirebaseMessaging.onTokenRefresh.listen((token) async {
+    messaging.onTokenRefresh.listen((token) async {
       debugPrint('[FCM] token refreshed');
       await FcmStorage.saveToken(token);
     });
@@ -54,21 +56,25 @@ class FirebaseMessagingService {
 }
 
 Future<void> _handleIncomingHint(RemoteMessage message) async {
-  await _storeIncomingHint(message);
+  final stored = await _storeIncomingHint(message);
+  if (!stored) return;
+  debugPrint('[FCM] pending incoming hint queued, triggering handler');
+  unawaited(requestIncomingCallHintProcessing());
 }
 
-Future<void> _storeIncomingHint(RemoteMessage message) async {
+Future<bool> _storeIncomingHint(RemoteMessage message) async {
   final rawType = message.data['type']?.toString();
   debugPrint('[FCM] message received payload=$rawType data=${message.data}');
   if (rawType != 'incoming_call') {
-    return;
+    return false;
   }
 
   final timestamp = DateTime.now();
   await FcmStorage.savePendingIncomingHint(message.data, timestamp);
   debugPrint(
-    '[FCM] pending incoming hint stored call_uuid=${message.data['call_uuid'] ?? '<none>'} timestamp=$timestamp',
+    '[FCM] pending incoming hint stored call_uuid=${message.data['call_uuid'] ?? '<none>'} timestamp=$timestamp; app should handle it on next resume/foreground',
   );
+  return true;
 }
 
 @pragma('vm:entry-point')

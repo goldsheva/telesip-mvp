@@ -1,15 +1,34 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/env_config.dart';
 import 'package:app/core/providers.dart';
 import 'package:app/core/providers/sip_providers.dart';
+import 'package:app/core/storage/fcm_storage.dart';
 import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/sip/sip_engine.dart';
+
+CallNotifier? _globalCallNotifierInstance;
+
+void _registerGlobalCallNotifierInstance(CallNotifier notifier) {
+  _globalCallNotifierInstance = notifier;
+}
+
+void _unregisterGlobalCallNotifierInstance(CallNotifier notifier) {
+  if (_globalCallNotifierInstance == notifier) {
+    _globalCallNotifierInstance = null;
+  }
+}
+
+Future<void> requestIncomingCallHintProcessing() async {
+  final handler = _globalCallNotifierInstance;
+  if (handler == null) return;
+  await handler.handleIncomingCallHintIfAny();
+}
 
 enum CallStatus { dialing, ringing, connected, ended }
 
@@ -131,6 +150,12 @@ class CallNotifier extends Notifier<CallState> {
   static const Duration _strayRingingRejectMinGap = Duration(seconds: 2);
   DateTime? _busyUntil;
   static const Duration _busyGrace = Duration(seconds: 2);
+
+  DateTime? _lastHandledHintTimestamp;
+  DateTime? _lastHintAttemptAt;
+  bool _isHandlingHint = false;
+  static const Duration _incomingHintExpiry = Duration(seconds: 60);
+  static const Duration _incomingHintRetryTtl = Duration(seconds: 30);
 
   bool get isBusy {
     final baseBusy =
@@ -257,17 +282,106 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  Future<void> handleIncomingCallHintIfAny() async {
+    if (_isHandlingHint) return;
+    _isHandlingHint = true;
+    try {
+      final raw = await FcmStorage.readPendingIncomingHint();
+      if (raw == null) return;
+
+      final payload = raw['payload'] as Map<String, dynamic>?;
+      final timestampRaw = raw['timestamp'] as String?;
+      final timestamp = DateTime.tryParse(timestampRaw ?? '');
+      final callUuid = payload?['call_uuid']?.toString() ?? '<none>';
+
+      if (payload == null || timestamp == null) {
+        debugPrint(
+          '[INCOMING] invalid pending hint (call_uuid=$callUuid), clearing',
+        );
+        await FcmStorage.clearPendingIncomingHint();
+        return;
+      }
+
+      final now = DateTime.now();
+      if (now.difference(timestamp) > _incomingHintExpiry) {
+        debugPrint(
+          '[INCOMING] pending hint expired after ${now.difference(timestamp).inSeconds}s (call_uuid=$callUuid)',
+        );
+        await FcmStorage.clearPendingIncomingHint();
+        return;
+      }
+
+      if (_lastHandledHintTimestamp != null &&
+          _lastHandledHintTimestamp!.isAtSameMomentAs(timestamp)) {
+        return;
+      }
+
+      if (_lastHintAttemptAt != null &&
+          now.difference(_lastHintAttemptAt!) < _incomingHintRetryTtl) {
+        final remaining =
+            _incomingHintRetryTtl - now.difference(_lastHintAttemptAt!);
+        debugPrint(
+          '[INCOMING] hint retry suppressed for ${remaining.inSeconds}s (call_uuid=$callUuid)',
+        );
+        return;
+      }
+
+      if (isBusy) {
+        debugPrint(
+          '[INCOMING] busy when handling hint (call_uuid=$callUuid), will retry later',
+        );
+        return;
+      }
+
+      final snapshot = await ref.read(sipAuthStorageProvider).readSnapshot();
+      if (snapshot == null) {
+        debugPrint(
+          '[INCOMING] no stored SIP credentials to register (call_uuid=$callUuid)',
+        );
+        return;
+      }
+
+      _lastHintAttemptAt = now;
+      debugPrint('[INCOMING] registering SIP from hint (call_uuid=$callUuid)');
+      final registered = await registerWithSnapshot(snapshot);
+      if (registered) {
+        _lastHandledHintTimestamp = timestamp;
+        await FcmStorage.clearPendingIncomingHint();
+        debugPrint(
+          '[INCOMING] pending hint handled and cleared (call_uuid=$callUuid)',
+        );
+      } else {
+        debugPrint(
+          '[INCOMING] hint handling failed, retry allowed after ${_incomingHintRetryTtl.inSeconds}s (call_uuid=$callUuid)',
+        );
+      }
+    } finally {
+      _isHandlingHint = false;
+    }
+  }
+
   @override
   CallState build() {
+    _registerGlobalCallNotifierInstance(this);
     _engine = ref.read(sipEngineProvider);
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
       (previous, next) => next.whenData(_onEvent),
     );
+    ref.listen<AsyncValue<AppLifecycleState>>(
+      appLifecycleProvider,
+      (previous, next) => next.whenData((state) {
+        if (state == AppLifecycleState.resumed) {
+          debugPrint('[INCOMING] app lifecycle resumed, checking hint');
+          unawaited(handleIncomingCallHintIfAny());
+        }
+      }),
+    );
     ref.onDispose(() {
       _eventSubscription?.close();
       _disposeWatchdog();
       _cancelRegistrationErrorTimer();
+      _unregisterGlobalCallNotifierInstance(this);
     });
     return CallState.initial();
   }
@@ -329,6 +443,23 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] allowing ringing as stitching candidate callId=$callId pending=$pendingId active=$activeId',
       );
     }
+    final callIdUnknown = !state.calls.containsKey(callId) &&
+        callId != activeId &&
+        (pendingId == null || callId != pendingId);
+    if (event.type == SipEventType.ringing &&
+        callIdUnknown &&
+        _busyUntil != null &&
+        now.isBefore(_busyUntil!) &&
+        !stitchingCandidate) {
+      final canReject = _lastStrayRingingRejectAt == null ||
+          now.difference(_lastStrayRingingRejectAt!) >
+              _strayRingingRejectMinGap;
+      if (canReject) {
+        _lastStrayRingingRejectAt = now;
+        _rejectBusyCall(callId, event.type);
+        return;
+      }
+    }
     final allowed =
         !hasActive ||
         callId == activeId ||
@@ -339,18 +470,6 @@ class CallNotifier extends Notifier<CallState> {
       if (event.type == SipEventType.ringing && isBusy) {
         _rejectBusyCall(callId, event.type);
         return;
-      }
-      if (event.type == SipEventType.ringing &&
-          _busyUntil != null &&
-          now.isBefore(_busyUntil!)) {
-        final canReject = _lastStrayRingingRejectAt == null ||
-            now.difference(_lastStrayRingingRejectAt!) >
-                _strayRingingRejectMinGap;
-        if (canReject) {
-          _lastStrayRingingRejectAt = now;
-          _rejectBusyCall(callId, event.type);
-          return;
-        }
       }
       debugPrint(
         '[INCOMING] ignoring stray ${event.type.name} callId=$callId active=$activeId pending=$pendingId',
