@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/core/network/api_exception.dart';
 import 'package:app/core/providers.dart';
 import 'package:app/features/dongles/state/dongles_provider.dart';
+import 'package:app/features/fcm/providers.dart';
 import 'package:app/features/sip_users/state/sip_users_provider.dart';
 import 'auth_state.dart';
 
@@ -36,6 +37,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       await ref.read(biometricTokensStorageProvider).writeTokens(tokens);
       state = AsyncData(AuthState.authenticated(tokens));
       _invalidateCaches();
+      await ref.read(fcmTokenRegistrarProvider).registerStoredToken();
     } catch (e) {
       state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
     }
@@ -71,6 +73,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       await biometricStorage.writeTokens(refreshed);
       state = AsyncData(AuthState.authenticated(refreshed));
       _invalidateCaches();
+      await ref.read(fcmTokenRegistrarProvider).registerStoredToken();
     } catch (e) {
       state = AsyncData(AuthState.unauthenticated(error: _messageFrom(e)));
     }

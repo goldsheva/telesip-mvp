@@ -13,24 +13,15 @@ import 'package:app/services/firebase_options_loader.dart';
 class FirebaseMessagingService {
   FirebaseMessagingService._();
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({
+    Future<void> Function(String token)? onTokenChanged,
+  }) async {
     final firebaseOptions = await FirebaseOptionsLoader.load(
       environment: EnvConfig.env,
     );
     await Firebase.initializeApp(options: firebaseOptions);
 
     final messaging = FirebaseMessaging.instance;
-    final settings = await messaging.requestPermission(
-      alert: true,
-      announcement: false,
-      badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
-    debugPrint('[FCM] permission status: ${settings.authorizationStatus}');
-
     await messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
@@ -48,15 +39,31 @@ class FirebaseMessagingService {
     messaging.onTokenRefresh.listen((token) async {
       debugPrint('[FCM] token refreshed');
       await FcmStorage.saveToken(token);
+      unawaited(onTokenChanged?.call(token));
     });
 
     final token = await messaging.getToken();
     if (token != null) {
       debugPrint('[FCM] token: $token');
       await FcmStorage.saveToken(token);
+      unawaited(onTokenChanged?.call(token));
     } else {
       debugPrint('[FCM] token unavailable');
     }
+  }
+
+  static Future<void> requestPermission() async {
+    final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+    debugPrint('[FCM] permission status: ${settings.authorizationStatus}');
   }
 }
 

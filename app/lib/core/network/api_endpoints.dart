@@ -7,4 +7,5 @@ class ApiEndpoints {
 
   static String get dongleList => '$_baseApiUrl/dongle';
   static String get sipUsersList => '$_baseApiUrl/sip-user';
+  static String get sipUserToken => '$_baseApiUrl/sip-user/token';
 }

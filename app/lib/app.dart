@@ -5,6 +5,7 @@ import 'package:app/config/app_theme.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/features/calls/incoming/incoming_wake_coordinator.dart';
+import 'package:app/services/firebase_messaging_service.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
 
@@ -37,6 +38,24 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
     });
+    ref.listen<AsyncValue<AuthState>>(
+      authNotifierProvider,
+      (previous, next) => _handleAuthState(next),
+    );
+    _handleAuthState(ref.read(authNotifierProvider));
+  }
+
+  bool _requestedFcmPermission = false;
+
+  void _handleAuthState(AsyncValue<AuthState> authState) {
+    final status = authState.value?.status ?? AuthStatus.unknown;
+    final authenticated = status == AuthStatus.authenticated;
+    if (authenticated && !_requestedFcmPermission) {
+      _requestedFcmPermission = true;
+      FirebaseMessagingService.requestPermission();
+    } else if (!authenticated) {
+      _requestedFcmPermission = false;
+    }
   }
 
   @override
