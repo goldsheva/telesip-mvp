@@ -22,10 +22,17 @@ object SipWakeLock {
   }
 
   fun release() {
-    if (wakeLock?.isHeld == true) {
-      wakeLock?.release()
-      Log.d(TAG, "wakeLock released")
+    val current = wakeLock ?: return
+    if (!current.isHeld) {
+      wakeLock = null
+      return
     }
+    current.release()
+    Log.d(TAG, "wakeLock released")
     wakeLock = null
+  }
+
+  fun isHeld(): Boolean {
+    return wakeLock?.isHeld == true
   }
 }

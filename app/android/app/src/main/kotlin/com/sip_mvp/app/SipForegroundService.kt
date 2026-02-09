@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.app.Service.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+import android.app.Service.FOREGROUND_SERVICE_TYPE_MICROPHONE
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -25,41 +27,93 @@ class SipForegroundService : Service() {
   }
 
   private var isRunning = false
+  private var isStarting = false
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    if (intent == null) {
+      debugLog("onStartCommand: null intent (sticky restart) state(running=$isRunning starting=$isStarting wake=${
+          SipWakeLock.isHeld()})")
+      isStarting = false
+      isRunning = false
+      if (SipWakeLock.isHeld()) {
+        SipWakeLock.release()
+      }
+      return START_STICKY
+    }
+    if (intent?.action == ACTION_START && (isInForeground() || isStarting)) {
+      debugLog("service already running; ignoring start")
+      return START_STICKY
+    }
     when (intent?.action) {
       ACTION_START -> {
-        if (isRunning) {
-          debugLog("duplicate start ignored")
-          return START_STICKY
-        }
-        isRunning = true
         debugLog("service start")
-        startForeground(
-          NOTIF_ID,
-          getNotification(),
-          FOREGROUND_SERVICE_TYPE_DATA_SYNC or FOREGROUND_SERVICE_TYPE_MICROPHONE,
-        )
-        SipWakeLock.acquire(this)
+        isStarting = true
+        try {
+          SipWakeLock.acquire(this)
+        } catch (error: Throwable) {
+          debugLog("wake lock acquire failed: $error")
+          isStarting = false
+          return START_NOT_STICKY
+        }
+        try {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            debugLog("startForeground: types (Q+)")
+            startForeground(
+              NOTIF_ID,
+              getNotification(),
+              FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                  FOREGROUND_SERVICE_TYPE_MICROPHONE
+            )
+          } else {
+            debugLog("startForeground: no types (<Q)")
+            startForeground(
+              NOTIF_ID,
+              getNotification()
+            )
+          }
+        } catch (t: Throwable) {
+          debugLog("startForeground failed: $t")
+          isRunning = false
+          SipWakeLock.release()
+          isStarting = false
+          stopSelf()
+          return START_NOT_STICKY
+        }
+        isStarting = false
+        isRunning = true
         return START_STICKY
       }
       ACTION_STOP -> {
         debugLog("service stop")
+        if (isStarting) {
+          debugLog("service stop while starting")
+        }
+        stopForegroundIfRunning()
         isRunning = false
-        stopForeground(true)
+        isStarting = false
+        if (SipWakeLock.isHeld()) {
+          debugLog("wake lock release (stop)")
+        }
         SipWakeLock.release()
         stopSelf()
         return START_NOT_STICKY
       }
-      else -> return START_STICKY
+      else -> {
+        debugLog("onStartCommand: unknown action ${intent.action}; ignoring")
+        return START_STICKY
+      }
     }
   }
 
   override fun onDestroy() {
+    stopForegroundIfRunning()
+    isStarting = false
     isRunning = false
-    stopForeground(true)
+    if (SipWakeLock.isHeld()) {
+      debugLog("wake lock release (destroy)")
+    }
     SipWakeLock.release()
-    debugLog("service destroyed")
+    debugLog("service destroy")
     super.onDestroy()
   }
 
@@ -96,4 +150,15 @@ class SipForegroundService : Service() {
   private fun debugLog(message: String) {
     android.util.Log.d("SipForegroundService", message)
   }
+
+  private fun stopForegroundIfRunning() {
+    if (!isInForeground()) return
+    debugLog("stopForeground(true)")
+    stopForeground(true)
+  }
+
+  private fun isInForeground(): Boolean {
+    return isRunning
+  }
+
 }

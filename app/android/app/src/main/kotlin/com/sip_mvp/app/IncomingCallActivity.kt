@@ -3,13 +3,13 @@ package com.sip_mvp.app
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.core.app.ActivityCompat
+import android.os.Build
+import android.view.WindowManager
 
 class IncomingCallActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    ActivityCompat.setShowWhenLocked(this, true)
-    ActivityCompat.setTurnScreenOn(this, true)
     super.onCreate(savedInstanceState)
+    applyLockScreenFlags()
     val mainIntent = Intent(this, MainActivity::class.java).apply {
       action = intent.action
       putExtras(intent)
@@ -21,5 +21,33 @@ class IncomingCallActivity : Activity() {
     }
     startActivity(mainIntent)
     finish()
+  }
+
+  private fun applyLockScreenFlags() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+      setShowWhenLocked(true)
+      setTurnScreenOn(true)
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        window.addFlags(
+          WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+              WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+        )
+      }
+    } else {
+      window.addFlags(
+        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+      )
+    }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+  }
+
+  override fun onPause() {
+    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    super.onPause()
   }
 }
