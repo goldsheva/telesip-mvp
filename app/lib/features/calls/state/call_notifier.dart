@@ -666,6 +666,9 @@ class CallNotifier extends Notifier<CallState> {
     final next = _phaseForStatus(status);
     if (next == _phase) return;
     _phase = next;
+    if (next != _CallPhase.ringing && next != _CallPhase.connecting) {
+      _cancelDialTimeout();
+    }
     if (next == _CallPhase.ringing || next == _CallPhase.connecting) {
       unawaited(_ensureAudioFocus(callId));
     } else if (next == _CallPhase.active) {
@@ -772,8 +775,13 @@ class CallNotifier extends Notifier<CallState> {
     _dialTimeoutTimer = Timer(_dialTimeout, () async {
       final targetCallId = _dialTimeoutCallId;
       if (targetCallId == null) return;
-      if (state.activeCallId != targetCallId) return;
-      _setError('Call was not answered, ending');
+      final activeId = state.activeCallId;
+      final pendingId = _pendingCallId;
+      if (targetCallId != activeId && targetCallId != pendingId) return;
+      final callInfo = state.calls[targetCallId];
+      if (callInfo?.status == CallStatus.ended) return;
+      if (_phase != _CallPhase.connecting && _phase != _CallPhase.ringing) return;
+      _setError('Call timed out, ending');
       await _engine.hangup(targetCallId);
       _cancelDialTimeout();
     });
