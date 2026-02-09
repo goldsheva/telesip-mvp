@@ -391,7 +391,7 @@ class CallNotifier extends Notifier<CallState> {
         final wsConnections = candidate.pbxSipConnections
             .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
             .toList();
-        String? wsUrl;
+        late final String wsUrl;
         String uriHost = '';
         if (wsConnections.isNotEmpty) {
           final connection = wsConnections.first;
@@ -420,7 +420,7 @@ class CallNotifier extends Notifier<CallState> {
           wsUrl = defaultWs;
           uriHost = Uri.tryParse(wsUrl)?.host ?? '';
         }
-        if (wsUrl == null || uriHost.isEmpty) {
+        if (uriHost.isEmpty) {
           debugPrint(
             '[INCOMING] invalid WS URL for incoming user, skipping hint (call_uuid=$callUuid)',
           );
@@ -977,8 +977,9 @@ class CallNotifier extends Notifier<CallState> {
       if (targetCallId != activeId && targetCallId != pendingId) return;
       final callInfo = state.calls[targetCallId];
       if (callInfo?.status == CallStatus.ended) return;
-      if (_phase != _CallPhase.connecting && _phase != _CallPhase.ringing)
+      if (_phase != _CallPhase.connecting && _phase != _CallPhase.ringing) {
         return;
+      }
       _setError('Call timed out, ending');
       await _engine.hangup(targetCallId);
       _cancelDialTimeout();
