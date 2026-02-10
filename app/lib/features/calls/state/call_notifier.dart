@@ -147,7 +147,7 @@ class CallState {
 
 enum _CallPhase { idle, ringing, connecting, active, ending }
 
-static const _errorDedupTtl = Duration(seconds: 2);
+const Duration _errorDedupTtl = Duration(seconds: 2);
 
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
@@ -247,6 +247,8 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] switching to DONGLE credentials for outgoing call: ${outgoingUser.dongleId}',
       );
     }
+    _commit(state.copyWith(audioRoute: AudioRoute.earpiece), syncFgs: false);
+    unawaited(_applyNativeAudioRoute(AudioRoute.earpiece));
     final prefixedDestination = _destinationWithBootstrapPrefix(
       trimmed,
       outgoingUser,
@@ -1052,12 +1054,24 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId: activeCallId,
       errorMessage: errorMessage,
     );
-    final next = status == CallStatus.ended
-        ? baseNext.copyWith(isMuted: false)
+    final prevActiveId = previousState.activeCallId;
+    final nextActiveId = baseNext.activeCallId;
+    final callCleared = nextActiveId == null;
+    final endedPreviousActive =
+        status == CallStatus.ended && callId == prevActiveId;
+    final shouldResetAudio = callCleared || endedPreviousActive;
+    final next = shouldResetAudio
+        ? baseNext.copyWith(
+            isMuted: false,
+            audioRoute: AudioRoute.systemDefault,
+          )
         : baseNext;
     _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, next);
     _commit(next);
+    if (shouldResetAudio) {
+      unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
+    }
     if (status == CallStatus.ended) {
       Future.microtask(() {
         unawaited(handleIncomingCallHintIfAny());
@@ -1303,6 +1317,14 @@ class CallNotifier extends Notifier<CallState> {
     _dialTimeoutTimer?.cancel();
     _dialTimeoutTimer = null;
     _dialTimeoutCallId = null;
+  }
+
+  Future<void> _applyNativeAudioRoute(AudioRoute route) async {
+    try {
+      await AudioRouteService.setRoute(route);
+    } catch (error) {
+      debugPrint('[CALLS] applyAudioRoute($route) failed: $error');
+    }
   }
 
   void _handleWatchdogActivation(CallState previous, CallState next) {
