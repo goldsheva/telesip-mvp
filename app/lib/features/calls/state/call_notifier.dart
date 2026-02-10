@@ -1079,7 +1079,9 @@ class CallNotifier extends Notifier<CallState> {
     if (shouldResetAudio) {
       unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
     }
-    if (status == CallStatus.connected) {
+    if (status == CallStatus.connected ||
+        status == CallStatus.ringing ||
+        status == CallStatus.dialing) {
       unawaited(_refreshAudioRoute());
     }
     if (status == CallStatus.ended) {
