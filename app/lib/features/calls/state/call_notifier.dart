@@ -186,6 +186,8 @@ class CallNotifier extends Notifier<CallState> {
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
   bool _hintForegroundGuard = false;
+  DateTime? _lastAudioRouteRefresh;
+  bool _audioRouteRefreshInFlight = false;
   static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -640,6 +642,7 @@ class CallNotifier extends Notifier<CallState> {
     }
     await AudioRouteService.setRoute(route);
     _commit(state.copyWith(audioRoute: route), syncFgs: false);
+    unawaited(_refreshAudioRoute());
   }
 
   Future<bool> setCallMuted(bool muted) async {
@@ -759,6 +762,10 @@ class CallNotifier extends Notifier<CallState> {
         if (state == AppLifecycleState.resumed) {
           debugPrint('[INCOMING] app lifecycle resumed, checking hint');
           unawaited(handleIncomingCallHintIfAny());
+          final active = this.state.activeCall;
+          if (active != null && active.status != CallStatus.ended) {
+            unawaited(_refreshAudioRoute());
+          }
         }
       }),
     );
@@ -1072,6 +1079,9 @@ class CallNotifier extends Notifier<CallState> {
     if (shouldResetAudio) {
       unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
     }
+    if (status == CallStatus.connected) {
+      unawaited(_refreshAudioRoute());
+    }
     if (status == CallStatus.ended) {
       Future.microtask(() {
         unawaited(handleIncomingCallHintIfAny());
@@ -1317,6 +1327,32 @@ class CallNotifier extends Notifier<CallState> {
     _dialTimeoutTimer?.cancel();
     _dialTimeoutTimer = null;
     _dialTimeoutCallId = null;
+  }
+
+  Future<void> _refreshAudioRoute() async {
+    final now = DateTime.now();
+    if (_audioRouteRefreshInFlight) return;
+    if (_lastAudioRouteRefresh != null &&
+        now.difference(_lastAudioRouteRefresh!) < const Duration(milliseconds: 500)) {
+      return;
+    }
+    final active = state.activeCall;
+    if (active == null || active.status == CallStatus.ended) {
+      return;
+    }
+    _audioRouteRefreshInFlight = true;
+    _lastAudioRouteRefresh = now;
+    try {
+      final info = await AudioRouteService.getRouteInfo();
+      if (info == null) return;
+      if (info.current != state.audioRoute) {
+        _commit(state.copyWith(audioRoute: info.current), syncFgs: false);
+      }
+    } catch (error) {
+      debugPrint('[CALLS] refreshAudioRoute failed: $error');
+    } finally {
+      _audioRouteRefreshInFlight = false;
+    }
   }
 
   Future<void> _applyNativeAudioRoute(AudioRoute route) async {
