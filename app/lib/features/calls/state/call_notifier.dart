@@ -787,7 +787,8 @@ class CallNotifier extends Notifier<CallState> {
     final sipCallId = event.callId;
     if (sipCallId == null) return;
 
-    var callId = _sipToLocalCallId[sipCallId] ?? sipCallId;
+    final effectiveId = _sipToLocalCallId[sipCallId] ?? sipCallId;
+    var callId = effectiveId;
 
     final now = DateTime.now();
     _recentlyEnded.removeWhere(
@@ -805,6 +806,10 @@ class CallNotifier extends Notifier<CallState> {
     final activeCall = state.activeCall;
     final hasActive =
         activeCall != null && activeCall.status != CallStatus.ended;
+    final activeLabel = activeId ?? '<none>';
+    debugPrint(
+      '[SIP] event=${event.type.name} sipId=$sipCallId effectiveId=$effectiveId active=$activeLabel',
+    );
     var callIdUnknown =
         !state.calls.containsKey(callId) &&
         callId != activeId &&
@@ -832,11 +837,10 @@ class CallNotifier extends Notifier<CallState> {
         event.type == SipEventType.ringing &&
         callIdUnknown &&
         !hasActive &&
-        _phase == _CallPhase.idle &&
         !isBusy;
     if (shouldAdoptIncoming) {
       debugPrint(
-        '[INCOMING] adopting incoming callId=$callId while idle (no active call)',
+        '[INCOMING] accepted incoming call effectiveId=$callId sipId=$sipCallId',
       );
       _pendingCallId = callId;
       pendingId = callId;
@@ -844,7 +848,7 @@ class CallNotifier extends Notifier<CallState> {
     }
     if (!_isRelevantCall(callId, activeId)) {
       debugPrint(
-        '[SIP] ignoring event for non-active callId=$callId active=$activeId pending=$pendingId',
+        '[SIP] ignoring event for non-active callId=$callId active=$activeId pending=$pendingId reason=non-relevant',
       );
       return;
     }
@@ -893,7 +897,7 @@ class CallNotifier extends Notifier<CallState> {
         return;
       }
       debugPrint(
-        '[INCOMING] ignoring stray ${event.type.name} callId=$callId active=$activeId pending=$pendingId',
+        '[INCOMING] ignoring stray ${event.type.name} callId=$callId active=$activeId pending=$pendingId reason=not-allowed',
       );
       return;
     }

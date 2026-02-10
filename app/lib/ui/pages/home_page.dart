@@ -32,8 +32,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   int? _lastIncomingUserId;
   late final ProviderSubscription<AsyncValue<SipUsersState>>
-  _sipUsersSubscription;
+      _sipUsersSubscription;
+  late final ProviderSubscription<CallState> _callNavigationSubscription;
   bool _requestedNotificationPermission = false;
+  bool _callScreenVisible = false;
 
   @override
   void initState() {
@@ -64,6 +66,10 @@ class _HomePageState extends ConsumerState<HomePage> {
         );
       },
     );
+    _callNavigationSubscription = ref.listenManual<CallState>(
+      callControllerProvider,
+      (previous, next) => _handleCallStateChange(previous, next),
+    );
     _requestNotificationPermission();
   }
 
@@ -73,9 +79,49 @@ class _HomePageState extends ConsumerState<HomePage> {
     unawaited(PermissionsService.ensureNotificationsPermission());
   }
 
+  void _handleCallStateChange(CallState? previous, CallState next) {
+    final isIncoming = next.activeCall?.status == CallStatus.ringing;
+    final wasIncoming = previous?.activeCall?.status == CallStatus.ringing;
+    if (isIncoming && !wasIncoming) {
+      _navigateToDialerPage();
+    }
+  }
+
+  void _openDialerForUser(PbxSipUser sipUser, Dongle? dongle) {
+    _navigateToDialerPage(
+      sipUser: sipUser,
+      dongleName: dongle?.name,
+      dongleNumber: dongle?.number,
+    );
+  }
+
+  void _navigateToDialerPage({
+    PbxSipUser? sipUser,
+    String? dongleName,
+    String? dongleNumber,
+  }) {
+    if (_callScreenVisible || !mounted) return;
+    _callScreenVisible = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            settings: const RouteSettings(name: 'dialer'),
+            builder: (_) => DialerPage(
+              sipUser: sipUser,
+              dongleName: dongleName,
+              dongleNumber: dongleNumber,
+            ),
+          ),
+        )
+        .whenComplete(() {
+          _callScreenVisible = false;
+        });
+  }
+
   @override
   void dispose() {
     _sipUsersSubscription.close();
+    _callNavigationSubscription.close();
     super.dispose();
   }
 
@@ -194,17 +240,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     sipUser: sipUser,
                     dongle: dongle,
                     isCallable: isCallable,
-                    onCall: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => DialerPage(
-                            sipUser: sipUser,
-                            dongleName: dongle?.name,
-                            dongleNumber: dongle?.number,
-                          ),
-                        ),
-                      );
-                    },
+                    onCall: () => _openDialerForUser(sipUser, dongle),
                   ),
                 );
               }, childCount: visibleSipClients.length),
