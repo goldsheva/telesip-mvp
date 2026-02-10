@@ -1043,8 +1043,9 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId: activeCallId,
       errorMessage: errorMessage,
     );
-    final next =
-        status == CallStatus.ended ? baseNext.copyWith(isMuted: false) : baseNext;
+    final next = status == CallStatus.ended
+        ? baseNext.copyWith(isMuted: false)
+        : baseNext;
     _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, next);
     _commit(next);

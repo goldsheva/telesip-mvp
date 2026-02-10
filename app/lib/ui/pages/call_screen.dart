@@ -14,7 +14,6 @@ class CallScreen extends ConsumerStatefulWidget {
 }
 
 class _CallScreenState extends ConsumerState<CallScreen> {
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(callControllerProvider);
@@ -47,8 +46,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final title = call.status == CallStatus.ringing
         ? 'Incoming call'
         : call.status == CallStatus.dialing
-            ? 'Calling…'
-            : 'Call';
+        ? 'Calling…'
+        : 'Call';
 
     return Scaffold(
       backgroundColor: Colors.grey.shade900,
@@ -61,9 +60,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               Text(
                 title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),

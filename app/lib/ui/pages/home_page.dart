@@ -32,7 +32,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   int? _lastIncomingUserId;
   late final ProviderSubscription<AsyncValue<SipUsersState>>
-      _sipUsersSubscription;
+  _sipUsersSubscription;
   late final ProviderSubscription<CallState> _callNavigationSubscription;
   bool _requestedNotificationPermission = false;
   bool _callScreenVisible = false;

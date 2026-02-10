@@ -46,7 +46,8 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   void initState() {
     super.initState();
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    _isResumed = lifecycleState == AppLifecycleState.resumed || lifecycleState == null;
+    _isResumed =
+        lifecycleState == AppLifecycleState.resumed || lifecycleState == null;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref
