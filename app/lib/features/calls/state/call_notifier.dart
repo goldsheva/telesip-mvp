@@ -13,6 +13,8 @@ import 'package:app/core/storage/fcm_storage.dart';
 import 'package:app/core/storage/general_sip_credentials_storage.dart';
 import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
+import 'package:app/features/dongles/models/dongle.dart';
+import 'package:app/features/dongles/state/dongles_provider.dart';
 import 'package:app/features/sip_users/models/pbx_sip_connection.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 import 'package:app/platform/foreground_service.dart';
@@ -226,7 +228,9 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] switching to DONGLE credentials for outgoing call: ${outgoingUser.dongleId}',
       );
     }
-    final callId = await _engine.startCall(trimmed);
+    final prefixedDestination =
+        _destinationWithBootstrapPrefix(trimmed, outgoingUser);
+    final callId = await _engine.startCall(prefixedDestination);
     _pendingCallId = callId;
     _pendingLocalCallId = callId;
     _callDongleMap[callId] = outgoingUser.dongleId;
@@ -1313,6 +1317,59 @@ class CallNotifier extends Notifier<CallState> {
     if (state.watchdogState.status != CallWatchdogStatus.ok) {
       state = state.copyWith(watchdogState: CallWatchdogState.ok());
     }
+  }
+
+  String _destinationWithBootstrapPrefix(
+    String destination,
+    PbxSipUser user,
+  ) {
+    final prefix = _bootstrapPrefixForUser(user);
+    if (prefix == null || prefix.isEmpty) return destination.trim();
+    final trimmed = destination.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (_destinationAlreadyHasPrefix(trimmed, prefix)) {
+      return trimmed;
+    }
+    const encodedSeparator = '%23';
+    final candidate = '$prefix$encodedSeparator$trimmed';
+    return candidate;
+  }
+
+  bool _destinationAlreadyHasPrefix(String destination, String prefix) {
+    var candidate = destination.trim();
+    if (candidate.isEmpty) return false;
+    if (candidate.toLowerCase().startsWith('sip:')) {
+      candidate = candidate.substring(4);
+    }
+    final atIndex = candidate.indexOf('@');
+    if (atIndex >= 0) {
+      candidate = candidate.substring(0, atIndex);
+    }
+    if (candidate.startsWith('+')) {
+      candidate = candidate.substring(1);
+    }
+    candidate = candidate.replaceAll('%23', '#');
+    return candidate.startsWith('$prefix#');
+  }
+
+  String? _bootstrapPrefixForUser(PbxSipUser user) {
+    final dongleId = user.dongleId;
+    if (dongleId == null) return null;
+    final dongles = ref.read(donglesProvider).maybeWhen(
+      data: (List<Dongle> data) => data,
+      orElse: () => null,
+    );
+    if (dongles == null) return null;
+    for (final dongle in dongles) {
+      if (dongle.dongleId == dongleId) {
+        final prefix = dongle.bootstrapPbxSipUser?.trim();
+        if (prefix != null && prefix.isNotEmpty) {
+          return prefix;
+        }
+        break;
+      }
+    }
+    return null;
   }
 
   Future<void> retryCallAudio() async {
