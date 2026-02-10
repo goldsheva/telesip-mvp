@@ -1,11 +1,15 @@
 package com.sip_mvp.app
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Build
 import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 
 object AudioRouteHelper {
   private const val TAG = "AudioRouteHelper"
@@ -14,7 +18,7 @@ object AudioRouteHelper {
   fun getRouteInfo(context: Context): Map<String, Any?> {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-    val bluetoothConnected = isBluetoothHeadsetConnected()
+    val bluetoothConnected = isBluetoothHeadsetConnected(context)
     val wiredConnected = false // skip unreliable wired detection
     val speakerOn = audioManager.isSpeakerphoneOn
     val hasEarpiece = telephonyManager.phoneType != TelephonyManager.PHONE_TYPE_NONE
@@ -65,8 +69,24 @@ object AudioRouteHelper {
     }
   }
 
-  private fun isBluetoothHeadsetConnected(): Boolean {
+  private fun hasBtConnectPermission(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(
+      context,
+      Manifest.permission.BLUETOOTH_CONNECT
+    ) == PackageManager.PERMISSION_GRANTED
+  }
+
+  private fun isBluetoothHeadsetConnected(context: Context): Boolean {
     val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
-    return adapter.getProfileConnectionState(BluetoothProfile.HEADSET) == BluetoothProfile.STATE_CONNECTED
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBtConnectPermission(context)) {
+      Log.w(TAG, "BLUETOOTH_CONNECT not granted, treating as not connected")
+      return false
+    }
+    return try {
+      adapter.getProfileConnectionState(BluetoothProfile.HEADSET) == BluetoothProfile.STATE_CONNECTED
+    } catch (se: SecurityException) {
+      Log.w(TAG, "SecurityException while checking BT state: ${se.message}")
+      false
+    }
   }
 }

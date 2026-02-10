@@ -152,6 +152,8 @@ class CallNotifier extends Notifier<CallState> {
   Timer? _watchdogFailureTimer;
   String? _failureTimerCallId;
   String? _pendingCallId;
+  String? _pendingLocalCallId;
+  final Map<String, String> _sipToLocalCallId = {};
   Timer? _registrationErrorTimer;
   String? _pendingRegistrationError;
   final Map<String, int?> _callDongleMap = {};
@@ -225,6 +227,7 @@ class CallNotifier extends Notifier<CallState> {
     }
     final callId = await _engine.startCall(trimmed);
     _pendingCallId = callId;
+    _pendingLocalCallId = callId;
     _callDongleMap[callId] = outgoingUser.dongleId;
     _startDialTimeout(callId);
     _clearError();
@@ -727,8 +730,10 @@ class CallNotifier extends Notifier<CallState> {
       _commit(state.copyWith(isRegistered: _isRegistered));
       return;
     }
-    final callId = event.callId;
-    if (callId == null) return;
+    final sipCallId = event.callId;
+    if (sipCallId == null) return;
+
+    var callId = _sipToLocalCallId[sipCallId] ?? sipCallId;
 
     final now = DateTime.now();
     _recentlyEnded.removeWhere(
@@ -750,12 +755,23 @@ class CallNotifier extends Notifier<CallState> {
         !state.calls.containsKey(callId) &&
         callId != activeId &&
         (pendingId == null || callId != pendingId);
-    if (callIdUnknown && pendingId != null && !state.calls.containsKey(callId)) {
+    final isOutgoingEvent =
+        event.type == SipEventType.dialing ||
+        event.callState == SipCallState.dialing;
+    if (callIdUnknown &&
+        pendingId != null &&
+        _pendingLocalCallId != null &&
+        isOutgoingEvent &&
+        !_sipToLocalCallId.containsKey(sipCallId)) {
+      final localPendingId = _pendingLocalCallId!;
       debugPrint(
-        '[CALLS] stitched sipCallId=$callId to localCallId=$pendingId',
+        '[CALLS] mapped sipCallId=$sipCallId -> localCallId=$localPendingId',
       );
-      _pendingCallId = callId;
-      pendingId = callId;
+      _sipToLocalCallId[sipCallId] = localPendingId;
+      callId = localPendingId;
+      pendingId = localPendingId;
+      _pendingCallId = localPendingId;
+      _pendingLocalCallId = null;
       callIdUnknown = false;
     }
     final shouldAdoptIncoming =
@@ -880,8 +896,11 @@ class CallNotifier extends Notifier<CallState> {
       }
       _cancelDialTimeout();
       _pendingCallId = null;
+      _pendingLocalCallId = null;
+      _clearSipMappingsForLocalCall(callId);
       _callDongleMap.remove(callId);
       if (pendingCallId != null) {
+        _clearSipMappingsForLocalCall(pendingCallId);
         _callDongleMap.remove(pendingCallId);
       }
       _busyUntil = now.add(_busyGrace);
@@ -895,7 +914,9 @@ class CallNotifier extends Notifier<CallState> {
         _dialTimeoutCallId = callId;
       }
       if (pendingCallId != null && pendingCallId != callId) {
+        _clearSipMappingsForLocalCall(pendingCallId);
         _pendingCallId = null;
+        _pendingLocalCallId = null;
       }
     }
 
@@ -1041,6 +1062,16 @@ class CallNotifier extends Notifier<CallState> {
   bool _isRelevantCall(String callId, String? activeId) {
     return callId == activeId ||
         (_pendingCallId != null && callId == _pendingCallId);
+  }
+
+  void _clearSipMappingsForLocalCall(String localCallId) {
+    final keysToRemove = _sipToLocalCallId.entries
+        .where((entry) => entry.value == localCallId)
+        .map((entry) => entry.key)
+        .toList();
+    for (final key in keysToRemove) {
+      _sipToLocalCallId.remove(key);
+    }
   }
 
   CallStatus _mapStatus(SipEventType event) {
