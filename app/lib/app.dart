@@ -39,10 +39,14 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   ProviderSubscription<CallState>? _callStateSubscription;
   String? _incomingScreenCallId;
   String? _scheduledCallId;
+  String? _deferredCallId;
+  late bool _isResumed;
 
   @override
   void initState() {
     super.initState();
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _isResumed = lifecycleState == AppLifecycleState.resumed || lifecycleState == null;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref
@@ -102,7 +106,16 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     AppLifecycleTracker.update(state);
+    _isResumed = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
+      if (_deferredCallId != null) {
+        if (_deferredCallId == _incomingScreenCallId) {
+          _deferredCallId = null;
+        } else {
+          _schedulePush(_deferredCallId!);
+          _deferredCallId = null;
+        }
+      }
       ref
           .read(incomingWakeCoordinatorProvider)
           .checkPendingHint()
@@ -166,6 +179,10 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (newCallId != null && newCallId != previousCallId) {
       _schedulePush(newCallId);
     }
+    final activeCall = next.activeCall;
+    if (activeCall == null || activeCall.status == CallStatus.ended) {
+      _deferredCallId = null;
+    }
   }
 
   void _pushCallScreen(String callId) {
@@ -194,6 +211,10 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   }
 
   void _schedulePush(String callId) {
+    if (!_isResumed) {
+      _deferredCallId = callId;
+      return;
+    }
     if (_incomingScreenCallId == callId) return;
     if (_scheduledCallId == callId) return;
     _scheduledCallId = callId;
