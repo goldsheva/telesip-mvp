@@ -1,3 +1,5 @@
+import 'package:app/features/dongles/models/dongle_bootstrap.dart';
+
 class Dongle {
   final int dongleId;
   final String name;
@@ -6,6 +8,7 @@ class Dongle {
   final DongleOnlineStatus dongleOnlineStatus;
   final bool isTariffPackageActive;
   final DongleCallType? dongleCallType;
+  final DongleBootstrap? bootstrapDongle;
 
   const Dongle({
     required this.dongleId,
@@ -15,6 +18,7 @@ class Dongle {
     required this.dongleOnlineStatus,
     required this.isTariffPackageActive,
     required this.dongleCallType,
+    required this.bootstrapDongle,
   });
 
   factory Dongle.fromJson(Map<String, dynamic> json) {
@@ -30,10 +34,17 @@ class Dongle {
       dongleCallType: DongleCallType.fromValue(
         (json['dongle_call_type_id'] as num?)?.toInt(),
       ),
+      bootstrapDongle: json['bootstrap_dongle'] is Map<String, dynamic>
+          ? DongleBootstrap.fromJson(
+              json['bootstrap_dongle'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
   bool get isCallable => dongleOnlineStatus == DongleOnlineStatus.online;
+
+  String? get bootstrapPbxSipUser => bootstrapDongle?.pbxSipUser;
 }
 
 enum DongleOnlineStatus {
