@@ -65,13 +65,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
-  call_audio_route:
-    dependency: "direct main"
-    description:
-      path: "../packages/call_audio_route"
-      relative: true
-    source: path
-    version: "0.0.1"
   characters:
     dependency: transitive
     description:

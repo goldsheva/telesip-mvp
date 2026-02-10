@@ -1,44 +1,38 @@
 # Native audio routing integration
 
-Use the `call_audio_route` plugin from `packages/call_audio_route` for reliable speaker/earpiece/Bluetooth routing inside the Flutter app.
+Use the built-in `AudioRouteService` (_app.calls/audio_route_) for reliable speaker/earpiece/Bluetooth routing inside the Flutter app.
 
-1. Instantiate the helper in a singleton or call controller:
-
-```dart
-final callAudioRoute = CallAudioRoute();
-```
-
-2. Hook it into the call lifecycle:
+1. Plug it into the call lifecycle from wherever you manage calls:
 
 ```dart
 Future<void> onIncomingCall() async {
-  await callAudioRoute.setRoute(AudioRoute.earpiece);
+  await AudioRouteService.setRoute(AudioRoute.earpiece);
 }
 
 Future<void> onAnswer() async {
-  await callAudioRoute.setRoute(AudioRoute.speaker);
+  await AudioRouteService.setRoute(AudioRoute.speaker);
 }
 
 Future<void> onCallReconnect() async {
-  final info = await callAudioRoute.getRouteInfo();
-  if (info.bluetoothConnected) {
-    await callAudioRoute.setRoute(AudioRoute.bluetooth);
-  } else {
-    await callAudioRoute.setRoute(info.current);
+  final info = await AudioRouteService.getRouteInfo();
+  if (info?.bluetoothConnected == true) {
+    await AudioRouteService.setRoute(AudioRoute.bluetooth);
+  } else if (info != null) {
+    await AudioRouteService.setRoute(info.current);
   }
 }
 
 Future<void> onHangup() async {
-  await callAudioRoute.setRoute(AudioRoute.systemDefault);
+  await AudioRouteService.setRoute(AudioRoute.systemDefault);
 }
 ```
 
-3. Observe the `routeChanges` stream to react when accessories connect/disconnect:
+2. Listen to `routeChanges` if you need to react when accessories connect/disconnect:
 
 ```dart
-callAudioRoute.routeChanges.listen((info) {
+AudioRouteService.routeChanges().listen((info) {
   // update UI, show “Bluetooth disconnected”, etc.
 });
 ```
 
-This keeps the native audio session in `MODE_IN_COMMUNICATION`, ensures focus is requested/abandoned, and lets you switch between speaker, earpiece, Bluetooth, or wired headsets without rewriting the entire SIP layer.
+The service keeps the native audio session in `MODE_IN_COMMUNICATION`, ensures focus is requested/abandoned, and lets you switch between speaker, earpiece, Bluetooth, or wired headsets without duplicating the SIP layer logic.

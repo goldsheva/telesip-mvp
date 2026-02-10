@@ -22,7 +22,7 @@ import 'package:app/services/audio_focus_service.dart';
 import 'package:app/services/audio_route_service.dart';
 import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
-import 'package:call_audio_route/call_audio_route.dart';
+import 'package:app/services/audio_route_types.dart';
 import 'package:app/sip/sip_engine.dart';
 
 CallNotifier? _globalCallNotifierInstance;
@@ -228,8 +228,10 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] switching to DONGLE credentials for outgoing call: ${outgoingUser.dongleId}',
       );
     }
-    final prefixedDestination =
-        _destinationWithBootstrapPrefix(trimmed, outgoingUser);
+    final prefixedDestination = _destinationWithBootstrapPrefix(
+      trimmed,
+      outgoingUser,
+    );
     final callId = await _engine.startCall(prefixedDestination);
     _pendingCallId = callId;
     _pendingLocalCallId = callId;
@@ -1319,10 +1321,7 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
-  String _destinationWithBootstrapPrefix(
-    String destination,
-    PbxSipUser user,
-  ) {
+  String _destinationWithBootstrapPrefix(String destination, PbxSipUser user) {
     final prefix = _bootstrapPrefixForUser(user);
     if (prefix == null || prefix.isEmpty) return destination.trim();
     final trimmed = destination.trim();
@@ -1355,10 +1354,9 @@ class CallNotifier extends Notifier<CallState> {
   String? _bootstrapPrefixForUser(PbxSipUser user) {
     final dongleId = user.dongleId;
     if (dongleId == null) return null;
-    final dongles = ref.read(donglesProvider).maybeWhen(
-      data: (List<Dongle> data) => data,
-      orElse: () => null,
-    );
+    final dongles = ref
+        .read(donglesProvider)
+        .maybeWhen(data: (List<Dongle> data) => data, orElse: () => null);
     if (dongles == null) return null;
     for (final dongle in dongles) {
       if (dongle.dongleId == dongleId) {

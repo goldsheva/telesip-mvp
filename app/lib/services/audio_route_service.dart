@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'package:call_audio_route/call_audio_route.dart';
+import 'package:app/services/audio_route_types.dart';
 
 class AudioRouteService {
   AudioRouteService._();

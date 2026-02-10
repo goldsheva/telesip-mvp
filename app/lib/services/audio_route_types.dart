@@ -1,8 +1,7 @@
-/// Shared definitions that describe the available audio routes.
-enum AudioRoute { earpiece, speaker, bluetooth, wiredHeadset, systemDefault }
+/// Common definitions that describe the available audio routes.
+enum AudioRoute { speaker, earpiece, bluetooth, wiredHeadset, systemDefault }
 
-/// Lightweight carrier for the current route state that is transferred
-/// over the method/event channels.
+/// Carries the current routing state between the native layer and Flutter.
 class AudioRouteInfo {
   final AudioRoute current;
   final List<AudioRoute> available;

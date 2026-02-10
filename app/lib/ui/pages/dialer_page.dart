@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:call_audio_route/call_audio_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_native_contact_picker/model/contact.dart';
 import 'package:app/features/calls/call_watchdog.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
+import 'package:app/services/audio_route_types.dart';
 import 'package:app/services/permissions_service.dart';
 
 class DialerPage extends ConsumerStatefulWidget {
