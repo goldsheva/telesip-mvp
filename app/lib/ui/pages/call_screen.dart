@@ -44,7 +44,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final notifier = ref.read(callControllerProvider.notifier);
     final statusText = _statusText(call.status);
     final isRinging = call.status == CallStatus.ringing;
-    final title = call.status == CallStatus.ringing ? 'Incoming call' : 'Call';
+    final title = call.status == CallStatus.ringing
+        ? 'Incoming call'
+        : call.status == CallStatus.dialing
+            ? 'Calling…'
+            : 'Call';
 
     return Scaffold(
       backgroundColor: Colors.grey.shade900,
@@ -192,7 +196,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       case CallStatus.ringing:
         return 'Ringing';
       case CallStatus.dialing:
-        return 'Dialing';
+        return 'Calling…';
       case CallStatus.connected:
         return 'In call';
       case CallStatus.ended:

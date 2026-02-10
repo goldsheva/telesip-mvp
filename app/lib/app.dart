@@ -160,13 +160,13 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (authStatus != AuthStatus.authenticated) {
       return;
     }
-    final currentCall = next.activeCall;
-    final wasRinging = previous?.activeCall?.status == CallStatus.ringing;
-    final isRinging = currentCall?.status == CallStatus.ringing;
-    if (isRinging && !wasRinging && currentCall != null) {
-      _pushCallScreen(currentCall.id);
+    final newCallId = next.activeCallId;
+    final previousCallId = previous?.activeCallId;
+    if (newCallId != null && newCallId != previousCallId) {
+      _pushCallScreen(newCallId);
       return;
     }
+    final currentCall = next.activeCall;
     if (currentCall == null || currentCall.status == CallStatus.ended) {
       _incomingScreenCallId = null;
     }
