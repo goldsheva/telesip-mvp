@@ -35,6 +35,9 @@ class _AuthGate extends ConsumerStatefulWidget {
 class _AuthGateState extends ConsumerState<_AuthGate>
     with WidgetsBindingObserver {
   ProviderSubscription<AsyncValue<AuthState>>? _authSubscription;
+  ProviderSubscription<CallState>? _callStateSubscription;
+  String? _incomingDialogCallId;
+  BuildContext? _incomingDialogContext;
 
   @override
   void initState() {
@@ -51,6 +54,10 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       (previous, next) => _handleAuthState(next),
     );
     _handleAuthState(ref.read(authNotifierProvider));
+    _callStateSubscription = ref.listenManual<CallState>(
+      callControllerProvider,
+      (previous, next) => _handleCallStateChange(previous, next),
+    );
   }
 
   bool _requestedFcmPermission = false;
@@ -87,6 +94,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.close();
+    _callStateSubscription?.close();
     super.dispose();
   }
 
@@ -143,6 +151,75 @@ class _AuthGateState extends ConsumerState<_AuthGate>
 
     if (executed) {
       await IncomingNotificationService.clearCallAction();
+    }
+  }
+
+  void _handleCallStateChange(CallState? previous, CallState next) {
+    final authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    if (authStatus != AuthStatus.authenticated) {
+      return;
+    }
+    final currentCall = next.activeCall;
+    final wasRinging = previous?.activeCall?.status == CallStatus.ringing;
+    final isRinging = currentCall?.status == CallStatus.ringing;
+    if (isRinging && !wasRinging && currentCall != null) {
+      _showIncomingDialog(currentCall.id);
+      return;
+    }
+    if (_incomingDialogCallId != null &&
+        (currentCall == null || currentCall.status != CallStatus.ringing)) {
+      _closeIncomingDialog();
+    }
+  }
+
+  void _showIncomingDialog(String callId) {
+    if (!mounted) return;
+    if (_incomingDialogCallId == callId) return;
+    _closeIncomingDialog();
+    _incomingDialogCallId = callId;
+    final notifier = ref.read(callControllerProvider.notifier);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          _incomingDialogContext = dialogContext;
+          return AlertDialog(
+            title: const Text('Incoming call'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await notifier.decline(callId);
+                  _closeIncomingDialog();
+                },
+                child: const Text('Decline'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await notifier.answer(callId);
+                  _closeIncomingDialog();
+                },
+                child: const Text('Answer'),
+              ),
+            ],
+          );
+        },
+      ).then((_) {
+        if (_incomingDialogCallId == callId) {
+          _incomingDialogCallId = null;
+        }
+        _incomingDialogContext = null;
+      }),
+    );
+  }
+
+  void _closeIncomingDialog() {
+    final dialogContext = _incomingDialogContext;
+    _incomingDialogCallId = null;
+    _incomingDialogContext = null;
+    if (dialogContext != null) {
+      Navigator.of(dialogContext).pop();
     }
   }
 

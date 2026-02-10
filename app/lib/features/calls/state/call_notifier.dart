@@ -644,7 +644,23 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  Future<void> answer(String callId) async {
+    await _answerIncomingCall(callId, source: 'answer');
+  }
+
+  Future<void> decline(String callId) async {
+    await _declineIncomingCall(callId, source: 'decline');
+  }
+
   Future<void> answerFromNotification(String callId) async {
+    await _answerIncomingCall(callId, source: 'answerFromNotification');
+  }
+
+  Future<void> declineFromNotification(String callId) async {
+    await _declineIncomingCall(callId, source: 'declineFromNotification');
+  }
+
+  Future<void> _answerIncomingCall(String callId, {required String source}) async {
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
@@ -652,13 +668,13 @@ class CallNotifier extends Notifier<CallState> {
     final ready = await _ensureIncomingReady();
     if (!ready) {
       debugPrint(
-        '[CALLS] answerFromNotification aborted: registration not ready',
+        '[CALLS] $source aborted: registration not ready',
       );
       return;
     }
     final micOk = await PermissionsService.ensureMicrophonePermission();
     if (!micOk) {
-      debugPrint('[CALLS] answerFromNotification aborted: microphone denied');
+      debugPrint('[CALLS] $source aborted: microphone denied');
       return;
     }
     var call = _engine.getCall(callId);
@@ -666,7 +682,7 @@ class CallNotifier extends Notifier<CallState> {
       call = _engine.getCall(state.activeCallId!);
     }
     if (call == null) {
-      debugPrint('[CALLS] answerFromNotification unknown call $callId');
+      debugPrint('[CALLS] $source unknown call $callId');
       return;
     }
     try {
@@ -674,11 +690,11 @@ class CallNotifier extends Notifier<CallState> {
         'mediaConstraints': <String, dynamic>{'audio': true, 'video': false},
       });
     } catch (error) {
-      debugPrint('[CALLS] answerFromNotification failed: $error');
+      debugPrint('[CALLS] $source failed: $error');
     }
   }
 
-  Future<void> declineFromNotification(String callId) async {
+  Future<void> _declineIncomingCall(String callId, {required String source}) async {
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
@@ -686,7 +702,7 @@ class CallNotifier extends Notifier<CallState> {
     final ready = await _ensureIncomingReady();
     if (!ready) {
       debugPrint(
-        '[CALLS] declineFromNotification aborted: registration not ready',
+        '[CALLS] $source aborted: registration not ready',
       );
       return;
     }
@@ -695,13 +711,13 @@ class CallNotifier extends Notifier<CallState> {
       targetCallId = state.activeCallId!;
     } else if (_engine.getCall(callId) == null && state.activeCallId == null) {
       debugPrint(
-        '[CALLS] declineFromNotification call $callId missing (falling back to callId)',
+        '[CALLS] $source call $callId missing (falling back to callId)',
       );
     }
     try {
       await _engine.hangup(targetCallId);
     } catch (error) {
-      debugPrint('[CALLS] declineFromNotification failed: $error');
+      debugPrint('[CALLS] $source failed: $error');
     }
   }
 
