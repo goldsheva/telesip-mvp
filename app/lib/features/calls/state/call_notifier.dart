@@ -139,6 +139,7 @@ class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
   bool _isRegistered = false;
+  SipRegistrationState _lastRegistrationState = SipRegistrationState.none;
   int? _registeredUserId;
   PbxSipUser? _lastKnownUser;
   PbxSipUser? _incomingUser;
@@ -499,15 +500,20 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  bool get _incomingRegistrationReady =>
+      state.isRegistered ||
+      (_isRegistered &&
+          _lastRegistrationState == SipRegistrationState.registered);
+
   Future<bool> _ensureIncomingReady({
     Duration timeout = const Duration(seconds: 4),
   }) async {
     await handleIncomingCallHintIfAny();
     final deadline = DateTime.now().add(timeout);
-    while (!state.isRegistered && DateTime.now().isBefore(deadline)) {
+    while (!_incomingRegistrationReady && DateTime.now().isBefore(deadline)) {
       await Future.delayed(const Duration(milliseconds: 200));
     }
-    if (state.isRegistered) return true;
+    if (_incomingRegistrationReady) return true;
     debugPrint('[INCOMING] registration not ready after ${timeout.inSeconds}s');
     return false;
   }
@@ -713,6 +719,9 @@ class CallNotifier extends Notifier<CallState> {
   void _onEvent(SipEvent event) {
     if (event.type == SipEventType.registration) {
       final registrationState = event.registrationState;
+      if (registrationState != null) {
+        _lastRegistrationState = registrationState;
+      }
       if (registrationState == SipRegistrationState.registered) {
         _isRegistered = true;
         _registeredUserId = _lastKnownUser?.pbxSipUserId;
