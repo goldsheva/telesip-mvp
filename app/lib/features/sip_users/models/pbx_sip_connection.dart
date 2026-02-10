@@ -1,5 +1,3 @@
-import 'package:app/features/sip_users/models/json_type_utils.dart';
-
 /// Mirrors the `/components/schemas/PbxSipUser` connection object from OpenAPI.
 class PbxSipConnection {
   final String pbxSipUrl;
@@ -14,9 +12,9 @@ class PbxSipConnection {
 
   factory PbxSipConnection.fromJson(Map<String, dynamic> json) {
     return PbxSipConnection(
-      pbxSipUrl: parseOpenApiString(json['pbx_sip_url']),
-      pbxSipPort: parseOpenApiInt(json['pbx_sip_port']),
-      pbxSipProtocol: parseOpenApiString(json['pbx_sip_protocol']),
+      pbxSipUrl: json['pbx_sip_url'] as String? ?? '',
+      pbxSipPort: (json['pbx_sip_port'] as num?)?.toInt() ?? 0,
+      pbxSipProtocol: json['pbx_sip_protocol'] as String? ?? '',
     );
   }
 }

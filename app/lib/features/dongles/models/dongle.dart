@@ -1,12 +1,9 @@
-import 'package:app/features/sip_users/models/json_type_utils.dart';
-
 class Dongle {
   final int dongleId;
   final String name;
   final String? number;
   final bool isActive;
   final DongleOnlineStatus dongleOnlineStatus;
-  final String displayStatus;
   final bool isTariffPackageActive;
   final DongleCallType? dongleCallType;
 
@@ -16,24 +13,22 @@ class Dongle {
     required this.number,
     required this.isActive,
     required this.dongleOnlineStatus,
-    required this.displayStatus,
     required this.isTariffPackageActive,
     required this.dongleCallType,
   });
 
   factory Dongle.fromJson(Map<String, dynamic> json) {
     return Dongle(
-      dongleId: parseOpenApiInt(json['dongle_id']),
-      name: parseOpenApiString(json['name']),
+      dongleId: (json['dongle_id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? 'Dongle',
       number: json['number'] as String?,
       isActive: json['is_active'] == true,
       dongleOnlineStatus: DongleOnlineStatus.fromValue(
-        parseOpenApiInt(json['dongle_online_status']),
+        (json['dongle_online_status'] as num?)?.toInt(),
       ),
-      displayStatus: parseOpenApiString(json['display_status']),
       isTariffPackageActive: json['is_tariff_package_active'] == true,
       dongleCallType: DongleCallType.fromValue(
-        parseOpenApiNullableInt(json['dongle_call_type_id']),
+        (json['dongle_call_type_id'] as num?)?.toInt(),
       ),
     );
   }

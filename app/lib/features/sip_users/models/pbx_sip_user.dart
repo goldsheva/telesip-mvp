@@ -1,4 +1,3 @@
-import 'package:app/features/sip_users/models/json_type_utils.dart';
 import 'package:app/features/sip_users/models/pbx_sip_connection.dart';
 
 /// Represents the OpenAPI `PbxSipUser` schema returned by `/sip-user`.
@@ -30,12 +29,12 @@ class PbxSipUser {
         const <PbxSipConnection>[];
 
     return PbxSipUser(
-      pbxSipUserId: parseOpenApiInt(json['pbx_sip_user_id']),
-      userId: parseOpenApiInt(json['user_id']),
-      sipLogin: parseOpenApiString(json['sip_login']),
-      sipPassword: parseOpenApiString(json['sip_password']),
-      dialplanId: parseOpenApiInt(json['dialplan_id']),
-      dongleId: parseOpenApiNullableInt(json['dongle_id']),
+      pbxSipUserId: (json['pbx_sip_user_id'] as num?)?.toInt() ?? 0,
+      userId: (json['user_id'] as num?)?.toInt() ?? 0,
+      sipLogin: json['sip_login'] as String? ?? '',
+      sipPassword: json['sip_password'] as String? ?? '',
+      dialplanId: (json['dialplan_id'] as num?)?.toInt() ?? 0,
+      dongleId: (json['dongle_id'] as num?)?.toInt(),
       pbxSipConnections: connections,
     );
   }
