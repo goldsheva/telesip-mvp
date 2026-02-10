@@ -147,10 +147,14 @@ class CallState {
 
 enum _CallPhase { idle, ringing, connecting, active, ending }
 
+static const _errorDedupTtl = Duration(seconds: 2);
+
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
   bool _isRegistered = false;
+  String? _lastErrorMessage;
+  DateTime? _lastErrorTimestamp;
   SipRegistrationState _lastRegistrationState = SipRegistrationState.none;
   int? _registeredUserId;
   PbxSipUser? _lastKnownUser;
@@ -210,7 +214,12 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> startCall(String destination) async {
     final activeCall = state.activeCall;
-    if (activeCall != null && activeCall.status != CallStatus.ended) return;
+    if (activeCall != null && activeCall.status != CallStatus.ended) {
+      const message = 'Cannot start a new call while one is active';
+      _setError(message);
+      debugPrint('[CALLS] startCall blocked: $message active=${activeCall.id}');
+      return;
+    }
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return;
     if (_phase != _CallPhase.idle && _phase != _CallPhase.ending) {
@@ -1216,6 +1225,14 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _setError(String message) {
+    final now = DateTime.now();
+    if (_lastErrorMessage == message &&
+        _lastErrorTimestamp != null &&
+        now.difference(_lastErrorTimestamp!) < _errorDedupTtl) {
+      return;
+    }
+    _lastErrorMessage = message;
+    _lastErrorTimestamp = now;
     state = state.copyWith(errorMessage: message);
   }
 
