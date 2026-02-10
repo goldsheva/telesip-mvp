@@ -98,6 +98,8 @@ class CallState {
     this.errorMessage,
     required this.watchdogState,
     required this.isRegistered,
+    required this.isMuted,
+    required this.audioRoute,
   });
 
   factory CallState.initial() => CallState(
@@ -105,6 +107,8 @@ class CallState {
     errorMessage: null,
     watchdogState: CallWatchdogState.ok(),
     isRegistered: false,
+    isMuted: false,
+    audioRoute: AudioRoute.systemDefault,
   );
 
   final Map<String, CallInfo> calls;
@@ -112,6 +116,8 @@ class CallState {
   final String? errorMessage;
   final CallWatchdogState watchdogState;
   final bool isRegistered;
+  final bool isMuted;
+  final AudioRoute audioRoute;
 
   CallInfo? get activeCall => activeCallId != null ? calls[activeCallId] : null;
 
@@ -124,6 +130,8 @@ class CallState {
     String? errorMessage,
     CallWatchdogState? watchdogState,
     bool? isRegistered,
+    bool? isMuted,
+    AudioRoute? audioRoute,
   }) {
     return CallState(
       calls: calls ?? this.calls,
@@ -131,6 +139,8 @@ class CallState {
       errorMessage: errorMessage ?? this.errorMessage,
       watchdogState: watchdogState ?? this.watchdogState,
       isRegistered: isRegistered ?? this.isRegistered,
+      isMuted: isMuted ?? this.isMuted,
+      audioRoute: audioRoute ?? this.audioRoute,
     );
   }
 }
@@ -166,7 +176,6 @@ class CallNotifier extends Notifier<CallState> {
   bool _audioFocusHeld = false;
   String? _focusedCallId;
   bool _scoActive = false;
-  bool _muted = false;
   _CallPhase _phase = _CallPhase.idle;
   bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
@@ -619,6 +628,7 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     await AudioRouteService.setRoute(route);
+    _commit(state.copyWith(audioRoute: route), syncFgs: false);
   }
 
   Future<bool> setCallMuted(bool muted) async {
@@ -628,7 +638,7 @@ class CallNotifier extends Notifier<CallState> {
     final call = _engine.getCall(callId);
     if (call == null) return false;
 
-    if (_muted == muted) return true;
+    if (state.isMuted == muted) return true;
 
     try {
       if (muted) {
@@ -636,7 +646,7 @@ class CallNotifier extends Notifier<CallState> {
       } else {
         call.unmute(true, false);
       }
-      _muted = muted;
+      _commit(state.copyWith(isMuted: muted), syncFgs: false);
       return true;
     } catch (error) {
       debugPrint('[CALLS] unable to toggle mute: $error');
@@ -1007,7 +1017,6 @@ class CallNotifier extends Notifier<CallState> {
         _clearSipMappingsForLocalCall(pendingCallId);
         _callDongleMap.remove(pendingCallId);
       }
-      _muted = false;
       _busyUntil = now.add(_busyGrace);
     } else {
       _busyUntil = null;
@@ -1029,11 +1038,13 @@ class CallNotifier extends Notifier<CallState> {
         ? event.message ?? 'SIP error'
         : null;
     final previousState = state;
-    final next = state.copyWith(
+    final baseNext = state.copyWith(
       calls: updated,
       activeCallId: activeCallId,
       errorMessage: errorMessage,
     );
+    final next =
+        status == CallStatus.ended ? baseNext.copyWith(isMuted: false) : baseNext;
     _applyPhase(status, callId);
     _handleWatchdogActivation(previousState, next);
     _commit(next);

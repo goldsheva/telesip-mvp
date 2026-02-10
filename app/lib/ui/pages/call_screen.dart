@@ -14,13 +14,13 @@ class CallScreen extends ConsumerStatefulWidget {
 }
 
 class _CallScreenState extends ConsumerState<CallScreen> {
-  bool _isMuted = false;
-  bool _isSpeakerOn = false;
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(callControllerProvider);
     final call = state.calls[widget.callId];
+    final isMuted = state.isMuted;
+    final isSpeakerOn = state.audioRoute == AudioRoute.speaker;
     final activeCallId = state.activeCallId;
     if (call == null || call.status == CallStatus.ended) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -120,30 +120,20 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     _buildToggle(
                       context,
                       icon: Icons.mic_off,
-                      label: _isMuted ? 'Unmute' : 'Mute',
-                      active: _isMuted,
-                      onPressed: () async {
-                        final desired = !_isMuted;
-                        if (await notifier.setCallMuted(desired)) {
-                          setState(() {
-                            _isMuted = desired;
-                          });
-                        }
-                      },
+                      label: isMuted ? 'Unmute' : 'Mute',
+                      active: isMuted,
+                      onPressed: () => notifier.setCallMuted(!isMuted),
                     ),
                     _buildToggle(
                       context,
                       icon: Icons.volume_up,
-                      label: _isSpeakerOn ? 'Speaker on' : 'Speaker off',
-                      active: _isSpeakerOn,
+                      label: isSpeakerOn ? 'Speaker on' : 'Speaker off',
+                      active: isSpeakerOn,
                       onPressed: () {
-                        final desired = !_isSpeakerOn;
+                        final desired = !isSpeakerOn;
                         notifier.setCallAudioRoute(
                           desired ? AudioRoute.speaker : AudioRoute.earpiece,
                         );
-                        setState(() {
-                          _isSpeakerOn = desired;
-                        });
                       },
                     ),
                   ],
