@@ -9,6 +9,7 @@ import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/firebase_messaging_service.dart';
 import 'package:app/services/incoming_notification_service.dart';
+import 'package:app/ui/pages/call_screen.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
 
@@ -36,8 +37,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     with WidgetsBindingObserver {
   ProviderSubscription<AsyncValue<AuthState>>? _authSubscription;
   ProviderSubscription<CallState>? _callStateSubscription;
-  String? _incomingDialogCallId;
-  BuildContext? _incomingDialogContext;
+  String? _incomingScreenCallId;
 
   @override
   void initState() {
@@ -164,63 +164,37 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     final wasRinging = previous?.activeCall?.status == CallStatus.ringing;
     final isRinging = currentCall?.status == CallStatus.ringing;
     if (isRinging && !wasRinging && currentCall != null) {
-      _showIncomingDialog(currentCall.id);
+      _pushCallScreen(currentCall.id);
       return;
     }
-    if (_incomingDialogCallId != null &&
-        (currentCall == null || currentCall.status != CallStatus.ringing)) {
-      _closeIncomingDialog();
+    if (currentCall == null || currentCall.status == CallStatus.ended) {
+      _incomingScreenCallId = null;
     }
   }
 
-  void _showIncomingDialog(String callId) {
+  void _pushCallScreen(String callId) {
     if (!mounted) return;
-    if (_incomingDialogCallId == callId) return;
-    _closeIncomingDialog();
-    _incomingDialogCallId = callId;
-    final notifier = ref.read(callControllerProvider.notifier);
-    unawaited(
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          _incomingDialogContext = dialogContext;
-          return AlertDialog(
-            title: const Text('Incoming call'),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  await notifier.decline(callId);
-                  _closeIncomingDialog();
-                },
-                child: const Text('Decline'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  await notifier.answer(callId);
-                  _closeIncomingDialog();
-                },
-                child: const Text('Answer'),
-              ),
-            ],
-          );
-        },
-      ).then((_) {
-        if (_incomingDialogCallId == callId) {
-          _incomingDialogCallId = null;
-        }
-        _incomingDialogContext = null;
-      }),
+    if (_incomingScreenCallId == callId) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final previousCallId = _incomingScreenCallId;
+    _incomingScreenCallId = callId;
+    final route = MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => CallScreen(callId: callId),
     );
-  }
-
-  void _closeIncomingDialog() {
-    final dialogContext = _incomingDialogContext;
-    _incomingDialogCallId = null;
-    _incomingDialogContext = null;
-    if (dialogContext != null) {
-      Navigator.of(dialogContext).pop();
+    if (previousCallId != null) {
+      navigator.pushReplacement(route).then((_) {
+        if (_incomingScreenCallId == callId) {
+          _incomingScreenCallId = null;
+        }
+      });
+      return;
     }
+    navigator.push(route).then((_) {
+      if (_incomingScreenCallId == callId) {
+        _incomingScreenCallId = null;
+      }
+    });
   }
 
   int? _timestampToMillis(Object? value) {

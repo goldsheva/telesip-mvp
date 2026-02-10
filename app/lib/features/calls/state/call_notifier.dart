@@ -660,16 +660,17 @@ class CallNotifier extends Notifier<CallState> {
     await _declineIncomingCall(callId, source: 'declineFromNotification');
   }
 
-  Future<void> _answerIncomingCall(String callId, {required String source}) async {
+  Future<void> _answerIncomingCall(
+    String callId, {
+    required String source,
+  }) async {
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
     }
     final ready = await _ensureIncomingReady();
     if (!ready) {
-      debugPrint(
-        '[CALLS] $source aborted: registration not ready',
-      );
+      debugPrint('[CALLS] $source aborted: registration not ready');
       return;
     }
     final micOk = await PermissionsService.ensureMicrophonePermission();
@@ -694,16 +695,17 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
-  Future<void> _declineIncomingCall(String callId, {required String source}) async {
+  Future<void> _declineIncomingCall(
+    String callId, {
+    required String source,
+  }) async {
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
     }
     final ready = await _ensureIncomingReady();
     if (!ready) {
-      debugPrint(
-        '[CALLS] $source aborted: registration not ready',
-      );
+      debugPrint('[CALLS] $source aborted: registration not ready');
       return;
     }
     var targetCallId = callId;
@@ -820,8 +822,7 @@ class CallNotifier extends Notifier<CallState> {
     var activeId = state.activeCallId;
     var pendingId = _pendingCallId;
     var activeCall = state.activeCall;
-    var hasActive =
-        activeCall != null && activeCall.status != CallStatus.ended;
+    var hasActive = activeCall != null && activeCall.status != CallStatus.ended;
     final activeLabel = activeId ?? '<none>';
     debugPrint(
       '[SIP] event=${event.type.name} sipId=$sipCallId effectiveId=$effectiveId active=$activeLabel',
@@ -858,7 +859,8 @@ class CallNotifier extends Notifier<CallState> {
     if (shouldAdoptIncoming) {
       final incomingCalls = Map<String, CallInfo>.from(state.calls);
       final existing = incomingCalls[callId];
-      final shouldForceRinging = existing == null ||
+      final shouldForceRinging =
+          existing == null ||
           (existing.status != CallStatus.connected &&
               existing.status != CallStatus.ended);
       if (existing == null) {
@@ -870,9 +872,7 @@ class CallNotifier extends Notifier<CallState> {
           dongleId: null,
         );
       } else if (shouldForceRinging) {
-        incomingCalls[callId] = existing.copyWith(
-          status: CallStatus.ringing,
-        );
+        incomingCalls[callId] = existing.copyWith(status: CallStatus.ringing);
       }
       final nextState = state.copyWith(
         calls: incomingCalls,
@@ -888,8 +888,7 @@ class CallNotifier extends Notifier<CallState> {
       );
       activeId = nextState.activeCallId;
       activeCall = nextState.activeCall;
-      hasActive =
-          activeCall != null && activeCall.status != CallStatus.ended;
+      hasActive = activeCall != null && activeCall.status != CallStatus.ended;
       callIdUnknown = false;
       didAdoptIncoming = true;
     }
