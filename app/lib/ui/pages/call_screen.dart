@@ -85,9 +85,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               const SizedBox(height: 6),
               Text(
                 _routeLabel(state.audioRoute),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.white54,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.white54),
                 textAlign: TextAlign.center,
               ),
               const Spacer(),

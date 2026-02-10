@@ -249,10 +249,10 @@ class CallNotifier extends Notifier<CallState> {
         '[SIP] switching to DONGLE credentials for outgoing call: ${outgoingUser.dongleId}',
       );
     }
-    _commit(state.copyWith(
-      audioRoute: AudioRoute.earpiece,
-      isMuted: false,
-    ), syncFgs: false);
+    _commit(
+      state.copyWith(audioRoute: AudioRoute.earpiece, isMuted: false),
+      syncFgs: false,
+    );
     unawaited(_applyNativeAudioRoute(AudioRoute.earpiece));
     final prefixedDestination = _destinationWithBootstrapPrefix(
       trimmed,
@@ -1344,7 +1344,8 @@ class CallNotifier extends Notifier<CallState> {
     final now = DateTime.now();
     if (_audioRouteRefreshInFlight) return;
     if (_lastAudioRouteRefresh != null &&
-        now.difference(_lastAudioRouteRefresh!) < const Duration(milliseconds: 500)) {
+        now.difference(_lastAudioRouteRefresh!) <
+            const Duration(milliseconds: 500)) {
       return;
     }
     final active = state.activeCall;
