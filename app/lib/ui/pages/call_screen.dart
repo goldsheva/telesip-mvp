@@ -82,6 +82,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 6),
+              Text(
+                _routeLabel(state.audioRoute),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white54,
+                    ),
+                textAlign: TextAlign.center,
+              ),
               const Spacer(),
               if (isRinging) ...[
                 Row(
@@ -190,6 +198,21 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         return 'In call';
       case CallStatus.ended:
         return 'Ended';
+    }
+  }
+
+  String _routeLabel(AudioRoute route) {
+    switch (route) {
+      case AudioRoute.speaker:
+        return 'Speaker';
+      case AudioRoute.earpiece:
+        return 'Earpiece';
+      case AudioRoute.bluetooth:
+        return 'Bluetooth';
+      case AudioRoute.wiredHeadset:
+        return 'Wired';
+      case AudioRoute.systemDefault:
+        return 'System';
     }
   }
 }
