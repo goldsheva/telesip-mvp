@@ -801,10 +801,10 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
 
-    final activeId = state.activeCallId;
+    var activeId = state.activeCallId;
     var pendingId = _pendingCallId;
-    final activeCall = state.activeCall;
-    final hasActive =
+    var activeCall = state.activeCall;
+    var hasActive =
         activeCall != null && activeCall.status != CallStatus.ended;
     final activeLabel = activeId ?? '<none>';
     debugPrint(
@@ -838,13 +838,44 @@ class CallNotifier extends Notifier<CallState> {
         callIdUnknown &&
         !hasActive &&
         !isBusy;
+    var didAdoptIncoming = false;
     if (shouldAdoptIncoming) {
-      debugPrint(
-        '[INCOMING] accepted incoming call effectiveId=$callId sipId=$sipCallId',
+      final incomingCalls = Map<String, CallInfo>.from(state.calls);
+      final existing = incomingCalls[callId];
+      final shouldForceRinging = existing == null ||
+          (existing.status != CallStatus.connected &&
+              existing.status != CallStatus.ended);
+      if (existing == null) {
+        incomingCalls[callId] = CallInfo(
+          id: callId,
+          destination: 'Incoming',
+          status: CallStatus.ringing,
+          createdAt: now,
+          dongleId: null,
+        );
+      } else if (shouldForceRinging) {
+        incomingCalls[callId] = existing.copyWith(
+          status: CallStatus.ringing,
+        );
+      }
+      final nextState = state.copyWith(
+        calls: incomingCalls,
+        activeCallId: callId,
       );
+      _clearError();
+      _commit(nextState);
       _pendingCallId = callId;
       pendingId = callId;
+      _phase = _CallPhase.ringing;
+      debugPrint(
+        '[INCOMING] adopted -> active ringing callId=$callId sipId=$sipCallId',
+      );
+      activeId = nextState.activeCallId;
+      activeCall = nextState.activeCall;
+      hasActive =
+          activeCall != null && activeCall.status != CallStatus.ended;
       callIdUnknown = false;
+      didAdoptIncoming = true;
     }
     if (!_isRelevantCall(callId, activeId)) {
       debugPrint(
@@ -903,7 +934,7 @@ class CallNotifier extends Notifier<CallState> {
     }
 
     final status = _mapStatus(event.type);
-    if (!_isPhaseEventAllowed(status)) {
+    if (!didAdoptIncoming && !_isPhaseEventAllowed(status)) {
       debugPrint(
         '[SIP] invalid phase ${_phase.name} for ${event.type.name} callId=$callId',
       );
