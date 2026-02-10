@@ -38,6 +38,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   ProviderSubscription<AsyncValue<AuthState>>? _authSubscription;
   ProviderSubscription<CallState>? _callStateSubscription;
   String? _incomingScreenCallId;
+  String? _scheduledCallId;
 
   @override
   void initState() {
@@ -163,12 +164,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     final newCallId = next.activeCallId;
     final previousCallId = previous?.activeCallId;
     if (newCallId != null && newCallId != previousCallId) {
-      _pushCallScreen(newCallId);
-      return;
-    }
-    final currentCall = next.activeCall;
-    if (currentCall == null || currentCall.status == CallStatus.ended) {
-      _incomingScreenCallId = null;
+      _schedulePush(newCallId);
     }
   }
 
@@ -194,6 +190,18 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       if (_incomingScreenCallId == callId) {
         _incomingScreenCallId = null;
       }
+    });
+  }
+
+  void _schedulePush(String callId) {
+    if (_incomingScreenCallId == callId) return;
+    if (_scheduledCallId == callId) return;
+    _scheduledCallId = callId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scheduledCallId != callId) return;
+      _scheduledCallId = null;
+      _pushCallScreen(callId);
     });
   }
 
