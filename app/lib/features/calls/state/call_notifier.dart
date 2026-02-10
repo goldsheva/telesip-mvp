@@ -166,6 +166,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _audioFocusHeld = false;
   String? _focusedCallId;
   bool _scoActive = false;
+  bool _muted = false;
   _CallPhase _phase = _CallPhase.idle;
   bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
@@ -328,7 +329,15 @@ class CallNotifier extends Notifier<CallState> {
         displayName: user.sipLogin,
       );
       await ref.read(sipAuthStorageProvider).writeSnapshot(snapshot);
+      _isRegistered = true;
+      _lastRegistrationState = SipRegistrationState.registered;
+      _registeredUserId = user.pbxSipUserId;
+      _commit(state.copyWith(isRegistered: true));
     } catch (error) {
+      if (_isRegistered) {
+        _isRegistered = false;
+        _commit(state.copyWith(isRegistered: false));
+      }
       _setError('SIP registration failed: $error');
     }
   }
@@ -352,8 +361,15 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint(
         '[INCOMING] SIP register triggered from wake hint (uri=${snapshot.uri})',
       );
+      _isRegistered = true;
+      _lastRegistrationState = SipRegistrationState.registered;
+      _commit(state.copyWith(isRegistered: true));
       return true;
     } catch (error) {
+      if (_isRegistered) {
+        _isRegistered = false;
+        _commit(state.copyWith(isRegistered: false));
+      }
       _setError('SIP registration failed: $error');
       return false;
     }
@@ -603,6 +619,29 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     await AudioRouteService.setRoute(route);
+  }
+
+  Future<bool> setCallMuted(bool muted) async {
+    final callId = state.activeCallId ?? _pendingCallId;
+    if (callId == null) return false;
+
+    final call = _engine.getCall(callId);
+    if (call == null) return false;
+
+    if (_muted == muted) return true;
+
+    try {
+      if (muted) {
+        call.mute(true, false);
+      } else {
+        call.unmute(true, false);
+      }
+      _muted = muted;
+      return true;
+    } catch (error) {
+      debugPrint('[CALLS] unable to toggle mute: $error');
+      return false;
+    }
   }
 
   Future<void> answerFromNotification(String callId) async {
@@ -918,6 +957,7 @@ class CallNotifier extends Notifier<CallState> {
         _clearSipMappingsForLocalCall(pendingCallId);
         _callDongleMap.remove(pendingCallId);
       }
+      _muted = false;
       _busyUntil = now.add(_busyGrace);
     } else {
       _busyUntil = null;

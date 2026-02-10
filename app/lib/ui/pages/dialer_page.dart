@@ -59,6 +59,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
             context,
           ).showSnackBar(SnackBar(content: Text(message)));
         }
+        if (next.activeCall == null && _isMuted && mounted) {
+          setState(() => _isMuted = false);
+        }
       },
     );
     _scheduleOutgoingUser(widget.sipUser);
@@ -246,8 +249,15 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                             isMuted: _isMuted,
                             isSpeakerOn: _isSpeakerOn,
                             onToggleMute: hasActiveCall
-                                ? () {
-                                    setState(() => _isMuted = !_isMuted);
+                                ? () async {
+                                    final desired = !_isMuted;
+                                    final success = await notifier.setCallMuted(
+                                      desired,
+                                    );
+                                    if (!mounted) return;
+                                    if (success) {
+                                      setState(() => _isMuted = desired);
+                                    }
                                   }
                                 : null,
                             onToggleSpeaker: hasActiveCall
