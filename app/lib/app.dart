@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -57,10 +58,18 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     super.initState();
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _isResumed =
-        lifecycleState == AppLifecycleState.resumed || lifecycleState == null;
+        lifecycleState == AppLifecycleState.resumed ||
+        lifecycleState == null ||
+        lifecycleState == AppLifecycleState.inactive;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_processIncomingActivity());
+      final status =
+          ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+      _logAuthGateState('init post-frame');
+      if (status == AuthStatus.authenticated) {
+        _ensureCallsBootstrapped('post-frame');
+      }
     });
     _authSubscription = ref.listenManual<AsyncValue<AuthState>>(
       authNotifierProvider,
@@ -85,6 +94,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       _requestedFcmPermission = false;
     }
     if (authenticated) {
+      _logAuthGateState('auth listener before bootstrap');
       unawaited(_maybeAskBatteryOptimizations());
       _ensureCallsBootstrapped('auth');
     }
@@ -122,6 +132,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (state == AppLifecycleState.resumed) {
       final pending = _pendingBootstrapReason;
       _pendingBootstrapReason = null;
+      _logAuthGateState('lifecycle resumed');
       if (pending != null) {
         _ensureCallsBootstrapped(pending);
       }
@@ -355,6 +366,16 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (executed) {
       await IncomingNotificationService.clearCallAction();
     }
+  }
+
+  void _logAuthGateState(String tag) {
+    if (!kDebugMode) return;
+    final status =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    debugPrint(
+      '[CALLS] auth gate $tag mounted=$mounted _isResumed=$_isResumed lifecycle=$lifecycle authStatus=$status pending=${_pendingBootstrapReason != null}',
+    );
   }
 
   void _ensureCallsBootstrapped(String reason) {
