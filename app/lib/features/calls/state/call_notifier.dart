@@ -989,6 +989,7 @@ class CallNotifier extends Notifier<CallState> {
       commitState = commitState.copyWith(
         isMuted: false,
         audioRoute: forcedRoute,
+        availableAudioRoutes: _defaultAvailableAudioRoutes,
       );
       final statusLabel = activeCall != null
           ? activeCall.status.toString().split('.').last
