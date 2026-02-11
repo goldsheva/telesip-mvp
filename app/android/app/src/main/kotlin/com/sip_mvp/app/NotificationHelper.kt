@@ -73,6 +73,10 @@ object NotificationHelper {
       },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
+    val callerPerson = NotificationCompat.Person.Builder()
+      .setName(displayName ?: from)
+      .setImportant(true)
+      .build()
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setContentTitle(displayName ?: "Incoming call")
       .setContentText("From $from")
@@ -97,6 +101,15 @@ object NotificationHelper {
       .setContentIntent(contentIntent)
       .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)
       .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declineIntent)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      builder.setStyle(
+        NotificationCompat.CallStyle.forIncomingCall(
+          callerPerson,
+          declineIntent,
+          answerIntent
+        )
+      )
+    }
 
     notificationManager.notify(getNotificationId(callId), builder.build())
   }
