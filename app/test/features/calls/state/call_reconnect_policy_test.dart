@@ -44,28 +44,6 @@ void main() {
     test('reports correct perform block reason', () {
       expect(
         CallReconnectPolicy.performBlockReason(
-          disposed: true,
-          reconnectInFlight: false,
-          lastKnownOnline: true,
-          hasActiveCall: false,
-          authenticated: true,
-        ),
-        equals(CallReconnectPerformBlockReason.disposed),
-      );
-      expect(
-        CallReconnectPolicy.performBlockReason(
-          disposed: false,
-          reconnectInFlight: true,
-          lastKnownOnline: true,
-          hasActiveCall: false,
-          authenticated: true,
-        ),
-        equals(CallReconnectPerformBlockReason.inFlight),
-      );
-      expect(
-        CallReconnectPolicy.performBlockReason(
-          disposed: false,
-          reconnectInFlight: false,
           lastKnownOnline: false,
           hasActiveCall: false,
           authenticated: true,
@@ -74,8 +52,6 @@ void main() {
       );
       expect(
         CallReconnectPolicy.performBlockReason(
-          disposed: false,
-          reconnectInFlight: false,
           lastKnownOnline: true,
           hasActiveCall: true,
           authenticated: true,
@@ -84,8 +60,6 @@ void main() {
       );
       expect(
         CallReconnectPolicy.performBlockReason(
-          disposed: false,
-          reconnectInFlight: false,
           lastKnownOnline: true,
           hasActiveCall: false,
           authenticated: false,
@@ -94,8 +68,6 @@ void main() {
       );
       expect(
         CallReconnectPolicy.performBlockReason(
-          disposed: false,
-          reconnectInFlight: false,
           lastKnownOnline: true,
           hasActiveCall: false,
           authenticated: true,

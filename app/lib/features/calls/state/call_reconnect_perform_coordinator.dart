@@ -22,8 +22,6 @@ class CallReconnectPerformCoordinator {
       return const ReconnectDecisionSkip(inFlight: true);
     }
     final performReason = CallReconnectPolicy.performBlockReason(
-      disposed: false,
-      reconnectInFlight: false,
       lastKnownOnline: online,
       hasActiveCall: hasActiveCall,
       authenticated: authenticated,
@@ -31,10 +29,6 @@ class CallReconnectPerformCoordinator {
     if (performReason != null) {
       String? message;
       switch (performReason) {
-        case CallReconnectPerformBlockReason.disposed:
-        case CallReconnectPerformBlockReason.inFlight:
-          message = null;
-          break;
         case CallReconnectPerformBlockReason.offline:
           message = CallReconnectLog.reconnectSkipOffline(reason);
           break;
