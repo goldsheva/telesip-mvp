@@ -285,58 +285,24 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> hangup(String callId) async {
-    await _engine.hangup(callId);
+    final engineCallId = _resolveEngineCallId(callId);
+    if (engineCallId == null) {
+      debugPrint('[CALLS] hangup ignored: no active engine call for $callId');
+      await _endCallAndCleanup(callId, reason: 'user-hangup');
+      return;
+    }
+    await _engine.hangup(engineCallId);
     await _endCallAndCleanup(callId, reason: 'user-hangup');
   }
 
   Future<void> sendDtmf(String callId, String digits) async {
     if (digits.isEmpty) return;
-    final targetCallId = _resolveAliveCallId(callId);
+    final targetCallId = _resolveEngineCallId(callId);
     if (targetCallId == null) {
       debugPrint('[CALLS] sendDtmf ignored: call $callId not active');
       return;
     }
     await _engine.sendDtmf(targetCallId, digits);
-  }
-
-  String? _resolveAliveCallId(String callId) {
-    final snapshot = state;
-    final calls = snapshot.calls;
-    final activeId = snapshot.activeCallId;
-    final localId = _sipToLocalCallId.containsKey(callId)
-        ? _sipToLocalCallId[callId]!
-        : callId;
-    String? sipId;
-    if (_sipToLocalCallId.containsKey(callId)) {
-      sipId = callId;
-    } else {
-      for (final entry in _sipToLocalCallId.entries) {
-        if (entry.value == localId) {
-          sipId = entry.key;
-          break;
-        }
-      }
-    }
-    String? pick(List<String?> candidates) {
-      for (final candidate in candidates) {
-        if (candidate == null) continue;
-        final info = calls[candidate];
-        if (info != null && info.status != CallStatus.ended) {
-          return candidate;
-        }
-      }
-      return null;
-    }
-
-    final found = pick([callId, localId, sipId]);
-    if (found != null) return found;
-    if (activeId != null) {
-      final activeInfo = calls[activeId];
-      if (activeInfo != null && activeInfo.status != CallStatus.ended) {
-        return activeId;
-      }
-    }
-    return null;
   }
 
   Future<void> setIncomingSipUser(PbxSipUser user) async {
@@ -951,7 +917,13 @@ class CallNotifier extends Notifier<CallState> {
       return false;
     }
 
-    final call = _engine.getCall(callId);
+    final targetCallId = _resolveEngineCallId(callId);
+    if (targetCallId == null) {
+      debugPrint('[CALLS] setCallMuted ignored: call $callId not active');
+      return false;
+    }
+
+    final call = _engine.getCall(targetCallId);
     if (call == null) return false;
 
     if (state.isMuted == muted) return true;
@@ -1076,22 +1048,40 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   String? _resolveEngineCallId(String requestedId) {
-    if (_engine.getCall(requestedId) != null) {
-      return requestedId;
-    }
-    final activeId = state.activeCallId;
-    if (activeId != null && _engine.getCall(activeId) != null) {
-      return activeId;
-    }
-    final pendingId = _pendingCallId;
-    if (pendingId != null && _engine.getCall(pendingId) != null) {
-      return pendingId;
-    }
-    for (final entry in _sipToLocalCallId.entries) {
-      if (entry.value == requestedId && _engine.getCall(entry.key) != null) {
-        return entry.key;
+    final localId = _sipToLocalCallId.containsKey(requestedId)
+        ? _sipToLocalCallId[requestedId]!
+        : requestedId;
+    String? sipId;
+    if (_sipToLocalCallId.containsKey(requestedId)) {
+      sipId = requestedId;
+    } else {
+      for (final entry in _sipToLocalCallId.entries) {
+        if (entry.value == localId) {
+          sipId = entry.key;
+          break;
+        }
       }
     }
+    final candidates = <String?>[
+      requestedId,
+      localId,
+      sipId,
+      state.activeCallId,
+      _pendingCallId,
+      _pendingLocalCallId,
+    ];
+    for (final candidate in candidates) {
+      if (candidate == null) {
+        continue;
+      }
+      if (_engine.getCall(candidate) != null) {
+        return candidate;
+      }
+    }
+    final activeId = state.activeCallId;
+    debugPrint(
+      '[CALLS] resolveEngineCallId failed for $requestedId active=$activeId pending=$_pendingCallId pendingLocal=$_pendingLocalCallId',
+    );
     return null;
   }
 
@@ -1714,7 +1704,14 @@ class CallNotifier extends Notifier<CallState> {
     debugPrint(
       '[INCOMING] busy rejecting callId=$callId event=${type.name} active=$activeInfo (fallback hangup)',
     );
-    unawaited(_engine.hangup(callId));
+    final targetCallId = _resolveEngineCallId(callId);
+    if (targetCallId == null) {
+      debugPrint(
+        '[INCOMING] busy reject skipped: no engine call for $callId (event=${type.name})',
+      );
+    } else {
+      unawaited(_engine.hangup(targetCallId));
+    }
     unawaited(
       _endCallAndCleanup(
         callId,
@@ -1764,7 +1761,14 @@ class CallNotifier extends Notifier<CallState> {
         return;
       }
       _setError('Call timed out, ending');
-      await _engine.hangup(targetCallId);
+      final engineCallId = _resolveEngineCallId(targetCallId);
+      if (engineCallId != null) {
+        await _engine.hangup(engineCallId);
+      } else {
+        debugPrint(
+          '[CALLS] dial timeout hangup ignored: no engine call for $targetCallId',
+        );
+      }
       await _endCallAndCleanup(targetCallId, reason: 'dial-timeout');
       _cancelDialTimeout();
     });
@@ -1926,7 +1930,14 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint('Watchdog hangup timer expired for $callId');
       _watchdogErrorActive = true;
       _setError('Network is unstable, ending call');
-      _engine.hangup(callId);
+      final engineCallId = _resolveEngineCallId(callId);
+      if (engineCallId != null) {
+        unawaited(_engine.hangup(engineCallId));
+      } else {
+        debugPrint(
+          '[CALLS] watchdog hangup ignored: no engine call for $callId',
+        );
+      }
       unawaited(_endCallAndCleanup(callId, reason: 'watchdog-failure'));
     });
     debugPrint('Watchdog failure timer started for $callId');
