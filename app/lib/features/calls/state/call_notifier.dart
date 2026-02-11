@@ -23,6 +23,7 @@ import 'package:app/services/audio_route_service.dart';
 import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
 import 'package:app/services/audio_route_types.dart';
+import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/sip/sip_engine.dart';
 
 CallNotifier? _globalCallNotifierInstance;
@@ -41,6 +42,12 @@ Future<void> requestIncomingCallHintProcessing() async {
   final handler = _globalCallNotifierInstance;
   if (handler == null) return;
   await handler.handleIncomingCallHintIfAny();
+}
+
+Future<void> requestIncomingCallCancelProcessing(String callId) async {
+  final handler = _globalCallNotifierInstance;
+  if (handler == null) return;
+  await handler.handleIncomingCallCancelled(callId);
 }
 
 enum CallStatus { dialing, ringing, connected, ended }
@@ -545,6 +552,56 @@ class CallNotifier extends Notifier<CallState> {
     } finally {
       _isHandlingHint = false;
     }
+  }
+
+  Future<void> handleIncomingCallCancelled(String callId) async {
+    await IncomingNotificationService.cancelIncoming(callId: callId);
+    final pending = await FcmStorage.readPendingIncomingHint();
+    final payload = pending?['payload'] as Map<String, dynamic>?;
+    final pendingCallId = payload?['call_id']?.toString();
+    var clearedHint = false;
+    if (pendingCallId == callId) {
+      await FcmStorage.clearPendingIncomingHint();
+      clearedHint = true;
+    }
+    final previousState = state;
+    final callInfo = previousState.calls[callId];
+    final activeWas = previousState.activeCallId;
+    final shouldEndInState =
+        (callInfo != null && callInfo.status != CallStatus.ended) ||
+            activeWas == callId;
+    if (!shouldEndInState) {
+      debugPrint(
+        '[INCOMING] cancelled callId=$callId endedInState=false activeWas=$activeWas clearedHint=$clearedHint',
+      );
+      return;
+    }
+    final now = DateTime.now();
+    final updatedCalls = Map<String, CallInfo>.from(previousState.calls);
+    var endedInState = false;
+    if (callInfo != null && callInfo.status != CallStatus.ended) {
+      final timeline = List<String>.from(callInfo.timeline)..add('cancelled');
+      updatedCalls[callId] = callInfo.copyWith(
+        status: CallStatus.ended,
+        endedAt: now,
+        timeline: timeline,
+      );
+      endedInState = true;
+    }
+    var nextActiveCallId = previousState.activeCallId;
+    if (activeWas == callId) {
+      nextActiveCallId = null;
+      _recentlyEnded[callId] = now;
+      _busyUntil = now.add(_busyGrace);
+    }
+    final nextState = previousState.copyWith(
+      calls: updatedCalls,
+      activeCallId: nextActiveCallId,
+    );
+    _commit(nextState);
+    debugPrint(
+      '[INCOMING] cancelled callId=$callId endedInState=$endedInState activeWas=$activeWas clearedHint=$clearedHint',
+    );
   }
 
   bool get _incomingRegistrationReady =>

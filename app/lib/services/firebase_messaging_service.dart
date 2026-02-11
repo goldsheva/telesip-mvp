@@ -73,7 +73,7 @@ Future<void> _handleIncomingHint(RemoteMessage message) async {
   final type = message.data['type']?.toString();
   final callId = message.data['call_id']?.toString();
   if (type == 'call_cancelled' && callId != null && callId.isNotEmpty) {
-    await IncomingNotificationService.cancelIncoming(callId: callId);
+    unawaited(requestIncomingCallCancelProcessing(callId));
   }
   final stored = await _storeIncomingHint(message);
   if (!stored) return;
