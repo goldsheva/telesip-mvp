@@ -1,32 +1,11 @@
+import 'package:app/features/calls/state/call_reconnect_decision.dart';
 import 'package:app/features/calls/state/call_reconnect_log.dart';
 import 'package:app/features/calls/state/call_reconnect_policy.dart';
-
-abstract class ReconnectScheduleDecision {
-  const ReconnectScheduleDecision._();
-}
-
-class ReconnectScheduleDecisionSkip extends ReconnectScheduleDecision {
-  const ReconnectScheduleDecisionSkip({
-    this.reason,
-    this.inFlight = false,
-    this.disposed = false,
-    this.message,
-  }) : super._();
-
-  final CallReconnectScheduleBlockReason? reason;
-  final bool inFlight;
-  final bool disposed;
-  final String? message;
-}
-
-class ReconnectScheduleDecisionAllow extends ReconnectScheduleDecision {
-  const ReconnectScheduleDecisionAllow() : super._();
-}
 
 class CallReconnectCoordinator {
   CallReconnectCoordinator._();
 
-  static ReconnectScheduleDecision decideSchedule({
+  static ReconnectDecision decideSchedule({
     required String reason,
     required String authStatusName,
     required String activeCallId,
@@ -37,7 +16,7 @@ class CallReconnectCoordinator {
     required bool reconnectInFlight,
   }) {
     if (disposed) {
-      return const ReconnectScheduleDecisionSkip(disposed: true);
+      return const ReconnectDecisionSkip(disposed: true);
     }
     final scheduleReason = CallReconnectPolicy.scheduleBlockReason(
       lastKnownOnline: online,
@@ -63,17 +42,14 @@ class CallReconnectCoordinator {
           );
           break;
       }
-      return ReconnectScheduleDecisionSkip(
-        reason: scheduleReason,
-        message: message,
-      );
+      return ReconnectDecisionSkip(message: message);
     }
     if (reconnectInFlight) {
-      return ReconnectScheduleDecisionSkip(
+      return ReconnectDecisionSkip(
         inFlight: true,
         message: CallReconnectLog.scheduleSkipInFlight(reason),
       );
     }
-    return const ReconnectScheduleDecisionAllow();
+    return const ReconnectDecisionAllow();
   }
 }

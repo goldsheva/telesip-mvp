@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/features/calls/state/call_reconnect_log.dart';
+import 'package:app/features/calls/state/call_reconnect_decision.dart';
 import 'package:app/features/calls/state/call_reconnect_perform_coordinator.dart';
-import 'package:app/features/calls/state/call_reconnect_policy.dart';
 
 void main() {
   group('CallReconnectPerformCoordinator.decidePerform', () {
@@ -17,7 +17,7 @@ void main() {
       'authenticated': true,
     };
 
-    ReconnectPerformDecision callWithOverrides(Map<String, Object?> overrides) {
+    ReconnectDecision callWithOverrides(Map<String, Object?> overrides) {
       return CallReconnectPerformCoordinator.decidePerform(
         reason: overrides['reason'] as String? ?? baseArgs['reason'] as String,
         authStatusName:
@@ -43,33 +43,31 @@ void main() {
 
     test('skips when disposed', () {
       final decision = callWithOverrides({'disposed': true});
-      expect(decision, isA<ReconnectPerformDecisionSkip>());
-      final skip = decision as ReconnectPerformDecisionSkip;
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(skip.disposed, isTrue);
       expect(skip.message, isNull);
     });
 
     test('skips when reconnect in flight', () {
       final decision = callWithOverrides({'reconnectInFlight': true});
-      expect(decision, isA<ReconnectPerformDecisionSkip>());
-      final skip = decision as ReconnectPerformDecisionSkip;
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(skip.inFlight, isTrue);
       expect(skip.message, isNull);
     });
 
     test('skips for offline reason with log message', () {
       final decision = callWithOverrides({'online': false});
-      expect(decision, isA<ReconnectPerformDecisionSkip>());
-      final skip = decision as ReconnectPerformDecisionSkip;
-      expect(skip.reason, CallReconnectPerformBlockReason.offline);
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(skip.message, CallReconnectLog.reconnectSkipOffline('reason'));
     });
 
     test('skips for active call reason with log message', () {
       final decision = callWithOverrides({'hasActiveCall': true});
-      expect(decision, isA<ReconnectPerformDecisionSkip>());
-      final skip = decision as ReconnectPerformDecisionSkip;
-      expect(skip.reason, CallReconnectPerformBlockReason.hasActiveCall);
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(
         skip.message,
         CallReconnectLog.reconnectSkipHasActiveCall('reason', '<call>'),
@@ -78,9 +76,8 @@ void main() {
 
     test('skips for authentication reason with log message', () {
       final decision = callWithOverrides({'authenticated': false});
-      expect(decision, isA<ReconnectPerformDecisionSkip>());
-      final skip = decision as ReconnectPerformDecisionSkip;
-      expect(skip.reason, CallReconnectPerformBlockReason.notAuthenticated);
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(
         skip.message,
         CallReconnectLog.reconnectSkipNotAuthenticated('reason', 'auth'),
@@ -89,7 +86,7 @@ void main() {
 
     test('allows when no blockers', () {
       final decision = callWithOverrides({});
-      expect(decision, isA<ReconnectPerformDecisionAllow>());
+      expect(decision, isA<ReconnectDecisionAllow>());
     });
   });
 }

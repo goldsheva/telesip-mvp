@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/features/calls/state/call_reconnect_coordinator.dart';
+import 'package:app/features/calls/state/call_reconnect_decision.dart';
 import 'package:app/features/calls/state/call_reconnect_log.dart';
-import 'package:app/features/calls/state/call_reconnect_policy.dart';
 
 void main() {
   group('CallReconnectCoordinator.decideSchedule', () {
@@ -17,9 +17,10 @@ void main() {
         hasActiveCall: false,
         reconnectInFlight: false,
       );
-      expect(decision, isA<ReconnectScheduleDecisionSkip>());
-      final skip = decision as ReconnectScheduleDecisionSkip;
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(skip.disposed, isTrue);
+      expect(skip.message, isNull);
     });
 
     test('skips for authentication/offline/active-call reasons', () {
@@ -33,13 +34,8 @@ void main() {
         hasActiveCall: false,
         reconnectInFlight: false,
       );
-      expect(unauthenticated, isA<ReconnectScheduleDecisionSkip>());
-      final unauthenticatedSkip =
-          unauthenticated as ReconnectScheduleDecisionSkip;
-      expect(
-        unauthenticatedSkip.reason,
-        CallReconnectScheduleBlockReason.notAuthenticated,
-      );
+      expect(unauthenticated, isA<ReconnectDecisionSkip>());
+      final unauthenticatedSkip = unauthenticated as ReconnectDecisionSkip;
       expect(
         unauthenticatedSkip.message,
         CallReconnectLog.scheduleSkipNotAuthenticated('reason', 'auth'),
@@ -55,9 +51,8 @@ void main() {
         hasActiveCall: false,
         reconnectInFlight: false,
       );
-      expect(offline, isA<ReconnectScheduleDecisionSkip>());
-      final offlineSkip = offline as ReconnectScheduleDecisionSkip;
-      expect(offlineSkip.reason, CallReconnectScheduleBlockReason.offline);
+      expect(offline, isA<ReconnectDecisionSkip>());
+      final offlineSkip = offline as ReconnectDecisionSkip;
       expect(
         offlineSkip.message,
         CallReconnectLog.scheduleSkipOffline('reason'),
@@ -73,12 +68,8 @@ void main() {
         hasActiveCall: true,
         reconnectInFlight: false,
       );
-      expect(activeCall, isA<ReconnectScheduleDecisionSkip>());
-      final activeCallSkip = activeCall as ReconnectScheduleDecisionSkip;
-      expect(
-        activeCallSkip.reason,
-        CallReconnectScheduleBlockReason.hasActiveCall,
-      );
+      expect(activeCall, isA<ReconnectDecisionSkip>());
+      final activeCallSkip = activeCall as ReconnectDecisionSkip;
       expect(
         activeCallSkip.message,
         CallReconnectLog.scheduleSkipHasActiveCall('reason', '<active>'),
@@ -96,8 +87,8 @@ void main() {
         hasActiveCall: false,
         reconnectInFlight: true,
       );
-      expect(decision, isA<ReconnectScheduleDecisionSkip>());
-      final skip = decision as ReconnectScheduleDecisionSkip;
+      expect(decision, isA<ReconnectDecisionSkip>());
+      final skip = decision as ReconnectDecisionSkip;
       expect(skip.inFlight, isTrue);
       expect(skip.message, CallReconnectLog.scheduleSkipInFlight('reason'));
     });
@@ -113,7 +104,7 @@ void main() {
         hasActiveCall: false,
         reconnectInFlight: false,
       );
-      expect(decision, isA<ReconnectScheduleDecisionAllow>());
+      expect(decision, isA<ReconnectDecisionAllow>());
     });
   });
 }

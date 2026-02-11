@@ -32,6 +32,7 @@ import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
 import 'call_reconnect_coordinator.dart';
+import 'call_reconnect_decision.dart';
 import 'call_reconnect_log.dart';
 import 'call_reconnect_perform_coordinator.dart';
 import 'call_reconnect_scheduler.dart';
@@ -1322,7 +1323,7 @@ class CallNotifier extends Notifier<CallState> {
       hasActiveCall: _hasActiveCall,
       reconnectInFlight: _reconnectInFlight,
     );
-    if (decision is ReconnectScheduleDecisionSkip) {
+    if (decision is ReconnectDecisionSkip) {
       if (decision.disposed) return;
       final message = decision.message;
       if (message != null) {
@@ -1369,7 +1370,7 @@ class CallNotifier extends Notifier<CallState> {
       hasActiveCall: _hasActiveCall,
       authenticated: authStatus == AuthStatus.authenticated,
     );
-    if (performDecision is ReconnectPerformDecisionSkip) {
+    if (performDecision is ReconnectDecisionSkip) {
       if (performDecision.disposed || performDecision.inFlight) return;
       final message = performDecision.message;
       if (message != null) {

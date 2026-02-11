@@ -1,32 +1,11 @@
+import 'package:app/features/calls/state/call_reconnect_decision.dart';
 import 'package:app/features/calls/state/call_reconnect_log.dart';
 import 'package:app/features/calls/state/call_reconnect_policy.dart';
-
-abstract class ReconnectPerformDecision {
-  const ReconnectPerformDecision._();
-}
-
-class ReconnectPerformDecisionSkip extends ReconnectPerformDecision {
-  const ReconnectPerformDecisionSkip({
-    this.reason,
-    this.inFlight = false,
-    this.disposed = false,
-    this.message,
-  }) : super._();
-
-  final CallReconnectPerformBlockReason? reason;
-  final bool inFlight;
-  final bool disposed;
-  final String? message;
-}
-
-class ReconnectPerformDecisionAllow extends ReconnectPerformDecision {
-  const ReconnectPerformDecisionAllow() : super._();
-}
 
 class CallReconnectPerformCoordinator {
   CallReconnectPerformCoordinator._();
 
-  static ReconnectPerformDecision decidePerform({
+  static ReconnectDecision decidePerform({
     required String reason,
     required String authStatusName,
     required String activeCallId,
@@ -37,14 +16,14 @@ class CallReconnectPerformCoordinator {
     required bool authenticated,
   }) {
     if (disposed) {
-      return const ReconnectPerformDecisionSkip(disposed: true);
+      return const ReconnectDecisionSkip(disposed: true);
     }
     if (reconnectInFlight) {
-      return const ReconnectPerformDecisionSkip(inFlight: true);
+      return const ReconnectDecisionSkip(inFlight: true);
     }
     final performReason = CallReconnectPolicy.performBlockReason(
-      disposed: disposed,
-      reconnectInFlight: reconnectInFlight,
+      disposed: false,
+      reconnectInFlight: false,
       lastKnownOnline: online,
       hasActiveCall: hasActiveCall,
       authenticated: authenticated,
@@ -72,11 +51,8 @@ class CallReconnectPerformCoordinator {
           );
           break;
       }
-      return ReconnectPerformDecisionSkip(
-        reason: performReason,
-        message: message,
-      );
+      return ReconnectDecisionSkip(message: message);
     }
-    return const ReconnectPerformDecisionAllow();
+    return const ReconnectDecisionAllow();
   }
 }
