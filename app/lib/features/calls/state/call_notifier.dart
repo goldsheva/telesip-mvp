@@ -1192,13 +1192,22 @@ class CallNotifier extends Notifier<CallState> {
     final lastNetAge = _lastNetworkActivityAt == null
         ? '<none>'
         : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
+    final activeStatus = activeCall?.status;
+    final activeStatusString = (activeStatus ?? '<none>').toString();
     debugPrint(
-      '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
-      'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
-      'active=${state.activeCallId ?? '<none>'} '
-      'status=${activeCall?.status ?? '<none>'} '
-      'lastNetAge=$lastNetAge backoffIndex=${_reconnectScheduler.backoffIndex} '
-      'registeredAt=${_lastSipRegisteredAt != null}',
+      CallConnectivitySnapshot.formatShort(
+        tag: tag,
+        authStatus: authStatus.name,
+        online: _lastKnownOnline,
+        bootstrapScheduled: _bootstrapScheduled,
+        bootstrapDone: _bootstrapDone,
+        bootstrapInFlight: _bootstrapInFlight,
+        lastNetAge: lastNetAge,
+        backoffIndex: _reconnectScheduler.backoffIndex,
+        activeCallId: state.activeCallId ?? '<none>',
+        activeCallStatus: activeStatusString,
+        registeredAt: _lastSipRegisteredAt != null,
+      ),
     );
   }
 

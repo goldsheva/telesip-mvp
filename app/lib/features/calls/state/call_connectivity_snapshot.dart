@@ -34,4 +34,30 @@ class CallConnectivitySnapshot {
         'active=$activeCallId '
         'status=$activeCallStatus';
   }
+
+  static String formatShort({
+    required String tag,
+    required String authStatus,
+    required bool online,
+    required bool bootstrapScheduled,
+    required bool bootstrapDone,
+    required bool bootstrapInFlight,
+    required String lastNetAge,
+    required int backoffIndex,
+    required String activeCallId,
+    required String activeCallStatus,
+    required bool registeredAt,
+  }) {
+    return '[CALLS_CONN] $tag '
+        'authStatus=$authStatus '
+        'online=$online '
+        'scheduled=$bootstrapScheduled '
+        'done=$bootstrapDone '
+        'inFlight=$bootstrapInFlight '
+        'active=$activeCallId '
+        'status=$activeCallStatus '
+        'lastNetAge=$lastNetAge '
+        'backoffIndex=$backoffIndex '
+        'registeredAt=$registeredAt';
+  }
 }
