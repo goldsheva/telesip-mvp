@@ -37,6 +37,7 @@ import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
 import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
+import 'call_reconnect_executor.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -126,6 +127,7 @@ class CallNotifier extends Notifier<CallState> {
   late final CallConnectivityListener _connectivityListener;
   late final CallReconnectScheduler _reconnectScheduler;
   late final CallHealthWatchdog _healthWatchdog;
+  late final CallReconnectExecutor _reconnectExecutor;
   late final CallAuthListener _authListener = CallAuthListener(
     isDisposed: () => _disposed,
   );
@@ -262,60 +264,15 @@ class CallNotifier extends Notifier<CallState> {
     _lastKnownUser = user;
     if (_isRegistered && _registeredUserId == user.pbxSipUserId) return;
 
-    final wsConnections = user.sipConnections
-        .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
-        .toList();
-
-    String wsUrl;
-    String uriHost;
-
-    if (wsConnections.isNotEmpty) {
-      final connection = wsConnections.first;
-      final protocol = connection.pbxSipProtocol.toLowerCase();
-      final scheme = protocol.contains('wss')
-          ? 'wss'
-          : protocol.contains('ws')
-          ? 'ws'
-          : null;
-      if (scheme == null) {
-        _setError('Only WS/WSS transports are supported');
-        return;
-      }
-
-      wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
-      uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
-    } else {
-      final defaultWs = EnvConfig.sipWebSocketUrl;
-      if (defaultWs == null) {
-        _setError(
-          'PBX does not offer WS/WSS transport. Sip_ua requires SIP over WebSocket. '
-          'Expected WSS (e.g., wss://pbx.teleleo.com:7443/).',
-        );
-        return;
-      }
-      wsUrl = defaultWs;
-      uriHost = Uri.tryParse(wsUrl)?.host ?? '';
-    }
-
-    if (uriHost.isEmpty) {
-      _setError('Unable to determine SIP domain');
-      return;
-    }
-    final uri = 'sip:${user.sipLogin}@$uriHost';
-    final snapshot = SipAuthSnapshot(
-      uri: uri,
-      password: user.sipPassword,
-      wsUrl: wsUrl,
-      displayName: user.sipLogin,
-      timestamp: DateTime.now(),
-    );
+    final snapshot = _snapshotForUser(user);
+    if (snapshot == null) return;
     try {
       _clearError();
       await _engine.register(
-        uri: uri,
-        password: user.sipPassword,
-        wsUrl: wsUrl,
-        displayName: user.sipLogin,
+        uri: snapshot.uri,
+        password: snapshot.password,
+        wsUrl: snapshot.wsUrl,
+        displayName: snapshot.displayName,
       );
       await ref.read(sipAuthStorageProvider).writeSnapshot(snapshot);
       _isRegistered = true;
@@ -362,6 +319,56 @@ class CallNotifier extends Notifier<CallState> {
       _setError('SIP registration failed: $error');
       return false;
     }
+  }
+
+  SipAuthSnapshot? _snapshotForUser(PbxSipUser user) {
+    final wsConnections = user.sipConnections
+        .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
+        .toList();
+
+    String wsUrl;
+    String uriHost;
+
+    if (wsConnections.isNotEmpty) {
+      final connection = wsConnections.first;
+      final protocol = connection.pbxSipProtocol.toLowerCase();
+      final scheme = protocol.contains('wss')
+          ? 'wss'
+          : protocol.contains('ws')
+          ? 'ws'
+          : null;
+      if (scheme == null) {
+        _setError('Only WS/WSS transports are supported');
+        return null;
+      }
+
+      wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
+      uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
+    } else {
+      final defaultWs = EnvConfig.sipWebSocketUrl;
+      if (defaultWs == null) {
+        _setError(
+          'PBX does not offer WS/WSS transport. Sip_ua requires SIP over WebSocket. '
+          'Expected WSS (e.g., wss://pbx.teleleo.com:7443/).',
+        );
+        return null;
+      }
+      wsUrl = defaultWs;
+      uriHost = Uri.tryParse(wsUrl)?.host ?? '';
+    }
+
+    if (uriHost.isEmpty) {
+      _setError('Unable to determine SIP domain');
+      return null;
+    }
+    final uri = 'sip:${user.sipLogin}@$uriHost';
+    return SipAuthSnapshot(
+      uri: uri,
+      password: user.sipPassword,
+      wsUrl: wsUrl,
+      displayName: user.sipLogin,
+      timestamp: DateTime.now(),
+    );
   }
 
   Future<void> handleIncomingCallHintIfAny() {
@@ -949,6 +956,10 @@ class CallNotifier extends Notifier<CallState> {
       interval: _healthCheckInterval,
       onTick: _checkSipHealthTick,
     );
+    _reconnectExecutor = CallReconnectExecutor(
+      isDisposed: () => _disposed,
+      log: (message) => debugPrint(message),
+    );
     final initialStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     _lastAuthStatus ??= initialStatus;
@@ -1417,16 +1428,13 @@ class CallNotifier extends Notifier<CallState> {
       }
     }
     final reconnectUser = _lastKnownUser ?? _incomingUser;
-    if (reconnectUser == null) {
-      debugPrint('[CALLS_CONN] reconnect skip reason=$reason missing_user');
-      return;
-    }
     _reconnectInFlight = true;
     try {
-      debugPrint('[CALLS_CONN] reconnect fired reason=$reason');
-      await ensureRegistered(reconnectUser);
-    } catch (error) {
-      debugPrint('[CALLS_CONN] reconnect failed: $error');
+      await _reconnectExecutor.reconnect(
+        reason: reason,
+        reconnectUser: reconnectUser,
+        ensureRegistered: ensureRegistered,
+      );
     } finally {
       _reconnectInFlight = false;
     }
