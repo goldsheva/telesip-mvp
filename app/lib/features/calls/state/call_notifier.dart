@@ -214,6 +214,8 @@ class CallNotifier extends Notifier<CallState> {
   static const Duration _strayRingingRejectMinGap = Duration(seconds: 2);
   DateTime? _busyUntil;
   static const Duration _busyGrace = Duration(seconds: 2);
+  final Map<String, DateTime> _processedPendingCallActions = {};
+  static const Duration _pendingCallActionDedupTtl = Duration(seconds: 120);
 
   DateTime? _lastHandledHintTimestamp;
   DateTime? _lastHintAttemptAt;
@@ -610,13 +612,8 @@ class CallNotifier extends Notifier<CallState> {
         (localId != callId && previousState.calls.containsKey(localId));
     final relevant =
         reason == 'cancelled' || activeMatches || pendingMatches || hasCallInfo;
-    if (!relevant) {
-      debugPrint(
-        '[CALLS] endCall reason=$reason callId=$callId localId=$localId relevant=false skipping cleanup',
-      );
-      return;
-    }
-
+    final requiresNotificationClear =
+        cancelNotification || clearPendingHint || clearPendingAction;
     String? pairedSipId;
     if (callIdIsSip) {
       pairedSipId = callId;
@@ -628,14 +625,11 @@ class CallNotifier extends Notifier<CallState> {
         }
       }
     }
-
     final calls = previousState.calls;
     final hasEntry =
         calls.containsKey(callId) ||
         (localId != callId && calls.containsKey(localId));
     final activeOrPending = activeMatches || pendingMatches;
-    final requiresNotificationClear =
-        cancelNotification || clearPendingHint || clearPendingAction || false;
     if (!hasEntry && !activeOrPending && !requiresNotificationClear) {
       _recentlyEnded[callId] = now;
       if (localId != callId) {
@@ -649,49 +643,23 @@ class CallNotifier extends Notifier<CallState> {
       );
       return;
     }
-
-    bool matchesCallId(String? candidate) =>
-        candidate != null && (candidate == callId || candidate == localId);
     var clearedHint = false;
     var clearedAction = false;
-
-    if (cancelNotification) {
-      try {
-        await IncomingNotificationService.cancelIncoming(callId: callId);
-      } catch (_) {
-        // best-effort
-      }
+    if (requiresNotificationClear) {
+      final cleanupResult = await _clearCallNotificationState(
+        callId,
+        cancelNotification: cancelNotification,
+        clearPendingHint: clearPendingHint,
+        clearPendingAction: clearPendingAction,
+      );
+      clearedHint = cleanupResult.clearedHint;
+      clearedAction = cleanupResult.clearedAction;
     }
-
-    if (clearPendingAction) {
-      try {
-        final pendingAction =
-            await IncomingNotificationService.readCallAction();
-        final actionCallId =
-            pendingAction?['call_id']?.toString() ??
-            pendingAction?['callId']?.toString();
-        if (matchesCallId(actionCallId)) {
-          await IncomingNotificationService.clearCallAction();
-          clearedAction = true;
-        }
-      } catch (_) {
-        // best-effort
-      }
-    }
-
-    if (clearPendingHint) {
-      try {
-        final pending = await FcmStorage.readPendingIncomingHint();
-        final payload = pending?['payload'] as Map<String, dynamic>?;
-        final pendingCallId = payload?['call_id']?.toString();
-        final pendingCallUuid = payload?['call_uuid']?.toString();
-        if (matchesCallId(pendingCallId) || matchesCallId(pendingCallUuid)) {
-          await FcmStorage.clearPendingIncomingHint();
-          clearedHint = true;
-        }
-      } catch (_) {
-        // best-effort
-      }
+    if (!relevant) {
+      debugPrint(
+        '[CALLS] endCall reason=$reason callId=$callId localId=$localId relevant=false skipping cleanup',
+      );
+      return;
     }
 
     _recentlyEnded[callId] = now;
@@ -767,6 +735,76 @@ class CallNotifier extends Notifier<CallState> {
       'clearedActive=$clearedActive clearedHint=$clearedHint clearedAction=$clearedAction '
       'relevant=true',
     );
+  }
+
+  Future<_CallNotificationCleanupResult> _clearCallNotificationState(
+    String callId, {
+    bool cancelNotification = false,
+    bool clearPendingHint = false,
+    bool clearPendingAction = false,
+  }) async {
+    var clearedAction = false;
+    var clearedHint = false;
+    if (cancelNotification) {
+      try {
+        await IncomingNotificationService.cancelIncoming(callId: callId);
+      } catch (_) {
+        // best-effort
+      }
+    }
+    if (clearPendingAction) {
+      try {
+        final pendingAction =
+            await IncomingNotificationService.readCallAction();
+        final actionCallId =
+            pendingAction?['call_id']?.toString() ??
+            pendingAction?['callId']?.toString();
+        if (_callIdMatches(callId, actionCallId)) {
+          await IncomingNotificationService.clearCallAction();
+          clearedAction = true;
+        }
+      } catch (_) {
+        // best-effort
+      }
+    }
+    if (clearPendingHint) {
+      try {
+        final pending = await FcmStorage.readPendingIncomingHint();
+        final payload = pending?['payload'] as Map<String, dynamic>?;
+        final pendingCallId = payload?['call_id']?.toString();
+        final pendingCallUuid = payload?['call_uuid']?.toString();
+        if (_callIdMatches(callId, pendingCallId) ||
+            _callIdMatches(callId, pendingCallUuid)) {
+          await FcmStorage.clearPendingIncomingHint();
+          clearedHint = true;
+        }
+      } catch (_) {
+        // best-effort
+      }
+    }
+    return _CallNotificationCleanupResult(
+      clearedAction: clearedAction,
+      clearedHint: clearedHint,
+    );
+  }
+
+  bool _callIdMatches(String referenceCallId, String? candidate) {
+    if (candidate == null) return false;
+    final localId = _sipToLocalCallId.containsKey(referenceCallId)
+        ? _sipToLocalCallId[referenceCallId]!
+        : referenceCallId;
+    if (candidate == referenceCallId || candidate == localId) {
+      return true;
+    }
+    for (final entry in _sipToLocalCallId.entries) {
+      if (entry.value == localId && candidate == entry.key) {
+        return true;
+      }
+      if (entry.key == referenceCallId && candidate == entry.value) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool get _incomingRegistrationReady =>
@@ -992,6 +1030,11 @@ class CallNotifier extends Notifier<CallState> {
     String callId, {
     required String source,
   }) async {
+    await _clearCallNotificationState(
+      callId,
+      cancelNotification: true,
+      clearPendingAction: true,
+    );
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
       return;
@@ -1026,6 +1069,7 @@ class CallNotifier extends Notifier<CallState> {
       );
       return;
     }
+    _busyUntil = DateTime.now().add(_busyGrace);
     try {
       call.answer(<String, dynamic>{
         'mediaConstraints': <String, dynamic>{'audio': true, 'video': false},
@@ -1041,6 +1085,12 @@ class CallNotifier extends Notifier<CallState> {
   }) async {
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
+      await _clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingHint: true,
+        clearPendingAction: true,
+      );
       return;
     }
     final ready = await _ensureIncomingReady();
@@ -1054,6 +1104,12 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint(
         '[CALLS] $source unknown call $callId active=${state.activeCallId} '
         'pending=$_pendingCallId',
+      );
+      await _clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingHint: true,
+        clearPendingAction: true,
       );
       return;
     }
@@ -1656,15 +1712,52 @@ class CallNotifier extends Notifier<CallState> {
       'drainPendingCallActions',
     );
     if (raw == null || raw.isEmpty) return;
+    final now = DateTime.now();
+    _processedPendingCallActions.removeWhere(
+      (_, timestamp) => now.difference(timestamp) > _pendingCallActionDedupTtl,
+    );
     for (final item in raw) {
       if (item is! Map) continue;
       final type = item['type']?.toString();
       final callId = item['callId']?.toString();
       if (type == null || callId == null) continue;
+      final tsKey = item['ts']?.toString() ?? '';
+      final dedupKey = '$type|$callId|$tsKey';
+      if (_processedPendingCallActions.containsKey(dedupKey)) {
+        debugPrint(
+          '[CALLS] drainPendingCallActions skipping duplicate type=$type callId=$callId ts=$tsKey',
+        );
+        continue;
+      }
+      _processedPendingCallActions[dedupKey] = now;
       if (type == 'answer') {
+        if (!_isCallAlive(callId)) {
+          debugPrint(
+            '[CALLS] pending answer for unknown call $callId, clearing',
+          );
+          await _clearCallNotificationState(
+            callId,
+            cancelNotification: true,
+            clearPendingAction: true,
+            clearPendingHint: true,
+          );
+          continue;
+        }
         await answerFromNotification(callId);
       } else if (type == 'decline') {
-        await hangup(callId);
+        if (!_isCallAlive(callId)) {
+          debugPrint(
+            '[CALLS] pending decline for unknown call $callId, clearing',
+          );
+          await _clearCallNotificationState(
+            callId,
+            cancelNotification: true,
+            clearPendingAction: true,
+            clearPendingHint: true,
+          );
+          continue;
+        }
+        await declineFromNotification(callId);
       }
     }
   }
@@ -2108,6 +2201,16 @@ class CallNotifier extends Notifier<CallState> {
     _startRetrySuppressionTimer();
     await _webRtcWatchdog!.manualRestart();
   }
+}
+
+class _CallNotificationCleanupResult {
+  const _CallNotificationCleanupResult({
+    required this.clearedAction,
+    required this.clearedHint,
+  });
+
+  final bool clearedAction;
+  final bool clearedHint;
 }
 
 final callControllerProvider = NotifierProvider<CallNotifier, CallState>(

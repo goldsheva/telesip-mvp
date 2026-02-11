@@ -24,22 +24,16 @@ class SipForegroundService : Service() {
     createNotificationChannel()
   }
 
-  private var isRunning = false
   private var isStarting = false
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent == null) {
-      debugLog("onStartCommand: null intent (sticky restart) state(running=$isRunning starting=$isStarting wake=${
+      debugLog("onStartCommand: null intent (sticky restart) state(starting=$isStarting wake=${
           SipWakeLock.isHeld()})")
       isStarting = false
-      isRunning = false
       if (SipWakeLock.isHeld()) {
         SipWakeLock.release()
       }
-      return START_STICKY
-    }
-    if (intent?.action == ACTION_START && (isInForeground() || isStarting)) {
-      debugLog("service already running; ignoring start")
       return START_STICKY
     }
     when (intent?.action) {
@@ -65,14 +59,12 @@ class SipForegroundService : Service() {
           )
         } catch (t: Throwable) {
           debugLog("startForeground failed: $t")
-          isRunning = false
           SipWakeLock.release()
           isStarting = false
           stopSelf()
           return START_NOT_STICKY
         }
         isStarting = false
-        isRunning = true
         return START_STICKY
       }
       ACTION_STOP -> {
@@ -80,8 +72,7 @@ class SipForegroundService : Service() {
         if (isStarting) {
           debugLog("service stop while starting")
         }
-        stopForegroundIfRunning()
-        isRunning = false
+        stopForegroundSafely()
         isStarting = false
         if (SipWakeLock.isHeld()) {
           debugLog("wake lock release (stop)")
@@ -98,9 +89,8 @@ class SipForegroundService : Service() {
   }
 
   override fun onDestroy() {
-    stopForegroundIfRunning()
+    stopForegroundSafely()
     isStarting = false
-    isRunning = false
     if (SipWakeLock.isHeld()) {
       debugLog("wake lock release (destroy)")
     }
@@ -143,19 +133,18 @@ class SipForegroundService : Service() {
     android.util.Log.d("SipForegroundService", message)
   }
 
-  private fun stopForegroundIfRunning() {
-    if (!isInForeground()) return
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      debugLog("stopForeground(STOP_FOREGROUND_REMOVE)")
-      stopForeground(Service.STOP_FOREGROUND_REMOVE)
-    } else {
-      debugLog("stopForeground(true)")
-      stopForeground(true)
+  private fun stopForegroundSafely() {
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        debugLog("stopForeground(STOP_FOREGROUND_REMOVE)")
+        stopForeground(Service.STOP_FOREGROUND_REMOVE)
+      } else {
+        debugLog("stopForeground(true)")
+        stopForeground(true)
+      }
+    } catch (error: Throwable) {
+      debugLog("stopForeground failed: $error")
     }
-  }
-
-  private fun isInForeground(): Boolean {
-    return isRunning
   }
 
 }
