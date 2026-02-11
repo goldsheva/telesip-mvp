@@ -153,4 +153,16 @@ class IncomingNotificationService {
       'keyguardLocked=${state['keyguardLocked']}',
     );
   }
+
+  static Future<void> logAndroidStateNow(String tag) async {
+    if (!kDebugMode) return;
+    final state = await getNotificationDebugState();
+    if (state == null) return;
+    debugPrint(
+      '[CALLS_NOTIF] androidState $tag enabled=${state['notificationsEnabled']} '
+      'postPerm=${state['hasPostNotificationsPermission']} channelExists=${state['channelExists']} '
+      'channelEnabled=${state['channelEnabled']} importance=${state['channelImportance']} '
+      'keyguardLocked=${state['keyguardLocked']}',
+    );
+  }
 }

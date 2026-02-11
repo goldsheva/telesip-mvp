@@ -57,3 +57,13 @@ Use the title-long-press in debug builds to open the Incoming Smoke dialog:
 4. **Run sequence**
    - Expect `[SMOKE] sequence start ...` → show→update→cancel with 400ms gaps, plus `[CALLS_NOTIF] androidState ...` for each call and `NotificationHelper` logs for each stage.
    - Pass: Sequence completes without duplicate notifications, suppression logs indicate cleanup, and final `[SMOKE] sequence done ...` shows finish.
+
+## Acceptance results template
+
+| Field | Details |
+| --- | --- |
+| Device model |  |
+| Android version |  |
+| Build type |  |
+| Steps (ordered) | e.g., unlocked / locked / double-tap / sequence |
+| Key logs | `[SMOKE] ...`, `[CALLS_NOTIF] androidState ...`, `NotificationHelper notify/update/suppressed ...`, `CallActionReceiver action_enqueued ...`, `[CALLS] drainPendingCallActions summary ...` |

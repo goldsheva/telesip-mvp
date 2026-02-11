@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/calls/debug/incoming_smoke_harness.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
+import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/features/dongles/models/dongle.dart';
 import 'package:app/features/dongles/state/dongles_provider.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
@@ -290,6 +291,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                 IncomingSmokeHarness.cancel();
               },
               child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                IncomingNotificationService.logAndroidStateNow('manual');
+              },
+              child: const Text('Log android state'),
             ),
             ElevatedButton(
               onPressed: () {
