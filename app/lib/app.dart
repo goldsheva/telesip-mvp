@@ -58,14 +58,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == AppLifecycleState.resumed || lifecycleState == null;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _lastIncomingActivityAt = DateTime.now();
-      ref
-          .read(incomingWakeCoordinatorProvider)
-          .checkPendingHint()
-          .whenComplete(() {
-        _lastIncomingActivityAt = DateTime.now();
-        _handlePendingCallAction();
-      });
+      unawaited(_processIncomingActivity());
     });
     _authSubscription = ref.listenManual<AsyncValue<AuthState>>(
       authNotifierProvider,
@@ -134,14 +127,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       }
       _batteryPromptScheduled = false;
       _batteryPromptInFlight = false;
-      _lastIncomingActivityAt = DateTime.now();
-      ref
-          .read(incomingWakeCoordinatorProvider)
-          .checkPendingHint()
-          .whenComplete(() {
-            _lastIncomingActivityAt = DateTime.now();
-            _handlePendingCallAction();
-          });
+      unawaited(_processIncomingActivity());
       unawaited(_maybeAskBatteryOptimizations());
     } else {
       _batteryPromptScheduled = false;
@@ -221,10 +207,19 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     }
   }
 
+  Future<void> _processIncomingActivity() async {
+    final handled =
+        await ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
+    if (handled) {
+      _lastIncomingActivityAt = DateTime.now();
+    }
+    await _handlePendingCallAction();
+  }
+
   Future<void> _handlePendingCallAction() async {
-    _lastIncomingActivityAt = DateTime.now();
     final rawAction = await IncomingNotificationService.readCallAction();
     if (rawAction == null) return;
+    _lastIncomingActivityAt = DateTime.now();
     final callId =
         rawAction['call_id']?.toString() ?? rawAction['callId']?.toString();
     final action = (rawAction['action'] ?? rawAction['type'])?.toString();

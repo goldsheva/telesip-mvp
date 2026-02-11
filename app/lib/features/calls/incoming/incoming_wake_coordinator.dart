@@ -17,9 +17,9 @@ class IncomingWakeCoordinator {
   final Ref _ref;
   DateTime? _lastHandledTimestamp;
 
-  Future<void> checkPendingHint() async {
+  Future<bool> checkPendingHint() async {
     final raw = await FcmStorage.readPendingIncomingHint();
-    if (raw == null) return;
+    if (raw == null) return false;
 
     final payload = raw['payload'] as Map<String, dynamic>?;
     final timestampRaw = raw['timestamp'] as String?;
@@ -31,7 +31,7 @@ class IncomingWakeCoordinator {
         '[INCOMING] invalid pending hint (call_uuid=$callUuid), clearing',
       );
       await FcmStorage.clearPendingIncomingHint();
-      return;
+      return false;
     }
 
     final now = DateTime.now();
@@ -40,12 +40,12 @@ class IncomingWakeCoordinator {
         '[INCOMING] pending hint expired after ${now.difference(timestamp).inSeconds}s (call_uuid=$callUuid)',
       );
       await FcmStorage.clearPendingIncomingHint();
-      return;
+      return false;
     }
 
     if (_lastHandledTimestamp != null &&
         _lastHandledTimestamp!.isAtSameMomentAs(timestamp)) {
-      return;
+      return false;
     }
 
     final callNotifier = _ref.read(callControllerProvider.notifier);
@@ -54,7 +54,7 @@ class IncomingWakeCoordinator {
       debugPrint(
         '[INCOMING] busy when handling wake hint (call_uuid=$callUuid), skipping SIP register',
       );
-      return;
+      return false;
     }
 
     final snapshot = await _ref.read(sipAuthStorageProvider).readSnapshot();
@@ -62,7 +62,7 @@ class IncomingWakeCoordinator {
       debugPrint(
         '[INCOMING] no stored SIP credentials to register (call_uuid=$callUuid)',
       );
-      return;
+      return false;
     }
 
     debugPrint(
@@ -75,6 +75,8 @@ class IncomingWakeCoordinator {
         '[INCOMING] wake-hint handled and cleared (call_uuid=$callUuid)',
       );
       await FcmStorage.clearPendingIncomingHint();
+      return true;
     }
+    return false;
   }
 }
