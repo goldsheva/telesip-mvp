@@ -1393,6 +1393,20 @@ class CallNotifier extends Notifier<CallState> {
     unawaited(handleIncomingCallHintIfAny());
   }
 
+  void ensureBootstrapped(String reason) {
+    if (_bootstrapDone) return;
+    debugPrint(
+      '[CALLS] bootstrap trigger reason=$reason scheduled=$_bootstrapScheduled done=$_bootstrapDone',
+    );
+    if (!_bootstrapScheduled) {
+      _bootstrapScheduled = true;
+      final snapshot = state;
+      Future.microtask(() => _bootstrapIfNeeded(snapshot));
+      return;
+    }
+    _bootstrapIfNeeded(state);
+  }
+
   void _commit(CallState next, {bool syncFgs = true}) {
     final previousState = state;
     final previousActiveId = previousState.activeCallId;

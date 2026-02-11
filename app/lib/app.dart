@@ -46,6 +46,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   String? _scheduledCallId;
   String? _deferredCallId;
   late bool _isResumed;
+  String? _pendingBootstrapReason;
   bool _batteryPromptInFlight = false;
   bool _batteryPromptScheduled = false;
   DateTime? _lastIncomingActivityAt;
@@ -85,6 +86,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     }
     if (authenticated) {
       unawaited(_maybeAskBatteryOptimizations());
+      _ensureCallsBootstrapped('auth');
     }
   }
 
@@ -118,6 +120,11 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     AppLifecycleTracker.update(state);
     _isResumed = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
+      final pending = _pendingBootstrapReason;
+      _pendingBootstrapReason = null;
+      if (pending != null) {
+        _ensureCallsBootstrapped(pending);
+      }
       if (_deferredCallId != null) {
         if (_deferredCallId == _incomingScreenCallId) {
           _deferredCallId = null;
@@ -129,6 +136,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       _batteryPromptScheduled = false;
       _batteryPromptInFlight = false;
       unawaited(_processIncomingActivity());
+      _ensureCallsBootstrapped('app-resume');
       unawaited(_maybeAskBatteryOptimizations());
     } else {
       _batteryPromptScheduled = false;
@@ -347,6 +355,15 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (executed) {
       await IncomingNotificationService.clearCallAction();
     }
+  }
+
+  void _ensureCallsBootstrapped(String reason) {
+    if (!mounted || !_isResumed) {
+      _pendingBootstrapReason = reason;
+      return;
+    }
+    _pendingBootstrapReason = null;
+    ref.read(callControllerProvider.notifier).ensureBootstrapped(reason);
   }
 
   void _handleCallStateChange(CallState? previous, CallState next) {
