@@ -43,8 +43,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (activeCallId != null &&
         activeCallId != widget.callId &&
         call.status != CallStatus.ringing) {
-        _scheduleExit();
-        return const Scaffold(body: SizedBox.shrink());
+      _scheduleExit();
+      return const Scaffold(body: SizedBox.shrink());
     }
 
     final notifier = ref.read(callControllerProvider.notifier);

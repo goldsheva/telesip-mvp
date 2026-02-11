@@ -291,7 +291,52 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> sendDtmf(String callId, String digits) async {
     if (digits.isEmpty) return;
-    await _engine.sendDtmf(callId, digits);
+    final targetCallId = _resolveAliveCallId(callId);
+    if (targetCallId == null) {
+      debugPrint('[CALLS] sendDtmf ignored: call $callId not active');
+      return;
+    }
+    await _engine.sendDtmf(targetCallId, digits);
+  }
+
+  String? _resolveAliveCallId(String callId) {
+    final snapshot = state;
+    final calls = snapshot.calls;
+    final activeId = snapshot.activeCallId;
+    final localId = _sipToLocalCallId.containsKey(callId)
+        ? _sipToLocalCallId[callId]!
+        : callId;
+    String? sipId;
+    if (_sipToLocalCallId.containsKey(callId)) {
+      sipId = callId;
+    } else {
+      for (final entry in _sipToLocalCallId.entries) {
+        if (entry.value == localId) {
+          sipId = entry.key;
+          break;
+        }
+      }
+    }
+    String? pick(List<String?> candidates) {
+      for (final candidate in candidates) {
+        if (candidate == null) continue;
+        final info = calls[candidate];
+        if (info != null && info.status != CallStatus.ended) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+
+    final found = pick([callId, localId, sipId]);
+    if (found != null) return found;
+    if (activeId != null) {
+      final activeInfo = calls[activeId];
+      if (activeInfo != null && activeInfo.status != CallStatus.ended) {
+        return activeId;
+      }
+    }
+    return null;
   }
 
   Future<void> setIncomingSipUser(PbxSipUser user) async {
@@ -814,6 +859,40 @@ class CallNotifier extends Notifier<CallState> {
     _scoActive = false;
   }
 
+  bool _isCallAlive(String id) {
+    final snapshot = state;
+    final calls = snapshot.calls;
+    final activeId = snapshot.activeCallId;
+    final localId = _sipToLocalCallId.containsKey(id)
+        ? _sipToLocalCallId[id]!
+        : id;
+    String? sipId;
+    if (_sipToLocalCallId.containsKey(id)) {
+      sipId = id;
+    } else {
+      for (final entry in _sipToLocalCallId.entries) {
+        if (entry.value == localId) {
+          sipId = entry.key;
+          break;
+        }
+      }
+    }
+    bool checkId(String? candidate) {
+      if (candidate == null) return false;
+      final info = calls[candidate];
+      return info != null && info.status != CallStatus.ended;
+    }
+
+    if (checkId(localId) || checkId(id) || checkId(sipId)) {
+      return true;
+    }
+    if (activeId != null &&
+        (activeId == id || activeId == localId || activeId == sipId)) {
+      return checkId(activeId);
+    }
+    return false;
+  }
+
   Future<void> setCallAudioRoute(AudioRoute route) async {
     final activeCall = state.activeCall;
     if (state.activeCallId == null ||
@@ -866,6 +945,11 @@ class CallNotifier extends Notifier<CallState> {
   Future<bool> setCallMuted(bool muted) async {
     final callId = state.activeCallId ?? _pendingCallId;
     if (callId == null) return false;
+
+    if (!_isCallAlive(callId)) {
+      debugPrint('[CALLS] setCallMuted ignored: call $callId not active');
+      return false;
+    }
 
     final call = _engine.getCall(callId);
     if (call == null) return false;
@@ -1173,7 +1257,11 @@ class CallNotifier extends Notifier<CallState> {
 
     final effectiveId = _sipToLocalCallId[sipCallId] ?? sipCallId;
     var callId = effectiveId;
+    final localId = _sipToLocalCallId.containsKey(callId)
+        ? _sipToLocalCallId[callId]!
+        : callId;
 
+    final status = _mapStatus(event.type);
     final now = DateTime.now();
     _recentlyEnded.removeWhere(
       (_, ts) => now.difference(ts) > _recentlyEndedTtl,
@@ -1182,6 +1270,14 @@ class CallNotifier extends Notifier<CallState> {
         _recentlyEnded.containsKey(sipCallId)) {
       debugPrint(
         '[CALLS] ignoring late sip event event=${event.type.name} sipId=$sipCallId effectiveId=$callId (recently ended)',
+      );
+      return;
+    }
+    final allowAlive =
+        status == CallStatus.dialing || status == CallStatus.ringing;
+    if (!allowAlive && !_isCallAlive(callId) && !_isCallAlive(sipCallId)) {
+      debugPrint(
+        '[CALLS] ignoring event for dead call event=${event.type.name} sipId=$sipCallId effectiveId=$callId localId=$localId dead=true',
       );
       return;
     }
@@ -1325,7 +1421,6 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
 
-    final status = _mapStatus(event.type);
     if (!didAdoptIncoming && !_isPhaseEventAllowed(status)) {
       debugPrint(
         '[SIP] invalid phase ${_phase.name} for ${event.type.name} callId=$callId',
@@ -1769,6 +1864,10 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _attachWatchdog(String callId) {
+    if (!_isCallAlive(callId)) {
+      debugPrint('[CALLS] watchdog not attached: call $callId not active');
+      return;
+    }
     if (_watchdogCallId == callId) return;
     _disposeWatchdog();
     final call = _engine.getCall(callId);
