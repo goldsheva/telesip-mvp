@@ -53,6 +53,12 @@ class IncomingNotificationService {
         args['callUuid'] = callUuid;
       }
       await _channel.invokeMethod('updateIncomingState', args);
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS_NOTIF] updateIncomingState callId=$callId callUuid=${callUuid ?? '<none>'} '
+          'from=$from display=${displayName ?? '<none>'} isRinging=$isRinging',
+        );
+      }
     } catch (error) {
       debugPrint('[CALLS_NOTIF] updateIncomingState failed: $error');
     }
@@ -66,6 +72,11 @@ class IncomingNotificationService {
       final args = <String, dynamic>{'callId': callId};
       if (callUuid != null) {
         args['callUuid'] = callUuid;
+      }
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS_NOTIF] cancelIncoming callId=$callId callUuid=${callUuid ?? '<none>'}',
+        );
       }
       await _channel.invokeMethod('cancelIncoming', args);
       await clearCallAction();
