@@ -1001,12 +1001,17 @@ class CallNotifier extends Notifier<CallState> {
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
       (previous, next) => next.whenData((event) {
-        _eventChain = _eventChain.then((_) => _onEvent(event)).catchError(
-          (error, stack) {
-            debugPrint('[CALLS] event processing failed: $error');
+        _eventChain = _eventChain.then((_) => _onEvent(event)).catchError((
+          error,
+          stack,
+        ) {
+          debugPrint(
+            '[CALLS] event processing failed: $error (sipEvent=${event.type.name})',
+          );
+          if (kDebugMode) {
             debugPrint(stack.toString());
-          },
-        );
+          }
+        });
       }),
     );
     ref.listen<AsyncValue<AppLifecycleState>>(
