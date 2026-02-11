@@ -32,7 +32,7 @@ import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
 import 'call_reconnect_coordinator.dart';
-import 'call_reconnect_decision.dart';
+import 'call_reconnect_helpers.dart';
 import 'call_reconnect_log.dart';
 import 'call_reconnect_perform_coordinator.dart';
 import 'call_reconnect_scheduler.dart';
@@ -1309,49 +1309,24 @@ class CallNotifier extends Notifier<CallState> {
     );
   }
 
-  String _activeCallIdForLogs() => state.activeCallId ?? '<none>';
-
-  AuthStatus _currentAuthStatus() =>
-      ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-
-  bool _handleReconnectDecision({
-    required ReconnectDecision decision,
-    required bool treatInFlightAsSilent,
-  }) {
-    if (decision is! ReconnectDecisionSkip) return false;
-    if (decision.disposed) return true;
-    if (decision.inFlight) {
-      if (treatInFlightAsSilent) return true;
-      final message = decision.message;
-      if (message != null) {
-        debugPrint(message);
-      }
-      return true;
-    }
-    final message = decision.message;
-    if (message != null) {
-      debugPrint(message);
-    }
-    return true;
-  }
-
   void _scheduleReconnect(String reason) {
     if (_disposed) return;
-    final authStatus = _currentAuthStatus();
-    final activeCallIdForLogs = _activeCallIdForLogs();
+    final authStatus = currentAuthStatus(ref);
+    final callIdForLogs = activeCallIdForLogs(state.activeCallId);
     final decision = CallReconnectCoordinator.decideSchedule(
       reason: reason,
       authStatusName: authStatus.name,
-      activeCallId: activeCallIdForLogs,
+      activeCallId: callIdForLogs,
       disposed: _disposed,
       authenticated: authStatus == AuthStatus.authenticated,
       online: _lastKnownOnline,
       hasActiveCall: _hasActiveCall,
       reconnectInFlight: _reconnectInFlight,
     );
-    if (_handleReconnectDecision(
+    if (handleReconnectDecision(
       decision: decision,
       treatInFlightAsSilent: false,
+      log: debugPrint,
     )) {
       return;
     }
@@ -1382,21 +1357,22 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> _performReconnect(String reason) async {
     if (_disposed) return;
-    final authStatus = _currentAuthStatus();
-    final activeCallIdForLogs = _activeCallIdForLogs();
+    final authStatus = currentAuthStatus(ref);
+    final callIdForLogs = activeCallIdForLogs(state.activeCallId);
     final performDecision = CallReconnectPerformCoordinator.decidePerform(
       reason: reason,
       authStatusName: authStatus.name,
-      activeCallId: activeCallIdForLogs,
+      activeCallId: callIdForLogs,
       disposed: _disposed,
       reconnectInFlight: _reconnectInFlight,
       online: _lastKnownOnline,
       hasActiveCall: _hasActiveCall,
       authenticated: authStatus == AuthStatus.authenticated,
     );
-    if (_handleReconnectDecision(
+    if (handleReconnectDecision(
       decision: performDecision,
       treatInFlightAsSilent: true,
+      log: debugPrint,
     )) {
       return;
     }
