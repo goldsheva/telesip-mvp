@@ -1314,6 +1314,30 @@ class CallNotifier extends Notifier<CallState> {
   AuthStatus _currentAuthStatus() =>
       ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
 
+  bool _handleScheduleDecision({required ReconnectDecision decision}) {
+    if (decision is ReconnectDecisionSkip) {
+      if (decision.disposed) return true;
+      final message = decision.message;
+      if (message != null) {
+        debugPrint(message);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  bool _handlePerformDecision({required ReconnectDecision decision}) {
+    if (decision is ReconnectDecisionSkip) {
+      if (decision.disposed || decision.inFlight) return true;
+      final message = decision.message;
+      if (message != null) {
+        debugPrint(message);
+      }
+      return true;
+    }
+    return false;
+  }
+
   void _scheduleReconnect(String reason) {
     if (_disposed) return;
     final authStatus = _currentAuthStatus();
@@ -1328,14 +1352,7 @@ class CallNotifier extends Notifier<CallState> {
       hasActiveCall: _hasActiveCall,
       reconnectInFlight: _reconnectInFlight,
     );
-    if (decision is ReconnectDecisionSkip) {
-      if (decision.disposed) return;
-      final message = decision.message;
-      if (message != null) {
-        debugPrint(message);
-      }
-      return;
-    }
+    if (_handleScheduleDecision(decision: decision)) return;
     _reconnectScheduler.cancel();
     final delay = _reconnectScheduler.currentDelay;
     final attemptNumber = _reconnectScheduler.currentAttemptNumber;
@@ -1375,12 +1392,7 @@ class CallNotifier extends Notifier<CallState> {
       hasActiveCall: _hasActiveCall,
       authenticated: authStatus == AuthStatus.authenticated,
     );
-    if (performDecision is ReconnectDecisionSkip) {
-      if (performDecision.disposed || performDecision.inFlight) return;
-      final message = performDecision.message;
-      if (message != null) {
-        debugPrint(message);
-      }
+    if (_handlePerformDecision(decision: performDecision)) {
       return;
     }
     final reconnectUser = _lastKnownUser ?? _incomingUser;
