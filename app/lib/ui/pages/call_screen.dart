@@ -38,13 +38,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final activeCallId = state.activeCallId;
     if (call == null || call.status == CallStatus.ended) {
       _scheduleExit();
-      return const Scaffold(body: SizedBox.shrink());
+      return const SizedBox.shrink();
     }
     if (activeCallId != null &&
         activeCallId != widget.callId &&
         call.status != CallStatus.ringing) {
       _scheduleExit();
-      return const Scaffold(body: SizedBox.shrink());
+      return const SizedBox.shrink();
     }
 
     final notifier = ref.read(callControllerProvider.notifier);
