@@ -1274,8 +1274,11 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    if (!_shouldStartHealthWatchdogNow(authStatus)) {
+    if (_shouldStopHealthWatchdogNow(authStatus)) {
       _stopHealthWatchdog();
+      return;
+    }
+    if (!_shouldStartHealthWatchdogNow(authStatus)) {
       return;
     }
     _healthStartedAt = DateTime.now();
@@ -1315,6 +1318,14 @@ class CallNotifier extends Notifier<CallState> {
     if (_healthWatchdog.isRunning) return false;
     if (_isSipHealthyNow()) return false;
     return true;
+  }
+
+  bool _shouldStopHealthWatchdogNow(AuthStatus authStatus) {
+    if (!_lastKnownOnline || authStatus != AuthStatus.authenticated) {
+      return true;
+    }
+    if (_isSipHealthyNow()) return true;
+    return false;
   }
 
   void _scheduleReconnect(String reason) {
