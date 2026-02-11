@@ -804,9 +804,42 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _commit(CallState next, {bool syncFgs = true}) {
-    state = next;
+    final previousState = state;
+    final previousActiveId = previousState.activeCallId;
+    final nextActiveId = next.activeCallId;
+    CallState commitState = next;
+    AudioRoute? forcedRoute;
+
+    final nextActiveIsNew =
+        nextActiveId != null &&
+        nextActiveId != previousActiveId &&
+        !previousState.calls.containsKey(nextActiveId);
+    if (nextActiveIsNew) {
+      final activeCall = next.calls[nextActiveId];
+      final outgoingDialing =
+          activeCall != null && activeCall.status == CallStatus.dialing;
+      forcedRoute =
+          outgoingDialing ? AudioRoute.earpiece : AudioRoute.systemDefault;
+      commitState = next.copyWith(
+        isMuted: false,
+        audioRoute: forcedRoute,
+      );
+      final statusLabel = activeCall != null
+          ? activeCall.status.toString().split('.').last
+          : '<unknown>';
+      debugPrint(
+        '[CALLS] hard-reset prev=$previousActiveId next=$nextActiveId '
+        'newCall=true route=$forcedRoute status=$statusLabel',
+      );
+    }
+
+    state = commitState;
     if (syncFgs) {
-      _syncForegroundServiceState(next);
+      _syncForegroundServiceState(commitState);
+    }
+    if (forcedRoute != null) {
+      unawaited(_applyNativeAudioRoute(forcedRoute));
+      unawaited(_refreshAudioRoute());
     }
   }
 
