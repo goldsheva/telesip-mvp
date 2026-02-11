@@ -149,10 +149,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     }
     final now = DateTime.now();
     if (_lastIncomingActivityAt != null &&
-        now.difference(_lastIncomingActivityAt!) < const Duration(seconds: 10)) {
-      debugPrint(
-        '[CALLS] battery prompt suppressed: recent incoming activity',
-      );
+        now.difference(_lastIncomingActivityAt!) <
+            const Duration(seconds: 10)) {
+      debugPrint('[CALLS] battery prompt suppressed: recent incoming activity');
       return;
     }
     final callState = ref.read(callControllerProvider);
@@ -208,8 +207,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   }
 
   Future<void> _processIncomingActivity() async {
-    final handled =
-        await ref.read(incomingWakeCoordinatorProvider).checkPendingHint();
+    final handled = await ref
+        .read(incomingWakeCoordinatorProvider)
+        .checkPendingHint();
     if (handled) {
       _lastIncomingActivityAt = DateTime.now();
     }
