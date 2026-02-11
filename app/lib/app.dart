@@ -49,6 +49,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   bool _batteryPromptInFlight = false;
   bool _batteryPromptScheduled = false;
   DateTime? _lastIncomingActivityAt;
+  bool _incomingProcessInFlight = false;
 
   @override
   void initState() {
@@ -207,13 +208,19 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   }
 
   Future<void> _processIncomingActivity() async {
-    final handled = await ref
-        .read(incomingWakeCoordinatorProvider)
-        .checkPendingHint();
-    if (handled) {
-      _lastIncomingActivityAt = DateTime.now();
+    if (_incomingProcessInFlight) return;
+    _incomingProcessInFlight = true;
+    try {
+      final handled = await ref
+          .read(incomingWakeCoordinatorProvider)
+          .checkPendingHint();
+      if (handled) {
+        _lastIncomingActivityAt = DateTime.now();
+      }
+      await _handlePendingCallAction();
+    } finally {
+      _incomingProcessInFlight = false;
     }
-    await _handlePendingCallAction();
   }
 
   Future<void> _handlePendingCallAction() async {
