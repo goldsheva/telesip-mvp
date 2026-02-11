@@ -1549,6 +1549,9 @@ class CallNotifier extends Notifier<CallState> {
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
       _reconnectInFlight = false;
+      _reconnectBackoffIndex = 0;
+      _lastNetworkActivityAt = null;
+      _lastSipRegisteredAt = null;
       _stopHealthWatchdog();
       debugDumpConnectivityAndSipHealth('net-offline');
       return;
@@ -1814,6 +1817,14 @@ class CallNotifier extends Notifier<CallState> {
         if (registrationState == SipRegistrationState.registered) {
           _lastSipRegisteredAt = now;
           _reconnectBackoffIndex = 0;
+          if (_reconnectTimer != null || _reconnectInFlight) {
+            debugPrint(
+              '[CALLS_CONN] reconnect cleared due to registration success',
+            );
+          }
+          _reconnectTimer?.cancel();
+          _reconnectTimer = null;
+          _reconnectInFlight = false;
         }
         _lastRegistrationState = registrationState;
       }
