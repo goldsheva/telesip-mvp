@@ -569,7 +569,7 @@ class CallNotifier extends Notifier<CallState> {
     final activeWas = previousState.activeCallId;
     final shouldEndInState =
         (callInfo != null && callInfo.status != CallStatus.ended) ||
-            activeWas == callId;
+        activeWas == callId;
     if (!shouldEndInState) {
       debugPrint(
         '[INCOMING] cancelled callId=$callId endedInState=false activeWas=$activeWas clearedHint=$clearedHint',
@@ -914,12 +914,10 @@ class CallNotifier extends Notifier<CallState> {
       final activeCall = next.calls[nextActiveId];
       final outgoingDialing =
           activeCall != null && activeCall.status == CallStatus.dialing;
-      forcedRoute =
-          outgoingDialing ? AudioRoute.earpiece : AudioRoute.systemDefault;
-      commitState = next.copyWith(
-        isMuted: false,
-        audioRoute: forcedRoute,
-      );
+      forcedRoute = outgoingDialing
+          ? AudioRoute.earpiece
+          : AudioRoute.systemDefault;
+      commitState = next.copyWith(isMuted: false, audioRoute: forcedRoute);
       final statusLabel = activeCall != null
           ? activeCall.status.toString().split('.').last
           : '<unknown>';
