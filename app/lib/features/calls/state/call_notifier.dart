@@ -167,6 +167,7 @@ class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
   Future<void> _eventChain = Future<void>.value();
+  bool _disposed = false;
   bool _isRegistered = false;
   String? _lastErrorMessage;
   DateTime? _lastErrorTimestamp;
@@ -1001,17 +1002,29 @@ class CallNotifier extends Notifier<CallState> {
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
       (previous, next) => next.whenData((event) {
-        _eventChain = _eventChain.then((_) => _onEvent(event)).catchError((
-          error,
-          stack,
-        ) {
-          debugPrint(
-            '[CALLS] event processing failed: $error (sipEvent=${event.type.name})',
-          );
-          if (kDebugMode) {
-            debugPrint(stack.toString());
-          }
+        if (_disposed) return;
+        final previousChain = _eventChain;
+        final nextChain = previousChain.then((_) async {
+          if (_disposed) return;
+          await _onEvent(event);
         });
+        late final Future<void> completion;
+        final handledChain = nextChain
+            .catchError((error, stack) {
+              debugPrint(
+                '[CALLS] event processing failed: $error (sipEvent=${event.type.name})',
+              );
+              if (kDebugMode) {
+                debugPrint(stack.toString());
+              }
+            })
+            .whenComplete(() {
+              if (_eventChain == completion && !_disposed) {
+                _eventChain = Future<void>.value();
+              }
+            });
+        completion = handledChain;
+        _eventChain = handledChain;
       }),
     );
     ref.listen<AsyncValue<AppLifecycleState>>(
@@ -1028,6 +1041,7 @@ class CallNotifier extends Notifier<CallState> {
       }),
     );
     ref.onDispose(() {
+      _disposed = true;
       _eventSubscription?.close();
       _disposeWatchdog();
       _cancelRegistrationErrorTimer();
