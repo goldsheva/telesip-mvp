@@ -728,9 +728,28 @@ class CallNotifier extends Notifier<CallState> {
       );
       return;
     }
-    await AudioRouteService.setRoute(route);
-    _commit(state.copyWith(audioRoute: route), syncFgs: false);
+    final available = state.availableAudioRoutes;
+    final clampedRoute = _clampToAvailableRoute(route, available);
+    if (clampedRoute != route) {
+      debugPrint(
+        '[CALLS] clamp audio route requested=$route -> $clampedRoute available=$available',
+      );
+    }
+    if (clampedRoute == state.audioRoute) return;
+    _commit(state.copyWith(audioRoute: clampedRoute), syncFgs: false);
+    unawaited(_applyNativeAudioRoute(clampedRoute));
     unawaited(_refreshAudioRoute());
+  }
+
+  AudioRoute _clampToAvailableRoute(
+    AudioRoute requested,
+    Set<AudioRoute> available,
+  ) {
+    if (available.contains(requested)) return requested;
+    if (available.contains(AudioRoute.bluetooth)) return AudioRoute.bluetooth;
+    if (available.contains(AudioRoute.earpiece)) return AudioRoute.earpiece;
+    if (available.contains(AudioRoute.speaker)) return AudioRoute.speaker;
+    return AudioRoute.systemDefault;
   }
 
   Future<bool> setCallMuted(bool muted) async {
