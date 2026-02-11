@@ -618,13 +618,36 @@ class CallNotifier extends Notifier<CallState> {
     }
 
     String? pairedSipId;
-    if (!callIdIsSip) {
+    if (callIdIsSip) {
+      pairedSipId = callId;
+    } else {
       for (final entry in _sipToLocalCallId.entries) {
         if (entry.value == localId) {
           pairedSipId = entry.key;
           break;
         }
       }
+    }
+
+    final calls = previousState.calls;
+    final hasEntry =
+        calls.containsKey(callId) ||
+        (localId != callId && calls.containsKey(localId));
+    final activeOrPending = activeMatches || pendingMatches;
+    final requiresNotificationClear =
+        cancelNotification || clearPendingHint || clearPendingAction || false;
+    if (!hasEntry && !activeOrPending && !requiresNotificationClear) {
+      _recentlyEnded[callId] = now;
+      if (localId != callId) {
+        _recentlyEnded[localId] = now;
+      }
+      if (markRecentlyEndedForSipPair && pairedSipId != null) {
+        _recentlyEnded[pairedSipId] = now;
+      }
+      debugPrint(
+        '[CALLS] endCall no-op reason=$reason callId=$callId localId=$localId paired=$pairedSipId',
+      );
+      return;
     }
 
     bool matchesCallId(String? candidate) =>
