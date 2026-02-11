@@ -163,6 +163,9 @@ class CallState {
 enum _CallPhase { idle, ringing, connecting, active, ending }
 
 const Duration _errorDedupTtl = Duration(seconds: 2);
+const Set<AudioRoute> _defaultAvailableAudioRoutes = {
+  AudioRoute.systemDefault,
+};
 
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
@@ -950,8 +953,15 @@ class CallNotifier extends Notifier<CallState> {
     final previousState = state;
     final previousActiveId = previousState.activeCallId;
     final nextActiveId = next.activeCallId;
+    final callEnded = previousActiveId != null && nextActiveId == null;
     CallState commitState = next;
     AudioRoute? forcedRoute;
+
+    if (callEnded) {
+      commitState = commitState.copyWith(
+        availableAudioRoutes: _defaultAvailableAudioRoutes,
+      );
+    }
 
     final nextActiveIsNew =
         nextActiveId != null &&
@@ -961,13 +971,11 @@ class CallNotifier extends Notifier<CallState> {
       final activeCall = next.calls[nextActiveId];
       final outgoingDialing =
           activeCall != null && activeCall.status == CallStatus.dialing;
-      forcedRoute = outgoingDialing
-          ? AudioRoute.earpiece
-          : AudioRoute.systemDefault;
-      commitState = next.copyWith(isMuted: false, audioRoute: forcedRoute);
-      final statusLabel = activeCall != null
-          ? activeCall.status.toString().split('.').last
-          : '<unknown>';
+      forcedRoute =
+          outgoingDialing ? AudioRoute.earpiece : AudioRoute.systemDefault;
+      commitState = commitState.copyWith(isMuted: false, audioRoute: forcedRoute);
+      final statusLabel =
+          activeCall != null ? activeCall.status.toString().split('.').last : '<unknown>';
       debugPrint(
         '[CALLS] hard-reset prev=$previousActiveId next=$nextActiveId '
         'newCall=true route=$forcedRoute status=$statusLabel',
@@ -978,8 +986,15 @@ class CallNotifier extends Notifier<CallState> {
     if (syncFgs) {
       _syncForegroundServiceState(commitState);
     }
+
+    final becameActive =
+        nextActiveId != null && (previousActiveId == null || nextActiveIsNew);
     if (forcedRoute != null) {
+      debugPrint('[CALLS] refreshAudioRoute on call activate id=$nextActiveId');
       unawaited(_applyNativeAudioRoute(forcedRoute));
+      unawaited(_refreshAudioRoute());
+    } else if (becameActive) {
+      debugPrint('[CALLS] refreshAudioRoute on call activate id=$nextActiveId');
       unawaited(_refreshAudioRoute());
     }
   }
