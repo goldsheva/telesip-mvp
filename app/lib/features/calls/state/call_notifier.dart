@@ -32,6 +32,7 @@ import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
 import 'call_reconnect_coordinator.dart';
+import 'call_reconnect_log.dart';
 import 'call_reconnect_policy.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
@@ -1324,25 +1325,27 @@ class CallNotifier extends Notifier<CallState> {
         switch (decision.reason!) {
           case CallReconnectScheduleBlockReason.notAuthenticated:
             debugPrint(
-              '[CALLS_CONN] scheduleReconnect skip reason=$reason authStatus=${authStatus.name}',
+              CallReconnectLog.scheduleSkipNotAuthenticated(
+                reason,
+                authStatus.name,
+              ),
             );
             return;
           case CallReconnectScheduleBlockReason.offline:
-            debugPrint(
-              '[CALLS_CONN] scheduleReconnect skip reason=$reason online=false',
-            );
+            debugPrint(CallReconnectLog.scheduleSkipOffline(reason));
             return;
           case CallReconnectScheduleBlockReason.hasActiveCall:
             debugPrint(
-              '[CALLS_CONN] scheduleReconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+              CallReconnectLog.scheduleSkipHasActiveCall(
+                reason,
+                state.activeCallId ?? '<none>',
+              ),
             );
             return;
         }
       }
       if (decision.inFlight) {
-        debugPrint(
-          '[CALLS_CONN] scheduleReconnect skip reason=$reason inFlight=true',
-        );
+        debugPrint(CallReconnectLog.scheduleSkipInFlight(reason));
         return;
       }
       return;
@@ -1354,10 +1357,16 @@ class CallNotifier extends Notifier<CallState> {
         ? '<none>'
         : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
     debugPrint(
-      '[CALLS_CONN] scheduleReconnect reason=$reason attempt=$attemptNumber '
-      'delayMs=${delay.inMilliseconds} online=$_lastKnownOnline '
-      'authStatus=${authStatus.name} registered=$_isRegistered '
-      'lastNetAge=$lastNetAge backoffIndex=${_reconnectScheduler.backoffIndex}',
+      CallReconnectLog.scheduleScheduled(
+        reason: reason,
+        attemptNumber: attemptNumber,
+        delayMs: delay.inMilliseconds,
+        online: _lastKnownOnline,
+        authStatus: authStatus.name,
+        registered: _isRegistered,
+        lastNetAge: lastNetAge,
+        backoffIndex: _reconnectScheduler.backoffIndex,
+      ),
     );
     debugDumpConnectivityAndSipHealth('scheduleReconnect');
     _reconnectScheduler.schedule(
@@ -1383,16 +1392,22 @@ class CallNotifier extends Notifier<CallState> {
         case CallReconnectPerformBlockReason.inFlight:
           return;
         case CallReconnectPerformBlockReason.offline:
-          debugPrint('[CALLS_CONN] reconnect skip reason=$reason online=false');
+          debugPrint(CallReconnectLog.reconnectSkipOffline(reason));
           return;
         case CallReconnectPerformBlockReason.hasActiveCall:
           debugPrint(
-            '[CALLS_CONN] reconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+            CallReconnectLog.reconnectSkipHasActiveCall(
+              reason,
+              state.activeCallId ?? '<none>',
+            ),
           );
           return;
         case CallReconnectPerformBlockReason.notAuthenticated:
           debugPrint(
-            '[CALLS_CONN] reconnect skip reason=$reason authStatus=${authStatus.name}',
+            CallReconnectLog.reconnectSkipNotAuthenticated(
+              reason,
+              authStatus.name,
+            ),
           );
           return;
       }

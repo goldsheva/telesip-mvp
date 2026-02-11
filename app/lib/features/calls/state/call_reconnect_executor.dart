@@ -1,3 +1,4 @@
+import 'package:app/features/calls/state/call_reconnect_log.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 
 class CallReconnectExecutor {
@@ -13,17 +14,17 @@ class CallReconnectExecutor {
   }) async {
     if (isDisposed()) return false;
     if (reconnectUser == null) {
-      log('[CALLS_CONN] reconnect skip reason=$reason missing_user');
+      log(CallReconnectLog.reconnectSkipMissingUser(reason));
       return false;
     }
     try {
-      log('[CALLS_CONN] reconnect fired reason=$reason');
+      log(CallReconnectLog.reconnectFired(reason));
       await ensureRegistered(reconnectUser);
       if (isDisposed()) return false;
       return true;
     } catch (error) {
       if (isDisposed()) return false;
-      log('[CALLS_CONN] reconnect failed: $error');
+      log(CallReconnectLog.reconnectFailed(error));
       return false;
     }
   }
