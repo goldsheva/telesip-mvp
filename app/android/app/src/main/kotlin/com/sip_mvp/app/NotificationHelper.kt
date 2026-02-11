@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
 
 object NotificationHelper {
   private const val CHANNEL_ID = "calls"
@@ -73,7 +74,7 @@ object NotificationHelper {
       },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
-    val callerPerson = NotificationCompat.Person.Builder()
+    val callerPerson = Person.Builder()
       .setName(displayName ?: from)
       .setImportant(true)
       .build()
@@ -99,8 +100,11 @@ object NotificationHelper {
         }
       }
       .setContentIntent(contentIntent)
-      .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)
-      .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declineIntent)
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+      builder
+        .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)
+        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declineIntent)
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       builder.setStyle(
         NotificationCompat.CallStyle.forIncomingCall(
