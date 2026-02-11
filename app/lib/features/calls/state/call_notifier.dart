@@ -1716,6 +1716,9 @@ class CallNotifier extends Notifier<CallState> {
     _processedPendingCallActions.removeWhere(
       (_, timestamp) => now.difference(timestamp) > _pendingCallActionDedupTtl,
     );
+    var dedupSkipped = 0;
+    var unknownCleared = 0;
+    var processed = 0;
     for (final item in raw) {
       if (item is! Map) continue;
       final type = item['type']?.toString();
@@ -1727,10 +1730,12 @@ class CallNotifier extends Notifier<CallState> {
         debugPrint(
           '[CALLS] drainPendingCallActions skipping duplicate type=$type callId=$callId ts=$tsKey',
         );
+        dedupSkipped++;
         continue;
       }
       _processedPendingCallActions[dedupKey] = now;
       if (type == 'answer') {
+        processed++;
         if (!_isCallAlive(callId)) {
           debugPrint(
             '[CALLS] pending answer for unknown call $callId, clearing',
@@ -1741,10 +1746,12 @@ class CallNotifier extends Notifier<CallState> {
             clearPendingAction: true,
             clearPendingHint: true,
           );
+          unknownCleared++;
           continue;
         }
         await answerFromNotification(callId);
       } else if (type == 'decline') {
+        processed++;
         if (!_isCallAlive(callId)) {
           debugPrint(
             '[CALLS] pending decline for unknown call $callId, clearing',
@@ -1755,10 +1762,18 @@ class CallNotifier extends Notifier<CallState> {
             clearPendingAction: true,
             clearPendingHint: true,
           );
+          unknownCleared++;
           continue;
         }
         await declineFromNotification(callId);
       }
+    }
+    if (kDebugMode) {
+      final totalConsidered = processed + dedupSkipped;
+      debugPrint(
+        '[CALLS] drainPendingCallActions summary total=$totalConsidered '
+        'processed=$processed dedupSkipped=$dedupSkipped unknownCleared=$unknownCleared',
+      );
     }
   }
 
