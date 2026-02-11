@@ -268,7 +268,20 @@ class _AuthGateState extends ConsumerState<_AuthGate>
 
     final callState = ref.read(callControllerProvider);
     final callInfo = callState.calls[callId];
-    if (callInfo == null || callInfo.status == CallStatus.ended) {
+    if (callInfo == null) {
+      debugPrint('[CALLS] pending action ignored: no call for callId=$callId');
+      await IncomingNotificationService.clearCallAction();
+      return;
+    }
+    if (callInfo.status == CallStatus.ended) {
+      debugPrint('[CALLS] pending action ignored: call ended callId=$callId');
+      await IncomingNotificationService.clearCallAction();
+      return;
+    }
+    if (callState.activeCallId != callId) {
+      debugPrint(
+        '[CALLS] pending action ignored: active=${callState.activeCallId} callId=$callId',
+      );
       await IncomingNotificationService.clearCallAction();
       return;
     }
