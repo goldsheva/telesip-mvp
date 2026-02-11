@@ -1,6 +1,6 @@
 import 'dart:async';
-
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -178,6 +178,14 @@ class CallNotifier extends Notifier<CallState> {
   DateTime? _lastOnlineHandledAt;
   bool _lastKnownOnline = false;
   static const Duration _connectivityDebounce = Duration(seconds: 2);
+  DateTime? _lastSipRegisteredAt;
+  DateTime? _lastNetworkActivityAt;
+  DateTime? _healthStartedAt;
+  DateTime? _bootstrapCompletedAt;
+  Timer? _reconnectTimer;
+  bool _reconnectInFlight = false;
+  int _reconnectBackoffIndex = 0;
+  Timer? _healthCheckTimer;
   bool _isRegistered = false;
   String? _lastErrorMessage;
   DateTime? _lastErrorTimestamp;
@@ -215,6 +223,17 @@ class CallNotifier extends Notifier<CallState> {
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
   bool _audioRouteRefreshInFlight = false;
+  static const Duration _sipHealthTimeout = Duration(seconds: 20);
+  static const Duration _healthCheckInterval = Duration(seconds: 10);
+  static const Duration _maxBackoff = Duration(seconds: 30);
+  static const List<Duration> _backoffDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 16),
+    _maxBackoff,
+  ];
   static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
@@ -953,6 +972,9 @@ class CallNotifier extends Notifier<CallState> {
       (_isRegistered &&
           _lastRegistrationState == SipRegistrationState.registered);
 
+  bool get _hasActiveCall =>
+      state.activeCall != null && state.activeCall!.status != CallStatus.ended;
+
   Future<bool> _ensureIncomingReady({
     Duration timeout = const Duration(seconds: 4),
   }) async {
@@ -1344,6 +1366,7 @@ class CallNotifier extends Notifier<CallState> {
               '[CALLS_CONN] net online (init) -> ensureBootstrapped reason=net-online-init',
             );
             ensureBootstrapped('net-online-init');
+            _maybeStartHealthWatchdog();
           }
         }),
       );
@@ -1394,6 +1417,8 @@ class CallNotifier extends Notifier<CallState> {
       _disposed = true;
       _eventSubscription?.close();
       _connectivitySubscription?.cancel();
+      _reconnectTimer?.cancel();
+      _healthCheckTimer?.cancel();
       _disposeWatchdog();
       _cancelRegistrationErrorTimer();
       unawaited(_releaseAudioFocus());
@@ -1442,8 +1467,10 @@ class CallNotifier extends Notifier<CallState> {
         return;
       }
       _bootstrapDone = true;
+      _bootstrapCompletedAt = DateTime.now();
       _syncForegroundServiceState(snapshot);
       unawaited(handleIncomingCallHintIfAny());
+      _maybeStartHealthWatchdog();
     } finally {
       _bootstrapInFlight = false;
     }
@@ -1495,6 +1522,10 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint('[CALLS_CONN] net offline');
       _lastKnownOnline = false;
       _lastOnlineHandledAt = null;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      _reconnectInFlight = false;
+      _stopHealthWatchdog();
       return;
     }
     final lastHandled = _lastOnlineHandledAt;
@@ -1507,12 +1538,10 @@ class CallNotifier extends Notifier<CallState> {
     _lastOnlineHandledAt = now;
 
     final activeCall = state.activeCall;
-    final hasActiveCall =
-        activeCall != null && activeCall.status != CallStatus.ended;
-    if (hasActiveCall) {
+    if (_hasActiveCall) {
       debugPrint(
         '[CALLS_CONN] net online skip activeCallId=${state.activeCallId ?? '<none>'} '
-        'status=${activeCall.status}',
+        'status=${activeCall?.status ?? '<none>'}',
       );
       return;
     }
@@ -1522,19 +1551,153 @@ class CallNotifier extends Notifier<CallState> {
       '[CALLS_CONN] net online -> ensureBootstrapped reason=net-online',
     );
     ensureBootstrapped('net-online');
+    _maybeStartHealthWatchdog();
+    if (!_isRegistered && !state.isRegistered) {
+      _scheduleReconnect('net-online');
+    }
   }
 
   void logConnectivitySnapshot(String tag) {
     if (!kDebugMode) return;
-    final authStatus =
+    final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     final activeCall = state.activeCall;
+    final lastNetAge = _lastNetworkActivityAt == null
+        ? '<none>'
+        : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
     debugPrint(
       '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
       'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
       'active=${state.activeCallId ?? '<none>'} '
-      'status=${activeCall?.status ?? '<none>'}',
+      'status=${activeCall?.status ?? '<none>'} '
+      'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex '
+      'registeredAt=${_lastSipRegisteredAt != null}',
     );
+  }
+
+  void _maybeStartHealthWatchdog() {
+    if (_disposed) return;
+    final AuthStatus authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    if (!_lastKnownOnline || authStatus != AuthStatus.authenticated) {
+      _stopHealthWatchdog();
+      return;
+    }
+    if (_healthCheckTimer != null) return;
+    _healthStartedAt = DateTime.now();
+    _healthCheckTimer = Timer.periodic(_healthCheckInterval, _checkSipHealth);
+  }
+
+  void _stopHealthWatchdog() {
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = null;
+    _healthStartedAt = null;
+  }
+
+  void _checkSipHealth(Timer timer) {
+    if (!_lastKnownOnline) return;
+    if (_hasActiveCall) return;
+    final AuthStatus authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    if (authStatus != AuthStatus.authenticated) return;
+    final now = DateTime.now();
+    final activityAt = _lastNetworkActivityAt;
+    if (activityAt == null) {
+      final start = _healthStartedAt ?? _bootstrapCompletedAt;
+      if (start != null && now.difference(start) > _sipHealthTimeout) {
+        _scheduleReconnect('no-network-activity');
+      }
+      return;
+    }
+    if (now.difference(activityAt) > _sipHealthTimeout) {
+      _scheduleReconnect('health-timeout');
+    }
+  }
+
+  void _scheduleReconnect(String reason) {
+    if (_disposed) return;
+    final AuthStatus authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    if (authStatus != AuthStatus.authenticated) {
+      debugPrint(
+        '[CALLS_CONN] scheduleReconnect skip reason=$reason authStatus=${authStatus.name}',
+      );
+      return;
+    }
+    if (!_lastKnownOnline) {
+      debugPrint(
+        '[CALLS_CONN] scheduleReconnect skip reason=$reason online=false',
+      );
+      return;
+    }
+    if (_hasActiveCall) {
+      debugPrint(
+        '[CALLS_CONN] scheduleReconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+      );
+      return;
+    }
+    if (_reconnectInFlight) {
+      debugPrint(
+        '[CALLS_CONN] scheduleReconnect skip reason=$reason inFlight=true',
+      );
+      return;
+    }
+    _reconnectTimer?.cancel();
+    final idx = math.min(_reconnectBackoffIndex, _backoffDelays.length - 1);
+    final delay = _backoffDelays[idx];
+    final attemptNumber = idx + 1;
+    final lastNetAge = _lastNetworkActivityAt == null
+        ? '<none>'
+        : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
+    debugPrint(
+      '[CALLS_CONN] scheduleReconnect reason=$reason attempt=$attemptNumber '
+      'delayMs=${delay.inMilliseconds} online=$_lastKnownOnline '
+      'authStatus=${authStatus.name} registered=$_isRegistered '
+      'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex',
+    );
+    _reconnectTimer = Timer(delay, () => _performReconnect(reason));
+    _reconnectBackoffIndex = math.min(
+      _reconnectBackoffIndex + 1,
+      _backoffDelays.length - 1,
+    );
+  }
+
+  Future<void> _performReconnect(String reason) async {
+    if (_disposed) return;
+    _reconnectTimer = null;
+    if (_reconnectInFlight) return;
+    if (!_lastKnownOnline) {
+      debugPrint('[CALLS_CONN] reconnect skip reason=$reason online=false');
+      return;
+    }
+    if (_hasActiveCall) {
+      debugPrint(
+        '[CALLS_CONN] reconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+      );
+      return;
+    }
+    final AuthStatus authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    if (authStatus != AuthStatus.authenticated) {
+      debugPrint(
+        '[CALLS_CONN] reconnect skip reason=$reason authStatus=${authStatus.name}',
+      );
+      return;
+    }
+    final reconnectUser = _lastKnownUser ?? _incomingUser;
+    if (reconnectUser == null) {
+      debugPrint('[CALLS_CONN] reconnect skip reason=$reason missing_user');
+      return;
+    }
+    _reconnectInFlight = true;
+    try {
+      debugPrint('[CALLS_CONN] reconnect fired reason=$reason');
+      await ensureRegistered(reconnectUser);
+    } catch (error) {
+      debugPrint('[CALLS_CONN] reconnect failed: $error');
+    } finally {
+      _reconnectInFlight = false;
+    }
   }
 
   void _commit(CallState next, {bool syncFgs = true}) {
@@ -1594,9 +1757,15 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _onEvent(SipEvent event) async {
+    final now = DateTime.now();
     if (event.type == SipEventType.registration) {
       final registrationState = event.registrationState;
       if (registrationState != null) {
+        _lastNetworkActivityAt = now;
+        if (registrationState == SipRegistrationState.registered) {
+          _lastSipRegisteredAt = now;
+          _reconnectBackoffIndex = 0;
+        }
         _lastRegistrationState = registrationState;
       }
       if (registrationState == SipRegistrationState.registered) {
@@ -1608,10 +1777,16 @@ class CallNotifier extends Notifier<CallState> {
       } else if (registrationState == SipRegistrationState.failed) {
         _isRegistered = false;
         _handleRegistrationFailure(event.message ?? 'SIP registration failed');
+        final stateName = registrationState?.name ?? 'unknown';
+        _scheduleReconnect('registration-$stateName');
       } else if (registrationState == SipRegistrationState.unregistered ||
           registrationState == SipRegistrationState.none) {
         _isRegistered = false;
         _registeredUserId = null;
+        if (registrationState == SipRegistrationState.unregistered) {
+          final stateName = registrationState?.name ?? 'unknown';
+          _scheduleReconnect('registration-$stateName');
+        }
       }
       _commit(state.copyWith(isRegistered: _isRegistered));
       return;
@@ -1626,7 +1801,6 @@ class CallNotifier extends Notifier<CallState> {
         : callId;
 
     final status = _mapStatus(event.type);
-    final now = DateTime.now();
     _recentlyEnded.removeWhere(
       (_, ts) => now.difference(ts) > _recentlyEndedTtl,
     );
