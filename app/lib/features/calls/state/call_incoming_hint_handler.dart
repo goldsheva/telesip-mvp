@@ -2,6 +2,7 @@ import 'package:app/config/env_config.dart';
 import 'package:app/core/storage/fcm_storage.dart';
 import 'package:app/core/storage/general_sip_credentials_storage.dart';
 import 'package:app/core/storage/sip_auth_storage.dart';
+import 'package:app/features/calls/state/call_sip_snapshot_builder.dart';
 import 'package:app/features/sip_users/models/pbx_sip_user.dart';
 
 class CallIncomingHintHandler {
@@ -107,51 +108,36 @@ class CallIncomingHintHandler {
       late final SipAuthSnapshot snapshot;
       if (candidate != null) {
         setIncomingUser(candidate);
-        final wsConnections = candidate.pbxSipConnections
-            .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
-            .toList();
-        late final String wsUrl;
-        String uriHost = '';
-        if (wsConnections.isNotEmpty) {
-          final connection = wsConnections.first;
-          final protocol = connection.pbxSipProtocol.toLowerCase();
-          final scheme = protocol.contains('wss')
-              ? 'wss'
-              : protocol.contains('ws')
-              ? 'ws'
-              : null;
-          if (scheme == null) {
-            log(
-              '[INCOMING] unsupported SIP transport for incoming user, skipping hint (call_uuid=$callUuid)',
-            );
-            return;
-          }
-          wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
-          uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
-        } else {
-          final defaultWs = EnvConfig.sipWebSocketUrl;
-          if (defaultWs == null || defaultWs.isEmpty) {
-            log(
-              '[INCOMING] no WS endpoint configured for incoming user, skipping hint (call_uuid=$callUuid)',
-            );
-            return;
-          }
-          wsUrl = defaultWs;
-          uriHost = Uri.tryParse(wsUrl)?.host ?? '';
-        }
-        if (uriHost.isEmpty) {
-          log(
-            '[INCOMING] invalid WS URL for incoming user, skipping hint (call_uuid=$callUuid)',
-          );
-          return;
-        }
-        snapshot = SipAuthSnapshot(
-          uri: 'sip:${candidate.sipLogin}@$uriHost',
-          password: candidate.sipPassword,
-          wsUrl: wsUrl,
-          displayName: candidate.sipLogin,
-          timestamp: DateTime.now(),
+        final result = buildSipSnapshot(
+          connections: candidate.pbxSipConnections,
+          sipLogin: candidate.sipLogin,
+          sipPassword: candidate.sipPassword,
+          defaultWsUrl: EnvConfig.sipWebSocketUrl,
+          allowEmptyDefaultWsUrl: false,
+          setError: (_) {},
         );
+        if (result.snapshot == null) {
+          switch (result.failure) {
+            case CallSipSnapshotBuildFailure.unsupportedTransport:
+              log(
+                '[INCOMING] unsupported SIP transport for incoming user, skipping hint (call_uuid=$callUuid)',
+              );
+              return;
+            case CallSipSnapshotBuildFailure.missingWsEndpoint:
+              log(
+                '[INCOMING] no WS endpoint configured for incoming user, skipping hint (call_uuid=$callUuid)',
+              );
+              return;
+            case CallSipSnapshotBuildFailure.invalidUriHost:
+              log(
+                '[INCOMING] invalid WS URL for incoming user, skipping hint (call_uuid=$callUuid)',
+              );
+              return;
+            case null:
+              return;
+          }
+        }
+        snapshot = result.snapshot!;
         log(
           '[INCOMING] registering SIP from stored incoming user (call_uuid=$callUuid)',
         );

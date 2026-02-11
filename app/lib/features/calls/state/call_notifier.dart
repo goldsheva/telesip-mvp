@@ -38,6 +38,7 @@ import 'call_connectivity_snapshot.dart';
 import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
 import 'call_reconnect_executor.dart';
+import 'call_sip_snapshot_builder.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -322,53 +323,15 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   SipAuthSnapshot? _snapshotForUser(PbxSipUser user) {
-    final wsConnections = user.sipConnections
-        .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
-        .toList();
-
-    String wsUrl;
-    String uriHost;
-
-    if (wsConnections.isNotEmpty) {
-      final connection = wsConnections.first;
-      final protocol = connection.pbxSipProtocol.toLowerCase();
-      final scheme = protocol.contains('wss')
-          ? 'wss'
-          : protocol.contains('ws')
-          ? 'ws'
-          : null;
-      if (scheme == null) {
-        _setError('Only WS/WSS transports are supported');
-        return null;
-      }
-
-      wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
-      uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
-    } else {
-      final defaultWs = EnvConfig.sipWebSocketUrl;
-      if (defaultWs == null) {
-        _setError(
-          'PBX does not offer WS/WSS transport. Sip_ua requires SIP over WebSocket. '
-          'Expected WSS (e.g., wss://pbx.teleleo.com:7443/).',
-        );
-        return null;
-      }
-      wsUrl = defaultWs;
-      uriHost = Uri.tryParse(wsUrl)?.host ?? '';
-    }
-
-    if (uriHost.isEmpty) {
-      _setError('Unable to determine SIP domain');
-      return null;
-    }
-    final uri = 'sip:${user.sipLogin}@$uriHost';
-    return SipAuthSnapshot(
-      uri: uri,
-      password: user.sipPassword,
-      wsUrl: wsUrl,
-      displayName: user.sipLogin,
-      timestamp: DateTime.now(),
+    final result = buildSipSnapshot(
+      connections: user.sipConnections,
+      sipLogin: user.sipLogin,
+      sipPassword: user.sipPassword,
+      defaultWsUrl: EnvConfig.sipWebSocketUrl,
+      allowEmptyDefaultWsUrl: true,
+      setError: _setError,
     );
+    return result.snapshot;
   }
 
   Future<void> handleIncomingCallHintIfAny() {
