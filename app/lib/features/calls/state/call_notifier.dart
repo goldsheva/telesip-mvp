@@ -1161,9 +1161,10 @@ class CallNotifier extends Notifier<CallState> {
     _recentlyEnded.removeWhere(
       (_, ts) => now.difference(ts) > _recentlyEndedTtl,
     );
-    if (_recentlyEnded.containsKey(callId)) {
+    if (_recentlyEnded.containsKey(callId) ||
+        _recentlyEnded.containsKey(sipCallId)) {
       debugPrint(
-        '[SIP] ignoring late ${event.type.name} for ended callId=$callId active=${state.activeCallId}',
+        '[CALLS] ignoring late sip event event=${event.type.name} sipId=$sipCallId effectiveId=$callId (recently ended)',
       );
       return;
     }
