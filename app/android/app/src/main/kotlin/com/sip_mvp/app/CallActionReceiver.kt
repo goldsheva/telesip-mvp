@@ -43,10 +43,6 @@ class CallActionReceiver : BroadcastReceiver() {
       }
     }
     NotificationHelper.markSuppressed(callId, callUuid)
-    Log.d(
-      "CallActionReceiver",
-      "action=$action call_id=$callId call_uuid=$callUuid cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded",
-    )
     val prefs = context.getSharedPreferences("pending_call_actions", Context.MODE_PRIVATE)
     val raw = prefs.getString("pending_call_actions", "[]")
     val existing = mutableListOf<JSONObject>()
@@ -93,6 +89,10 @@ class CallActionReceiver : BroadcastReceiver() {
       existing.forEach { updated.put(it) }
       prefs.edit().putString("pending_call_actions", updated.toString()).apply()
     }
+    Log.d(
+      "CallActionReceiver",
+      "action=$action call_id=$callId call_uuid=$callUuid cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
+    )
     CallActionStore.save(context, callId, action, System.currentTimeMillis())
     val main = Intent(context, MainActivity::class.java).apply {
       putExtra("call_id", callId)

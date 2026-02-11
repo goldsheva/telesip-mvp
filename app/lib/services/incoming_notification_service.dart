@@ -22,6 +22,11 @@ class IncomingNotificationService {
       }
       args['callUuid'] = callUuid ?? callId;
       args['isRinging'] = isRinging;
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS_NOTIF] showIncoming callId=$callId callUuid=${args['callUuid']} isRinging=$isRinging',
+        );
+      }
       await _channel.invokeMethod('showIncoming', args);
     } catch (error) {
       debugPrint('[CALLS_NOTIF] showIncoming failed: $error');

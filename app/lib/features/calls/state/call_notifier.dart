@@ -746,6 +746,10 @@ class CallNotifier extends Notifier<CallState> {
     var clearedAction = false;
     var clearedHint = false;
     if (cancelNotification) {
+      final ids = _notificationCallIds(callId);
+      if (kDebugMode) {
+        debugPrint('[CALLS_NOTIF] cancelIncoming ids=$ids');
+      }
       await _cancelIncomingNotificationsForCall(callId);
     }
     if (clearPendingAction) {

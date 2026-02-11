@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import com.sip_mvp.app.BuildConfig
 
 object NotificationHelper {
   private const val CHANNEL_ID = "calls"
@@ -46,7 +47,9 @@ object NotificationHelper {
   ) {
     ensureChannel(context, notificationManager)
     if (isSuppressed(callId, callUuid)) {
-      Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
+      if (BuildConfig.DEBUG) {
+        Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
+      }
       return
     }
     val effectiveCallUuid = callUuid ?: callId
@@ -91,6 +94,7 @@ object NotificationHelper {
         },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
+    val keyguardLocked = shouldUseFullScreenIntent(context)
     val callerPerson = Person.Builder()
       .setName(displayName ?: from)
       .setImportant(true)
@@ -109,7 +113,7 @@ object NotificationHelper {
       .setWhen(System.currentTimeMillis())
       .setShowWhen(false)
       .apply {
-        if (shouldUseFullScreenIntent(context)) {
+        if (keyguardLocked) {
           setFullScreenIntent(fullScreenIntent, true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -117,12 +121,13 @@ object NotificationHelper {
         }
       }
       .setContentIntent(contentIntent)
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+    val usedCallStyle = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    if (!usedCallStyle) {
       builder
         .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)
         .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declineIntent)
     }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    if (usedCallStyle) {
       builder.setStyle(
         NotificationCompat.CallStyle.forIncomingCall(
           callerPerson,
@@ -135,6 +140,12 @@ object NotificationHelper {
     val notification = builder.build()
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && isRinging) {
       notification.flags = notification.flags or Notification.FLAG_INSISTENT
+    }
+    if (BuildConfig.DEBUG) {
+      Log.d(
+        "NotificationHelper",
+        "notify baseId=$baseId call_id=$callId call_uuid=$effectiveCallUuid isRinging=$isRinging keyguardLocked=$keyguardLocked api=${Build.VERSION.SDK_INT} callStyle=$usedCallStyle",
+      )
     }
     notificationManager.notify(getNotificationId(callId), notification)
   }
@@ -164,13 +175,23 @@ object NotificationHelper {
   }
 
   fun markSuppressed(callId: String, callUuid: String?) {
-    val expiry = SystemClock.uptimeMillis() + SUPPRESSION_TTL_MS
+    val now = SystemClock.uptimeMillis()
+    val expiry = now + SUPPRESSION_TTL_MS
+    val addedKeys = mutableListOf<String>()
     synchronized(suppressionExpiry) {
       cleanupSuppression()
-      addSuppression(callId, expiry)
-      if (!callUuid.isNullOrBlank()) {
-        addSuppression(callUuid, expiry)
+      if (addSuppression(callId, expiry)) {
+        addedKeys.add(callId)
       }
+      if (!callUuid.isNullOrBlank() && addSuppression(callUuid, expiry)) {
+        addedKeys.add(callUuid)
+      }
+    }
+    if (BuildConfig.DEBUG && addedKeys.isNotEmpty()) {
+      Log.d(
+        "NotificationHelper",
+        "markSuppressed keys=$addedKeys deltaMs=${expiry - now}",
+      )
     }
   }
 
@@ -194,9 +215,10 @@ object NotificationHelper {
     }
   }
 
-  private fun addSuppression(key: String, expiry: Long) {
-    if (key.isBlank()) return
+  private fun addSuppression(key: String, expiry: Long): Boolean {
+    if (key.isBlank()) return false
     suppressionExpiry[key] = expiry
+    return true
   }
 
   private fun reqCode(baseId: Int, offset: Int): Int {
