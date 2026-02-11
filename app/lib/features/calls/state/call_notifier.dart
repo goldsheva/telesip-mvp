@@ -569,14 +569,25 @@ class CallNotifier extends Notifier<CallState> {
     final activeWas = previousState.activeCallId;
     final shouldEndInState =
         (callInfo != null && callInfo.status != CallStatus.ended) ||
-        activeWas == callId;
+            activeWas == callId;
+    final now = DateTime.now();
+    _recentlyEnded[callId] = now;
+    String? sipMappedId;
+    for (final entry in _sipToLocalCallId.entries) {
+      if (entry.value == callId) {
+        sipMappedId = entry.key;
+        break;
+      }
+    }
+    if (sipMappedId != null) {
+      _recentlyEnded[sipMappedId] = now;
+    }
     if (!shouldEndInState) {
       debugPrint(
         '[INCOMING] cancelled callId=$callId endedInState=false activeWas=$activeWas clearedHint=$clearedHint',
       );
       return;
     }
-    final now = DateTime.now();
     final updatedCalls = Map<String, CallInfo>.from(previousState.calls);
     var endedInState = false;
     if (callInfo != null && callInfo.status != CallStatus.ended) {
@@ -591,7 +602,6 @@ class CallNotifier extends Notifier<CallState> {
     var nextActiveCallId = previousState.activeCallId;
     if (activeWas == callId) {
       nextActiveCallId = null;
-      _recentlyEnded[callId] = now;
       _busyUntil = now.add(_busyGrace);
     }
     final nextState = previousState.copyWith(
@@ -1015,46 +1025,54 @@ class CallNotifier extends Notifier<CallState> {
         !isBusy;
     var didAdoptIncoming = false;
     if (shouldAdoptIncoming) {
-      final incomingCalls = Map<String, CallInfo>.from(state.calls);
-      final existing = incomingCalls[callId];
-      final shouldForceRinging =
-          existing == null ||
-          (existing.status != CallStatus.connected &&
-              existing.status != CallStatus.ended);
-      if (existing == null) {
-        incomingCalls[callId] = CallInfo(
-          id: callId,
-          destination: 'Incoming',
-          status: CallStatus.ringing,
-          createdAt: now,
-          dongleId: null,
+      final alreadyCancelled = _recentlyEnded.containsKey(callId) ||
+          _recentlyEnded.containsKey(sipCallId);
+      if (alreadyCancelled) {
+        debugPrint(
+          '[INCOMING] suppress adopt for cancelled call sipId=$sipCallId effectiveId=$callId',
         );
-      } else if (shouldForceRinging) {
-        incomingCalls[callId] = existing.copyWith(status: CallStatus.ringing);
+      } else {
+        final incomingCalls = Map<String, CallInfo>.from(state.calls);
+        final existing = incomingCalls[callId];
+        final shouldForceRinging =
+            existing == null ||
+            (existing.status != CallStatus.connected &&
+                existing.status != CallStatus.ended);
+        if (existing == null) {
+          incomingCalls[callId] = CallInfo(
+            id: callId,
+            destination: 'Incoming',
+            status: CallStatus.ringing,
+            createdAt: now,
+            dongleId: null,
+          );
+        } else if (shouldForceRinging) {
+          incomingCalls[callId] = existing.copyWith(status: CallStatus.ringing);
+        }
+        final nextState = state.copyWith(
+          calls: incomingCalls,
+          activeCallId: callId,
+        );
+        _clearError();
+        final resetState = nextState.copyWith(
+          isMuted: false,
+          audioRoute: AudioRoute.systemDefault,
+        );
+        _commit(resetState, syncFgs: false);
+        unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
+        unawaited(_refreshAudioRoute());
+        _pendingCallId = callId;
+        pendingId = callId;
+        _phase = _CallPhase.ringing;
+        debugPrint(
+          '[INCOMING] adopted -> active ringing callId=$callId sipId=$sipCallId',
+        );
+        activeId = nextState.activeCallId;
+        activeCall = nextState.activeCall;
+        hasActive = activeCall != null && activeCall.status != CallStatus.ended;
+        callIdUnknown = false;
+        didAdoptIncoming = true;
       }
-      final nextState = state.copyWith(
-        calls: incomingCalls,
-        activeCallId: callId,
-      );
-      _clearError();
-      final resetState = nextState.copyWith(
-        isMuted: false,
-        audioRoute: AudioRoute.systemDefault,
-      );
-      _commit(resetState, syncFgs: false);
-      unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
-      unawaited(_refreshAudioRoute());
-      _pendingCallId = callId;
-      pendingId = callId;
-      _phase = _CallPhase.ringing;
-      debugPrint(
-        '[INCOMING] adopted -> active ringing callId=$callId sipId=$sipCallId',
-      );
-      activeId = nextState.activeCallId;
-      activeCall = nextState.activeCall;
-      hasActive = activeCall != null && activeCall.status != CallStatus.ended;
-      callIdUnknown = false;
-      didAdoptIncoming = true;
     }
     if (!_isRelevantCall(callId, activeId)) {
       debugPrint(
