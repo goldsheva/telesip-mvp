@@ -144,8 +144,6 @@ class _AuthGateState extends ConsumerState<_AuthGate>
 
     final callState = ref.read(callControllerProvider);
     final callInfo = callState.calls[callId];
-    final hasCall = callInfo != null || callState.activeCallId == callId;
-    if (!hasCall) return;
     if (callInfo?.status == CallStatus.ended) {
       await IncomingNotificationService.clearCallAction();
       return;
