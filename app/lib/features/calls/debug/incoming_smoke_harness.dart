@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 
 import 'package:app/services/incoming_notification_service.dart';
 
+/// Manual on-device incoming-call exercise tool (debug builds only).
+/// Not intended as a test harness; use this to validate notification/show/update/cancel
+/// flows without a PBX. All methods are gated by `kDebugMode` to avoid release-side exposure.
 class IncomingSmokeHarness {
   static const _sampleFrom = '1001';
   static const _sampleDisplayName = 'Smoke Call';
