@@ -1395,6 +1395,9 @@ class CallNotifier extends Notifier<CallState> {
         }),
       );
     }
+    Future.microtask(
+      () => _maybeBootstrapFromCurrentSnapshot('build-snapshot'),
+    );
     unawaited(_ensureStoredIncomingCredentialsLoaded());
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
@@ -1602,6 +1605,16 @@ class CallNotifier extends Notifier<CallState> {
       'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex '
       'registeredAt=${_lastSipRegisteredAt != null}',
     );
+  }
+
+  void _maybeBootstrapFromCurrentSnapshot(String reason) {
+    if (_bootstrapDone || _bootstrapInFlight) return;
+    final skip = _bootstrapPrerequisitesSkipReason();
+    if (skip != null) return;
+    debugPrint('[CALLS_CONN] snapshot -> ensureBootstrapped reason=$reason');
+    ensureBootstrapped(reason);
+    _maybeStartHealthWatchdog();
+    debugDumpConnectivityAndSipHealth(reason);
   }
 
   void debugDumpConnectivityAndSipHealth(String tag) {
