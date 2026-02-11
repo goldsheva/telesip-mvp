@@ -35,7 +35,8 @@ class IncomingFcmService : FirebaseMessagingService() {
       callId,
       from,
       displayName,
-      true
+      callUuid = message.data["call_uuid"] ?: callId,
+      isRinging = true
     )
   }
 

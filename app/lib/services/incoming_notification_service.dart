@@ -12,6 +12,7 @@ class IncomingNotificationService {
     required String callId,
     required String from,
     String? displayName,
+    String? callUuid,
     bool isRinging = true,
   }) async {
     try {
@@ -19,6 +20,7 @@ class IncomingNotificationService {
       if (displayName != null) {
         args['displayName'] = displayName;
       }
+      args['callUuid'] = callUuid ?? callId;
       args['isRinging'] = isRinging;
       await _channel.invokeMethod('showIncoming', args);
     } catch (error) {

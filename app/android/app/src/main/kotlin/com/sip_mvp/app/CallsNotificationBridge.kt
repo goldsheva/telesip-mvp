@@ -29,6 +29,7 @@ class CallsNotificationBridge(
             result.error("invalid_args", "callId/from are required", null)
             return@setMethodCallHandler
           }
+          val callUuid = call.argument<String>("callUuid") ?: callId
           val isRinging = call.argument<Boolean>("isRinging") ?: true
           NotificationHelper.showIncoming(
             context,
@@ -36,6 +37,7 @@ class CallsNotificationBridge(
             callId,
             from,
             displayName,
+            callUuid,
             isRinging
           )
           result.success(null)

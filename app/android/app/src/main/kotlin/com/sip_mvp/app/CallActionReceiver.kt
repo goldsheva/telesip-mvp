@@ -42,6 +42,7 @@ class CallActionReceiver : BroadcastReceiver() {
         }
       }
     }
+    NotificationHelper.markSuppressed(callId, callUuid)
     Log.d(
       "CallActionReceiver",
       "action=$action call_id=$callId call_uuid=$callUuid cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded",

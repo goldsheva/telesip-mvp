@@ -8,12 +8,16 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 
 object NotificationHelper {
   private const val CHANNEL_ID = "calls"
   private const val CHANNEL_NAME = "Calls"
+  private const val SUPPRESSION_TTL_MS = 2_000L
+  private val suppressionExpiry = mutableMapOf<String, Long>()
 
   fun ensureChannel(context: Context, notificationManager: NotificationManager) {
     if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) {
@@ -37,12 +41,18 @@ object NotificationHelper {
     callId: String,
     from: String,
     displayName: String?,
+    callUuid: String? = null,
     isRinging: Boolean
   ) {
     ensureChannel(context, notificationManager)
+    if (isSuppressed(callId, callUuid)) {
+      Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
+      return
+    }
+    val effectiveCallUuid = callUuid ?: callId
     val incomingIntent = Intent(context, IncomingCallActivity::class.java).apply {
       putExtra("call_id", callId)
-      putExtra("call_uuid", callId)
+      putExtra("call_uuid", effectiveCallUuid)
       putExtra("from", from)
       putExtra("display_name", displayName)
       action = "open_incoming"
@@ -56,7 +66,7 @@ object NotificationHelper {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
     val main = mainIntent(context, callId, from, displayName)
-    main.putExtra("call_uuid", callId)
+    main.putExtra("call_uuid", effectiveCallUuid)
     val contentIntent = PendingIntent.getActivity(
       context,
       reqCode(baseId, 1),
@@ -68,7 +78,7 @@ object NotificationHelper {
       reqCode(baseId, 2),
         Intent(CallActionReceiver.ACTION_ANSWER).apply {
           putExtra("call_id", callId)
-          putExtra("call_uuid", callId)
+          putExtra("call_uuid", effectiveCallUuid)
         },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
@@ -77,7 +87,7 @@ object NotificationHelper {
       reqCode(baseId, 3),
         Intent(CallActionReceiver.ACTION_DECLINE).apply {
           putExtra("call_id", callId)
-          putExtra("call_uuid", callId)
+          putExtra("call_uuid", effectiveCallUuid)
         },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
@@ -151,6 +161,42 @@ object NotificationHelper {
 
   private fun getNotificationId(callId: String): Int {
     return callId.hashCode() and 0x7fffffff
+  }
+
+  fun markSuppressed(callId: String, callUuid: String?) {
+    val expiry = SystemClock.uptimeMillis() + SUPPRESSION_TTL_MS
+    synchronized(suppressionExpiry) {
+      cleanupSuppression()
+      addSuppression(callId, expiry)
+      if (!callUuid.isNullOrBlank()) {
+        addSuppression(callUuid, expiry)
+      }
+    }
+  }
+
+  private fun isSuppressed(callId: String, callUuid: String?): Boolean {
+    val now = SystemClock.uptimeMillis()
+    synchronized(suppressionExpiry) {
+      cleanupSuppression()
+      if (suppressionExpiry.containsKey(callId)) return true
+      if (!callUuid.isNullOrBlank() && suppressionExpiry.containsKey(callUuid)) return true
+    }
+    return false
+  }
+
+  private fun cleanupSuppression() {
+    val now = SystemClock.uptimeMillis()
+    val iterator = suppressionExpiry.entries.iterator()
+    while (iterator.hasNext()) {
+      if (iterator.next().value <= now) {
+        iterator.remove()
+      }
+    }
+  }
+
+  private fun addSuppression(key: String, expiry: Long) {
+    if (key.isBlank()) return
+    suppressionExpiry[key] = expiry
   }
 
   private fun reqCode(baseId: Int, offset: Int): Int {

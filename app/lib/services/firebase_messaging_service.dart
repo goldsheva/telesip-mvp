@@ -113,6 +113,7 @@ Future<void> _maybeShowIncomingNotification(Map<String, dynamic> data) async {
     callId: callId,
     from: from,
     displayName: displayName,
+    callUuid: data['call_uuid']?.toString(),
   );
 }
 
