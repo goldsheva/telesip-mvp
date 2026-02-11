@@ -32,6 +32,7 @@ import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
 import 'call_reconnect_scheduler.dart';
+import 'call_health_watchdog.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -81,7 +82,7 @@ class CallNotifier extends Notifier<CallState> {
   DateTime? _healthStartedAt;
   DateTime? _bootstrapCompletedAt;
   bool _reconnectInFlight = false;
-  Timer? _healthCheckTimer;
+  late final CallHealthWatchdog _healthWatchdog;
   bool _isRegistered = false;
   AuthStatus? _lastAuthStatus;
   bool _authListenerActive = false;
@@ -936,6 +937,11 @@ class CallNotifier extends Notifier<CallState> {
       isDisposed: () => _disposed,
       backoffDelays: _backoffDelays,
     );
+    _healthWatchdog = CallHealthWatchdog(
+      isDisposed: () => _disposed,
+      interval: _healthCheckInterval,
+      onTick: _checkSipHealthTick,
+    );
     final initialStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     _lastAuthStatus ??= initialStatus;
@@ -1028,7 +1034,7 @@ class CallNotifier extends Notifier<CallState> {
       _eventSubscription?.close();
       _connectivityListener.dispose();
       _reconnectScheduler.cancel();
-      _healthCheckTimer?.cancel();
+      _healthWatchdog.stop();
       _cancelDialTimeout();
       _cancelRegistrationErrorTimer();
       _cancelFailureTimer();
@@ -1220,7 +1226,7 @@ class CallNotifier extends Notifier<CallState> {
     final lastNetAge = _lastNetworkActivityAt == null
         ? '<none>'
         : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
-    final healthTimerActive = _healthCheckTimer != null;
+    final healthTimerActive = _healthWatchdog.isRunning;
     final reconnectTimerActive = _reconnectScheduler.hasScheduledTimer;
     debugPrint(
       '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
@@ -1242,19 +1248,18 @@ class CallNotifier extends Notifier<CallState> {
       _stopHealthWatchdog();
       return;
     }
-    if (_healthCheckTimer != null) return;
+    if (_healthWatchdog.isRunning) return;
     if (_isSipHealthyNow()) return;
     _healthStartedAt = DateTime.now();
-    _healthCheckTimer = Timer.periodic(_healthCheckInterval, _checkSipHealth);
+    _healthWatchdog.start();
   }
 
   void _stopHealthWatchdog() {
-    _healthCheckTimer?.cancel();
-    _healthCheckTimer = null;
+    _healthWatchdog.stop();
     _healthStartedAt = null;
   }
 
-  void _checkSipHealth(Timer timer) {
+  void _checkSipHealthTick() {
     if (_disposed) return;
     if (!_lastKnownOnline) return;
     if (_hasActiveCall) return;
