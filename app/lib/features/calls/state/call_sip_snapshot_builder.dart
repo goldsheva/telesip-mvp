@@ -19,7 +19,7 @@ CallSipSnapshotBuildResult buildSipSnapshot({
   required String sipLogin,
   required String sipPassword,
   required String? defaultWsUrl,
-  required bool allowEmptyDefaultWsUrl,
+  required bool treatEmptyDefaultAsMissing,
   required void Function(String message) setError,
 }) {
   final wsConnections = connections
@@ -46,7 +46,7 @@ CallSipSnapshotBuildResult buildSipSnapshot({
     uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
   } else {
     if (defaultWsUrl == null ||
-        (!allowEmptyDefaultWsUrl && defaultWsUrl.isEmpty)) {
+        (treatEmptyDefaultAsMissing && defaultWsUrl.isEmpty)) {
       setError(
         'PBX does not offer WS/WSS transport. Sip_ua requires SIP over WebSocket. '
         'Expected WSS (e.g., wss://pbx.teleleo.com:7443/).',

@@ -113,7 +113,7 @@ class CallIncomingHintHandler {
           sipLogin: candidate.sipLogin,
           sipPassword: candidate.sipPassword,
           defaultWsUrl: EnvConfig.sipWebSocketUrl,
-          allowEmptyDefaultWsUrl: false,
+          treatEmptyDefaultAsMissing: true,
           setError: (_) {},
         );
         if (result.snapshot == null) {

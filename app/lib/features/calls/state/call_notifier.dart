@@ -329,7 +329,7 @@ class CallNotifier extends Notifier<CallState> {
       sipLogin: user.sipLogin,
       sipPassword: user.sipPassword,
       defaultWsUrl: EnvConfig.sipWebSocketUrl,
-      allowEmptyDefaultWsUrl: true,
+      treatEmptyDefaultAsMissing: false,
       setError: _setError,
     );
     return result.snapshot;

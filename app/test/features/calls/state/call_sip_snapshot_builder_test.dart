@@ -24,7 +24,7 @@ void main() {
         sipLogin: 'user',
         sipPassword: 'secret',
         defaultWsUrl: null,
-        allowEmptyDefaultWsUrl: false,
+        treatEmptyDefaultAsMissing: false,
         setError: errors.add,
       );
 
@@ -43,7 +43,7 @@ void main() {
         sipLogin: 'fallback',
         sipPassword: 'secret',
         defaultWsUrl: 'wss://fallback.example:7443/',
-        allowEmptyDefaultWsUrl: true,
+        treatEmptyDefaultAsMissing: false,
         setError: errors.add,
       );
 
@@ -61,7 +61,7 @@ void main() {
         sipLogin: 'user',
         sipPassword: 'secret',
         defaultWsUrl: null,
-        allowEmptyDefaultWsUrl: false,
+        treatEmptyDefaultAsMissing: false,
         setError: errors.add,
       );
 
@@ -87,7 +87,7 @@ void main() {
         sipLogin: 'user',
         sipPassword: 'secret',
         defaultWsUrl: null,
-        allowEmptyDefaultWsUrl: false,
+        treatEmptyDefaultAsMissing: false,
         setError: errors.add,
       );
 
@@ -95,6 +95,47 @@ void main() {
       expect(result.failure, CallSipSnapshotBuildFailure.invalidUriHost);
       expect(errors, ['Unable to determine SIP domain']);
     });
+
+    test(
+      'empty default treated as missing when treatEmptyDefaultAsMissing is true',
+      () {
+        const connections = <PbxSipConnection>[];
+        final errors = <String>[];
+        final result = buildSipSnapshot(
+          connections: connections,
+          sipLogin: 'user',
+          sipPassword: 'secret',
+          defaultWsUrl: '',
+          treatEmptyDefaultAsMissing: true,
+          setError: errors.add,
+        );
+        expect(result.snapshot, isNull);
+        expect(result.failure, CallSipSnapshotBuildFailure.missingWsEndpoint);
+        expect(errors, [
+          'PBX does not offer WS/WSS transport. Sip_ua requires SIP over WebSocket. '
+              'Expected WSS (e.g., wss://pbx.teleleo.com:7443/).',
+        ]);
+      },
+    );
+
+    test(
+      'empty default allowed when treatEmptyDefaultAsMissing is false but host missing',
+      () {
+        const connections = <PbxSipConnection>[];
+        final errors = <String>[];
+        final result = buildSipSnapshot(
+          connections: connections,
+          sipLogin: 'user',
+          sipPassword: 'secret',
+          defaultWsUrl: '',
+          treatEmptyDefaultAsMissing: false,
+          setError: errors.add,
+        );
+        expect(result.snapshot, isNull);
+        expect(result.failure, CallSipSnapshotBuildFailure.invalidUriHost);
+        expect(errors, ['Unable to determine SIP domain']);
+      },
+    );
   });
 
   group('incomingHintFailureMessage', () {
