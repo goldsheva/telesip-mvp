@@ -33,6 +33,7 @@ import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
+import 'call_connectivity_snapshot.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -1228,15 +1229,27 @@ class CallNotifier extends Notifier<CallState> {
         : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
     final healthTimerActive = _healthWatchdog.isRunning;
     final reconnectTimerActive = _reconnectScheduler.hasScheduledTimer;
+    final activeStatus = activeCall?.status;
+    final activeStatusString = (activeStatus ?? '<none>').toString();
     debugPrint(
-      '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
-      'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
-      'registered=$_isRegistered stateRegistered=${state.isRegistered} '
-      'lastRegistrationState=${_lastRegistrationState.name} '
-      'lastNetAge=$lastNetAge healthTimer=$healthTimerActive '
-      'reconnectTimer=$reconnectTimerActive reconnectInFlight=$_reconnectInFlight '
-      'backoffIndex=${_reconnectScheduler.backoffIndex} '
-      'active=${state.activeCallId ?? '<none>'} status=${activeCall?.status ?? '<none>'}',
+      CallConnectivitySnapshot.format(
+        tag: tag,
+        authStatus: authStatus.name,
+        online: _lastKnownOnline,
+        bootstrapScheduled: _bootstrapScheduled,
+        bootstrapDone: _bootstrapDone,
+        bootstrapInFlight: _bootstrapInFlight,
+        registered: _isRegistered,
+        stateRegistered: state.isRegistered,
+        lastRegistrationState: _lastRegistrationState.name,
+        lastNetAge: lastNetAge,
+        healthTimerActive: healthTimerActive,
+        reconnectTimerActive: reconnectTimerActive,
+        reconnectInFlight: _reconnectInFlight,
+        backoffIndex: _reconnectScheduler.backoffIndex,
+        activeCallId: state.activeCallId ?? '<none>',
+        activeCallStatus: activeStatusString,
+      ),
     );
   }
 
