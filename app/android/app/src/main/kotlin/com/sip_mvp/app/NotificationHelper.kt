@@ -1,5 +1,6 @@
 package com.sip_mvp.app
 
+import android.Manifest
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -11,6 +12,8 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.app.Person
 import com.sip_mvp.app.BuildConfig
 
@@ -225,6 +228,33 @@ object NotificationHelper {
       putExtra("display_name", displayName)
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
+  }
+
+  fun getNotificationDebugState(
+    context: Context,
+    notificationManager: NotificationManager,
+  ): Map<String, Any?> {
+    val compat = NotificationManagerCompat.from(context)
+    val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
+    val keyguardManager =
+      context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+    val keyguardState = keyguardManager?.isKeyguardLocked
+    val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      ContextCompat.checkSelfPermission(
+        context,
+        android.Manifest.permission.POST_NOTIFICATIONS,
+      ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    } else {
+      true
+    }
+    return mapOf(
+      "notificationsEnabled" to compat.areNotificationsEnabled(),
+      "channelImportance" to channel?.importance,
+      "channelEnabled" to (channel != null && channel.importance != NotificationManager.IMPORTANCE_NONE),
+      "channelExists" to (channel != null),
+      "hasPostNotificationsPermission" to hasPermission,
+      "keyguardLocked" to keyguardState,
+    )
   }
 
   private fun shouldUseFullScreenIntent(context: Context): Boolean {
