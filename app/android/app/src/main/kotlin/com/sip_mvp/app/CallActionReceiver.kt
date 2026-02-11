@@ -27,10 +27,14 @@ class CallActionReceiver : BroadcastReceiver() {
         array.optJSONObject(i)?.let { existing.add(it) }
       }
     }
+    val now = System.currentTimeMillis()
     val entry = JSONObject().apply {
       put("type", action)
       put("callId", callId)
-      put("ts", System.currentTimeMillis())
+      put("ts", now)
+      put("call_id", callId)
+      put("action", action)
+      put("timestamp", now)
     }
     existing.add(entry)
     while (existing.size > 10) {
