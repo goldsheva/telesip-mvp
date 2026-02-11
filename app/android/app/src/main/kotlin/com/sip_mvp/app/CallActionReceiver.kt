@@ -94,6 +94,10 @@ class CallActionReceiver : BroadcastReceiver() {
       "action=$action call_id=$callId call_uuid=$callUuid cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
     )
     CallActionStore.save(context, callId, action, System.currentTimeMillis())
+    Log.d(
+      "CallActionReceiver",
+      "action_enqueued action=$action call_id=$callId call_uuid=$callUuid duplicateSuppressed=$duplicateSuppressed",
+    )
     val main = Intent(context, MainActivity::class.java).apply {
       putExtra("call_id", callId)
       putExtra("action", action)

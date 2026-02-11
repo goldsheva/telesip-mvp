@@ -909,6 +909,12 @@ class CallNotifier extends Notifier<CallState> {
     final normalizedDisplay = (payloadDisplayName?.isNotEmpty == true
         ? payloadDisplayName
         : null);
+    if (kDebugMode) {
+      debugPrint(
+        '[CALLS_NOTIF] updateNotRinging callId=$callId callUuid=${callUuid ?? '<none>'} '
+        'from=$payloadFrom display=${normalizedDisplay ?? '<none>'}',
+      );
+    }
     try {
       await IncomingNotificationService.showIncoming(
         callId: callId,
@@ -1134,10 +1140,24 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> answerFromNotification(String callId) async {
+    if (kDebugMode) {
+      final engineCallId = _resolveEngineCallId(callId);
+      debugPrint(
+        '[CALLS_NOTIF] answerFromNotification callId=$callId engine=${engineCallId ?? '<unknown>'} '
+        'active=${state.activeCallId ?? '<none>'} pending=${_pendingCallId ?? '<none>'}',
+      );
+    }
     await _answerIncomingCall(callId, source: 'answerFromNotification');
   }
 
   Future<void> declineFromNotification(String callId) async {
+    if (kDebugMode) {
+      final engineCallId = _resolveEngineCallId(callId);
+      debugPrint(
+        '[CALLS_NOTIF] declineFromNotification callId=$callId engine=${engineCallId ?? '<unknown>'} '
+        'active=${state.activeCallId ?? '<none>'} pending=${_pendingCallId ?? '<none>'}',
+      );
+    }
     await _declineIncomingCall(callId, source: 'declineFromNotification');
   }
 
