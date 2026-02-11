@@ -47,19 +47,19 @@ object NotificationHelper {
     val baseId = getNotificationId(callId)
     val fullScreenIntent = PendingIntent.getActivity(
       context,
-      baseId,
+      reqCode(baseId, 0),
       incomingIntent,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
     val contentIntent = PendingIntent.getActivity(
       context,
-      baseId + 1,
+      reqCode(baseId, 1),
       mainIntent(context, callId, from, displayName),
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
     val answerIntent = PendingIntent.getBroadcast(
       context,
-      baseId + 2,
+      reqCode(baseId, 2),
       Intent(CallActionReceiver.ACTION_ANSWER).apply {
         putExtra("call_id", callId)
       },
@@ -67,7 +67,7 @@ object NotificationHelper {
     )
     val declineIntent = PendingIntent.getBroadcast(
       context,
-      baseId + 3,
+      reqCode(baseId, 3),
       Intent(CallActionReceiver.ACTION_DECLINE).apply {
         putExtra("call_id", callId)
       },
@@ -119,5 +119,9 @@ object NotificationHelper {
 
   private fun getNotificationId(callId: String): Int {
     return callId.hashCode() and 0x7fffffff
+  }
+
+  private fun reqCode(baseId: Int, offset: Int): Int {
+    return (baseId + offset) and 0x7fffffff
   }
 }
