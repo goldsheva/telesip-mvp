@@ -1368,6 +1368,7 @@ class CallNotifier extends Notifier<CallState> {
             ensureBootstrapped('net-online-init');
             _maybeStartHealthWatchdog();
           }
+          debugDumpConnectivityAndSipHealth('connectivity-init');
         }),
       );
     }
@@ -1526,6 +1527,7 @@ class CallNotifier extends Notifier<CallState> {
       _reconnectTimer = null;
       _reconnectInFlight = false;
       _stopHealthWatchdog();
+      debugDumpConnectivityAndSipHealth('net-offline');
       return;
     }
     final lastHandled = _lastOnlineHandledAt;
@@ -1555,6 +1557,7 @@ class CallNotifier extends Notifier<CallState> {
     if (!_isRegistered && !state.isRegistered) {
       _scheduleReconnect('net-online');
     }
+    debugDumpConnectivityAndSipHealth('net-online');
   }
 
   void logConnectivitySnapshot(String tag) {
@@ -1572,6 +1575,28 @@ class CallNotifier extends Notifier<CallState> {
       'status=${activeCall?.status ?? '<none>'} '
       'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex '
       'registeredAt=${_lastSipRegisteredAt != null}',
+    );
+  }
+
+  void debugDumpConnectivityAndSipHealth(String tag) {
+    if (!kDebugMode) return;
+    final AuthStatus authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    final activeCall = state.activeCall;
+    final lastNetAge = _lastNetworkActivityAt == null
+        ? '<none>'
+        : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
+    final healthTimerActive = _healthCheckTimer != null;
+    final reconnectTimerActive = _reconnectTimer != null;
+    debugPrint(
+      '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
+      'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
+      'registered=$_isRegistered stateRegistered=${state.isRegistered} '
+      'lastRegistrationState=${_lastRegistrationState.name} '
+      'lastNetAge=$lastNetAge healthTimer=$healthTimerActive '
+      'reconnectTimer=$reconnectTimerActive reconnectInFlight=$_reconnectInFlight '
+      'backoffIndex=$_reconnectBackoffIndex '
+      'active=${state.activeCallId ?? '<none>'} status=${activeCall?.status ?? '<none>'}',
     );
   }
 
@@ -1655,6 +1680,7 @@ class CallNotifier extends Notifier<CallState> {
       'authStatus=${authStatus.name} registered=$_isRegistered '
       'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex',
     );
+    debugDumpConnectivityAndSipHealth('scheduleReconnect');
     _reconnectTimer = Timer(delay, () => _performReconnect(reason));
     _reconnectBackoffIndex = math.min(
       _reconnectBackoffIndex + 1,
