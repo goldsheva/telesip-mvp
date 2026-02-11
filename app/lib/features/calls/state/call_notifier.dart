@@ -118,9 +118,7 @@ class CallState {
     isRegistered: false,
     isMuted: false,
     audioRoute: AudioRoute.systemDefault,
-    availableAudioRoutes: const {
-      AudioRoute.systemDefault,
-    },
+    availableAudioRoutes: const {AudioRoute.systemDefault},
   );
 
   final Map<String, CallInfo> calls;
@@ -163,9 +161,7 @@ class CallState {
 enum _CallPhase { idle, ringing, connecting, active, ending }
 
 const Duration _errorDedupTtl = Duration(seconds: 2);
-const Set<AudioRoute> _defaultAvailableAudioRoutes = {
-  AudioRoute.systemDefault,
-};
+const Set<AudioRoute> _defaultAvailableAudioRoutes = {AudioRoute.systemDefault};
 
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
@@ -569,7 +565,8 @@ class CallNotifier extends Notifier<CallState> {
     await IncomingNotificationService.cancelIncoming(callId: callId);
     try {
       final pendingAction = await IncomingNotificationService.readCallAction();
-      final actionCallId = pendingAction?['call_id']?.toString() ??
+      final actionCallId =
+          pendingAction?['call_id']?.toString() ??
           pendingAction?['callId']?.toString();
       if (actionCallId == callId) {
         await IncomingNotificationService.clearCallAction();
@@ -590,7 +587,7 @@ class CallNotifier extends Notifier<CallState> {
     final activeWas = previousState.activeCallId;
     final shouldEndInState =
         (callInfo != null && callInfo.status != CallStatus.ended) ||
-            activeWas == callId;
+        activeWas == callId;
     final now = DateTime.now();
     _recentlyEnded[callId] = now;
     String? sipMappedId;
@@ -749,8 +746,9 @@ class CallNotifier extends Notifier<CallState> {
     }
     if (clampedRoute == state.audioRoute) return;
     _commit(state.copyWith(audioRoute: clampedRoute), syncFgs: false);
-    final availabilitySnapshot =
-        state.availableAudioRoutes.map((route) => route.name).join(',');
+    final availabilitySnapshot = state.availableAudioRoutes
+        .map((route) => route.name)
+        .join(',');
     debugPrint(
       '[CALLS] applying route requested=$route clamped=$clampedRoute available=$availabilitySnapshot',
     );
@@ -985,11 +983,16 @@ class CallNotifier extends Notifier<CallState> {
       final activeCall = next.calls[nextActiveId];
       final outgoingDialing =
           activeCall != null && activeCall.status == CallStatus.dialing;
-      forcedRoute =
-          outgoingDialing ? AudioRoute.earpiece : AudioRoute.systemDefault;
-      commitState = commitState.copyWith(isMuted: false, audioRoute: forcedRoute);
-      final statusLabel =
-          activeCall != null ? activeCall.status.toString().split('.').last : '<unknown>';
+      forcedRoute = outgoingDialing
+          ? AudioRoute.earpiece
+          : AudioRoute.systemDefault;
+      commitState = commitState.copyWith(
+        isMuted: false,
+        audioRoute: forcedRoute,
+      );
+      final statusLabel = activeCall != null
+          ? activeCall.status.toString().split('.').last
+          : '<unknown>';
       debugPrint(
         '[CALLS] hard-reset prev=$previousActiveId next=$nextActiveId '
         'newCall=true route=$forcedRoute status=$statusLabel',
@@ -1091,7 +1094,8 @@ class CallNotifier extends Notifier<CallState> {
         !isBusy;
     var didAdoptIncoming = false;
     if (shouldAdoptIncoming) {
-      final alreadyCancelled = _recentlyEnded.containsKey(callId) ||
+      final alreadyCancelled =
+          _recentlyEnded.containsKey(callId) ||
           _recentlyEnded.containsKey(sipCallId);
       if (alreadyCancelled) {
         debugPrint(
@@ -1579,11 +1583,14 @@ class CallNotifier extends Notifier<CallState> {
           '[CALLS] refreshAudioRoute fallback: nativeCurrentMissing native=${info.current} -> desired=$desiredRoute',
         );
       }
-      final availableChanged = !setEquals(availableRoutes, state.availableAudioRoutes);
+      final availableChanged = !setEquals(
+        availableRoutes,
+        state.availableAudioRoutes,
+      );
       final shouldLog = desiredRoute != state.audioRoute || availableChanged;
       if (shouldLog) {
-        final availableNames = availableRoutes.map((route) => route.name).toList()
-          ..sort();
+        final availableNames =
+            availableRoutes.map((route) => route.name).toList()..sort();
         debugPrint(
           '[CALLS] refreshAudioRoute native=${info.current} desired=$desiredRoute '
           'available=${availableNames.join(',')} commit=$shouldLog',

@@ -146,8 +146,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (_batteryPromptInFlight) return;
     _batteryPromptInFlight = true;
     try {
-      final batteryDisabled =
-          await ref.read(callControllerProvider.notifier).isBatteryOptimizationDisabled();
+      final batteryDisabled = await ref
+          .read(callControllerProvider.notifier)
+          .isBatteryOptimizationDisabled();
       if (batteryDisabled) {
         await BatteryOptimizationPromptStorage.markPromptShown();
         return;
@@ -184,7 +185,8 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   Future<void> _handlePendingCallAction() async {
     final rawAction = await IncomingNotificationService.readCallAction();
     if (rawAction == null) return;
-    final callId = rawAction['call_id']?.toString() ?? rawAction['callId']?.toString();
+    final callId =
+        rawAction['call_id']?.toString() ?? rawAction['callId']?.toString();
     final action = (rawAction['action'] ?? rawAction['type'])?.toString();
     final timestampMillis = _timestampToMillis(
       rawAction['timestamp'] ?? rawAction['ts'],

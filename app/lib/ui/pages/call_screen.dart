@@ -168,7 +168,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           final isBluetoothOn =
                               state.audioRoute == AudioRoute.bluetooth;
                           notifier.setCallAudioRoute(
-                            isBluetoothOn ? fallbackRoute : AudioRoute.bluetooth,
+                            isBluetoothOn
+                                ? fallbackRoute
+                                : AudioRoute.bluetooth,
                           );
                         },
                       ),
