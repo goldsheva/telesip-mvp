@@ -45,7 +45,9 @@ CallSipSnapshotBuildResult buildSipSnapshot({
     final connectionUrl = connection.pbxSipUrl;
     if (connectionUrl.contains('://')) {
       final parsed = Uri.tryParse(connectionUrl);
-      if (parsed == null) {
+      if (parsed == null ||
+          !(parsed.scheme == 'ws' || parsed.scheme == 'wss') ||
+          parsed.host.isEmpty) {
         setError('Unable to determine SIP domain');
         return const CallSipSnapshotBuildResult(
           failure: CallSipSnapshotBuildFailure.invalidUriHost,
@@ -55,11 +57,7 @@ CallSipSnapshotBuildResult buildSipSnapshot({
           ? connectionUrl
           : '$connectionUrl/';
       wsUrl = normalizedUrl;
-      uriHost = parsed.host.isNotEmpty
-          ? parsed.host
-          : parsed.authority.isNotEmpty
-          ? parsed.authority
-          : connectionUrl;
+      uriHost = parsed.host;
     } else {
       wsUrl = '$scheme://$connectionUrl:${connection.pbxSipPort}/';
       uriHost = Uri.tryParse(wsUrl)?.host ?? connectionUrl;
