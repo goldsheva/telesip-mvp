@@ -1313,6 +1313,9 @@ class CallNotifier extends Notifier<CallState> {
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     final decision = CallReconnectCoordinator.decideSchedule(
+      reason: reason,
+      authStatusName: authStatus.name,
+      activeCallId: state.activeCallId ?? '<none>',
       disposed: _disposed,
       authenticated: authStatus == AuthStatus.authenticated,
       online: _lastKnownOnline,
@@ -1321,32 +1324,9 @@ class CallNotifier extends Notifier<CallState> {
     );
     if (decision is ReconnectScheduleDecisionSkip) {
       if (decision.disposed) return;
-      if (decision.reason != null) {
-        switch (decision.reason!) {
-          case CallReconnectScheduleBlockReason.notAuthenticated:
-            debugPrint(
-              CallReconnectLog.scheduleSkipNotAuthenticated(
-                reason,
-                authStatus.name,
-              ),
-            );
-            return;
-          case CallReconnectScheduleBlockReason.offline:
-            debugPrint(CallReconnectLog.scheduleSkipOffline(reason));
-            return;
-          case CallReconnectScheduleBlockReason.hasActiveCall:
-            debugPrint(
-              CallReconnectLog.scheduleSkipHasActiveCall(
-                reason,
-                state.activeCallId ?? '<none>',
-              ),
-            );
-            return;
-        }
-      }
-      if (decision.inFlight) {
-        debugPrint(CallReconnectLog.scheduleSkipInFlight(reason));
-        return;
+      final message = decision.message;
+      if (message != null) {
+        debugPrint(message);
       }
       return;
     }

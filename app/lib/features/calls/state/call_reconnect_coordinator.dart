@@ -1,3 +1,4 @@
+import 'package:app/features/calls/state/call_reconnect_log.dart';
 import 'package:app/features/calls/state/call_reconnect_policy.dart';
 
 abstract class ReconnectScheduleDecision {
@@ -9,11 +10,13 @@ class ReconnectScheduleDecisionSkip extends ReconnectScheduleDecision {
     this.reason,
     this.inFlight = false,
     this.disposed = false,
+    this.message,
   }) : super._();
 
   final CallReconnectScheduleBlockReason? reason;
   final bool inFlight;
   final bool disposed;
+  final String? message;
 }
 
 class ReconnectScheduleDecisionAllow extends ReconnectScheduleDecision {
@@ -24,6 +27,9 @@ class CallReconnectCoordinator {
   CallReconnectCoordinator._();
 
   static ReconnectScheduleDecision decideSchedule({
+    required String reason,
+    required String authStatusName,
+    required String activeCallId,
     required bool disposed,
     required bool authenticated,
     required bool online,
@@ -39,10 +45,34 @@ class CallReconnectCoordinator {
       authenticated: authenticated,
     );
     if (scheduleReason != null) {
-      return ReconnectScheduleDecisionSkip(reason: scheduleReason);
+      String message;
+      switch (scheduleReason) {
+        case CallReconnectScheduleBlockReason.notAuthenticated:
+          message = CallReconnectLog.scheduleSkipNotAuthenticated(
+            reason,
+            authStatusName,
+          );
+          break;
+        case CallReconnectScheduleBlockReason.offline:
+          message = CallReconnectLog.scheduleSkipOffline(reason);
+          break;
+        case CallReconnectScheduleBlockReason.hasActiveCall:
+          message = CallReconnectLog.scheduleSkipHasActiveCall(
+            reason,
+            activeCallId,
+          );
+          break;
+      }
+      return ReconnectScheduleDecisionSkip(
+        reason: scheduleReason,
+        message: message,
+      );
     }
     if (reconnectInFlight) {
-      return const ReconnectScheduleDecisionSkip(inFlight: true);
+      return ReconnectScheduleDecisionSkip(
+        inFlight: true,
+        message: CallReconnectLog.scheduleSkipInFlight(reason),
+      );
     }
     return const ReconnectScheduleDecisionAllow();
   }
