@@ -31,6 +31,7 @@ import 'call_models.dart';
 import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
+import 'call_reconnect_coordinator.dart';
 import 'call_reconnect_policy.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
@@ -1310,34 +1311,40 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final scheduleBlock = CallReconnectPolicy.scheduleBlockReason(
-      lastKnownOnline: _lastKnownOnline,
-      hasActiveCall: _hasActiveCall,
+    final decision = CallReconnectCoordinator.decideSchedule(
+      disposed: _disposed,
       authenticated: authStatus == AuthStatus.authenticated,
+      online: _lastKnownOnline,
+      hasActiveCall: _hasActiveCall,
+      reconnectInFlight: _reconnectInFlight,
     );
-    if (scheduleBlock != null) {
-      switch (scheduleBlock) {
-        case CallReconnectScheduleBlockReason.notAuthenticated:
-          debugPrint(
-            '[CALLS_CONN] scheduleReconnect skip reason=$reason authStatus=${authStatus.name}',
-          );
-          return;
-        case CallReconnectScheduleBlockReason.offline:
-          debugPrint(
-            '[CALLS_CONN] scheduleReconnect skip reason=$reason online=false',
-          );
-          return;
-        case CallReconnectScheduleBlockReason.hasActiveCall:
-          debugPrint(
-            '[CALLS_CONN] scheduleReconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
-          );
-          return;
+    if (decision is ReconnectScheduleDecisionSkip) {
+      if (decision.disposed) return;
+      if (decision.reason != null) {
+        switch (decision.reason!) {
+          case CallReconnectScheduleBlockReason.notAuthenticated:
+            debugPrint(
+              '[CALLS_CONN] scheduleReconnect skip reason=$reason authStatus=${authStatus.name}',
+            );
+            return;
+          case CallReconnectScheduleBlockReason.offline:
+            debugPrint(
+              '[CALLS_CONN] scheduleReconnect skip reason=$reason online=false',
+            );
+            return;
+          case CallReconnectScheduleBlockReason.hasActiveCall:
+            debugPrint(
+              '[CALLS_CONN] scheduleReconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+            );
+            return;
+        }
       }
-    }
-    if (_reconnectInFlight) {
-      debugPrint(
-        '[CALLS_CONN] scheduleReconnect skip reason=$reason inFlight=true',
-      );
+      if (decision.inFlight) {
+        debugPrint(
+          '[CALLS_CONN] scheduleReconnect skip reason=$reason inFlight=true',
+        );
+        return;
+      }
       return;
     }
     _reconnectScheduler.cancel();
