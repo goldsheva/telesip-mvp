@@ -136,6 +136,47 @@ void main() {
         expect(errors, ['Unable to determine SIP domain']);
       },
     );
+
+    test('connection with scheme reuses provided URL', () {
+      const connections = [
+        PbxSipConnection(
+          pbxSipUrl: 'wss://pbx.teleleo.com',
+          pbxSipPort: 7443,
+          pbxSipProtocol: 'WSS',
+        ),
+      ];
+      final errors = <String>[];
+      final result = buildSipSnapshot(
+        connections: connections,
+        sipLogin: 'user',
+        sipPassword: 'secret',
+        defaultWsUrl: null,
+        treatEmptyDefaultAsMissing: false,
+        setError: errors.add,
+      );
+
+      expect(result.snapshot, isNotNull);
+      expect(result.snapshot!.wsUrl, 'wss://pbx.teleleo.com/');
+      expect(result.snapshot!.uri, 'sip:user@pbx.teleleo.com');
+      expect(errors, isEmpty);
+    });
+
+    test('default ws without scheme fails', () {
+      const connections = <PbxSipConnection>[];
+      final errors = <String>[];
+      final result = buildSipSnapshot(
+        connections: connections,
+        sipLogin: 'user',
+        sipPassword: 'secret',
+        defaultWsUrl: 'pbx.teleleo.com:7443',
+        treatEmptyDefaultAsMissing: false,
+        setError: errors.add,
+      );
+
+      expect(result.snapshot, isNull);
+      expect(result.failure, CallSipSnapshotBuildFailure.invalidUriHost);
+      expect(errors, ['Unable to determine SIP domain']);
+    });
   });
 
   group('incomingHintFailureMessage', () {

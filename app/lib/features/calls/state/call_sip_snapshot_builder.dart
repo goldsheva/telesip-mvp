@@ -42,8 +42,28 @@ CallSipSnapshotBuildResult buildSipSnapshot({
         failure: CallSipSnapshotBuildFailure.unsupportedTransport,
       );
     }
-    wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
-    uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
+    final connectionUrl = connection.pbxSipUrl;
+    if (connectionUrl.contains('://')) {
+      final parsed = Uri.tryParse(connectionUrl);
+      if (parsed == null) {
+        setError('Unable to determine SIP domain');
+        return const CallSipSnapshotBuildResult(
+          failure: CallSipSnapshotBuildFailure.invalidUriHost,
+        );
+      }
+      final normalizedUrl = connectionUrl.endsWith('/')
+          ? connectionUrl
+          : '$connectionUrl/';
+      wsUrl = normalizedUrl;
+      uriHost = parsed.host.isNotEmpty
+          ? parsed.host
+          : parsed.authority.isNotEmpty
+          ? parsed.authority
+          : connectionUrl;
+    } else {
+      wsUrl = '$scheme://$connectionUrl:${connection.pbxSipPort}/';
+      uriHost = Uri.tryParse(wsUrl)?.host ?? connectionUrl;
+    }
   } else {
     if (defaultWsUrl == null ||
         (treatEmptyDefaultAsMissing && defaultWsUrl.isEmpty)) {
@@ -55,8 +75,19 @@ CallSipSnapshotBuildResult buildSipSnapshot({
         failure: CallSipSnapshotBuildFailure.missingWsEndpoint,
       );
     }
-    wsUrl = defaultWsUrl;
-    uriHost = Uri.tryParse(wsUrl)?.host ?? '';
+    final parsedDefault = Uri.tryParse(defaultWsUrl);
+    if (parsedDefault == null ||
+        !(parsedDefault.scheme == 'ws' || parsedDefault.scheme == 'wss')) {
+      setError('Unable to determine SIP domain');
+      return const CallSipSnapshotBuildResult(
+        failure: CallSipSnapshotBuildFailure.invalidUriHost,
+      );
+    }
+    final normalizedDefaultWsUrl = defaultWsUrl.endsWith('/')
+        ? defaultWsUrl
+        : '$defaultWsUrl/';
+    wsUrl = normalizedDefaultWsUrl;
+    uriHost = parsedDefault.host;
   }
 
   if (uriHost.isEmpty) {
