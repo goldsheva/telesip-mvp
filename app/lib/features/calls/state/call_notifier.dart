@@ -25,7 +25,10 @@ import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
 import 'package:app/services/audio_route_types.dart';
 import 'package:app/services/incoming_notification_service.dart';
+import 'package:app/services/network_connectivity_service.dart';
 import 'package:app/sip/sip_engine.dart';
+import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/auth/state/auth_state.dart';
 
 CallNotifier? _globalCallNotifierInstance;
 
@@ -168,6 +171,13 @@ class CallNotifier extends Notifier<CallState> {
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
   Future<void> _eventChain = Future<void>.value();
   bool _disposed = false;
+  final NetworkConnectivityService _connectivityService =
+      NetworkConnectivityService();
+  bool _connectivityListenerActive = false;
+  StreamSubscription<bool>? _connectivitySubscription;
+  DateTime? _lastOnlineHandledAt;
+  bool _lastKnownOnline = false;
+  static const Duration _connectivityDebounce = Duration(seconds: 2);
   bool _isRegistered = false;
   String? _lastErrorMessage;
   DateTime? _lastErrorTimestamp;
@@ -201,6 +211,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _foregroundRequested = false;
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
+  bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
   bool _audioRouteRefreshInFlight = false;
@@ -1319,6 +1330,24 @@ class CallNotifier extends Notifier<CallState> {
   CallState build() {
     _registerGlobalCallNotifierInstance(this);
     _engine = ref.read(sipEngineProvider);
+    if (!_connectivityListenerActive) {
+      _connectivityListenerActive = true;
+      _connectivitySubscription = _connectivityService.onOnlineChanged.listen(
+        _handleConnectivityChanged,
+      );
+      unawaited(
+        _connectivityService.isOnline().then((online) {
+          _lastKnownOnline = online;
+          logConnectivitySnapshot('connectivity-init');
+          if (online) {
+            debugPrint(
+              '[CALLS_CONN] net online (init) -> ensureBootstrapped reason=net-online-init',
+            );
+            ensureBootstrapped('net-online-init');
+          }
+        }),
+      );
+    }
     unawaited(_ensureStoredIncomingCredentialsLoaded());
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
@@ -1364,6 +1393,7 @@ class CallNotifier extends Notifier<CallState> {
     ref.onDispose(() {
       _disposed = true;
       _eventSubscription?.close();
+      _connectivitySubscription?.cancel();
       _disposeWatchdog();
       _cancelRegistrationErrorTimer();
       unawaited(_releaseAudioFocus());
@@ -1398,9 +1428,25 @@ class CallNotifier extends Notifier<CallState> {
       );
     }
     if (_bootstrapDone) return;
-    _bootstrapDone = true;
-    _syncForegroundServiceState(snapshot);
-    unawaited(handleIncomingCallHintIfAny());
+    if (_bootstrapInFlight) {
+      if (kDebugMode) {
+        debugPrint('[CALLS] bootstrapIfNeeded skip already in-flight');
+      }
+      return;
+    }
+    _bootstrapInFlight = true;
+    try {
+      final skipReason = _bootstrapPrerequisitesSkipReason();
+      if (skipReason != null) {
+        debugPrint('[CALLS] bootstrapIfNeeded skip: $skipReason');
+        return;
+      }
+      _bootstrapDone = true;
+      _syncForegroundServiceState(snapshot);
+      unawaited(handleIncomingCallHintIfAny());
+    } finally {
+      _bootstrapInFlight = false;
+    }
   }
 
   void ensureBootstrapped(String reason) {
@@ -1414,6 +1460,14 @@ class CallNotifier extends Notifier<CallState> {
       );
     }
     if (_bootstrapDone) return;
+    if (_bootstrapInFlight) {
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS] ensureBootstrapped skip: bootstrap already in-flight',
+        );
+      }
+      return;
+    }
     if (!_bootstrapScheduled) {
       _bootstrapScheduled = true;
       final snapshot = state;
@@ -1421,6 +1475,66 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     _bootstrapIfNeeded(state);
+  }
+
+  String? _bootstrapPrerequisitesSkipReason() {
+    final authState = ref.read(authNotifierProvider);
+    final authStatus = authState.value?.status ?? AuthStatus.unknown;
+    if (authStatus != AuthStatus.authenticated) {
+      return 'authStatus=${authStatus.name}';
+    }
+    if (!_lastKnownOnline) {
+      return 'offline';
+    }
+    return null;
+  }
+
+  void _handleConnectivityChanged(bool online) {
+    final now = DateTime.now();
+    if (!online) {
+      debugPrint('[CALLS_CONN] net offline');
+      _lastKnownOnline = false;
+      _lastOnlineHandledAt = null;
+      return;
+    }
+    final lastHandled = _lastOnlineHandledAt;
+    if (lastHandled != null &&
+        now.difference(lastHandled) < _connectivityDebounce) {
+      debugPrint('[CALLS_CONN] net online skip (debounce)');
+      return;
+    }
+    _lastKnownOnline = true;
+    _lastOnlineHandledAt = now;
+
+    final activeCall = state.activeCall;
+    final hasActiveCall =
+        activeCall != null && activeCall.status != CallStatus.ended;
+    if (hasActiveCall) {
+      debugPrint(
+        '[CALLS_CONN] net online skip activeCallId=${state.activeCallId ?? '<none>'} '
+        'status=${activeCall.status}',
+      );
+      return;
+    }
+
+    logConnectivitySnapshot('net-online');
+    debugPrint(
+      '[CALLS_CONN] net online -> ensureBootstrapped reason=net-online',
+    );
+    ensureBootstrapped('net-online');
+  }
+
+  void logConnectivitySnapshot(String tag) {
+    if (!kDebugMode) return;
+    final authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    final activeCall = state.activeCall;
+    debugPrint(
+      '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
+      'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
+      'active=${state.activeCallId ?? '<none>'} '
+      'status=${activeCall?.status ?? '<none>'}',
+    );
   }
 
   void _commit(CallState next, {bool syncFgs = true}) {
