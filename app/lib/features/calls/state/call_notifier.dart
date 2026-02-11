@@ -68,6 +68,7 @@ class CallNotifier extends Notifier<CallState> {
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
   Future<void> _eventChain = Future<void>.value();
   bool _disposed = false;
+  bool get _alive => !_disposed;
   final NetworkConnectivityService _connectivityService =
       NetworkConnectivityService();
   bool _connectivityListenerActive = false;
@@ -361,11 +362,14 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> handleIncomingCallHintIfAny() async {
+    if (_disposed) return;
     await _ensureStoredIncomingCredentialsLoaded();
+    if (_disposed) return;
     if (_isHandlingHint) return;
     _isHandlingHint = true;
     try {
       final raw = await FcmStorage.readPendingIncomingHint();
+      if (_disposed) return;
       if (raw == null) return;
 
       final payload = raw['payload'] as Map<String, dynamic>?;
@@ -525,6 +529,7 @@ class CallNotifier extends Notifier<CallState> {
     bool clearPendingAction = false,
     bool markRecentlyEndedForSipPair = true,
   }) async {
+    if (_disposed) return;
     final now = DateTime.now();
     final callIdIsSip = _sipToLocalCallId.containsKey(callId);
     final localId = callIdIsSip ? _sipToLocalCallId[callId]! : callId;
@@ -582,6 +587,7 @@ class CallNotifier extends Notifier<CallState> {
         clearPendingHint: clearPendingHint,
         clearPendingAction: clearPendingAction,
       );
+      if (_disposed) return;
       clearedHint = cleanupResult.clearedHint;
       clearedAction = cleanupResult.clearedAction;
     }
@@ -653,7 +659,7 @@ class CallNotifier extends Notifier<CallState> {
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
     );
-    _commit(nextState);
+    _commitSafe(nextState);
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
@@ -678,10 +684,14 @@ class CallNotifier extends Notifier<CallState> {
   Future<bool> _ensureIncomingReady({
     Duration timeout = const Duration(seconds: 4),
   }) async {
+    if (_disposed) return false;
     await handleIncomingCallHintIfAny();
+    if (_disposed) return false;
     final deadline = DateTime.now().add(timeout);
     while (!_incomingRegistrationReady && DateTime.now().isBefore(deadline)) {
+      if (_disposed) return false;
       await Future.delayed(const Duration(milliseconds: 200));
+      if (_disposed) return false;
     }
     if (_incomingRegistrationReady) return true;
     debugPrint('[INCOMING] registration not ready after ${timeout.inSeconds}s');
@@ -694,11 +704,13 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _ensureStoredIncomingCredentialsLoaded() async {
+    if (_disposed) return;
     if (_storedIncomingCredentialsLoaded) return;
     _storedIncomingCredentialsLoaded = true;
     final stored = await ref
         .read(generalSipCredentialsStorageProvider)
         .readCredentials();
+    if (_disposed) return;
     if (stored == null) return;
     _storedIncomingCredentials = stored;
     _incomingUser ??= _incomingUserFromStoredCredentials(stored);
@@ -1132,6 +1144,7 @@ class CallNotifier extends Notifier<CallState> {
     ref.listen<AsyncValue<AppLifecycleState>>(
       appLifecycleProvider,
       (previous, next) => next.whenData((state) {
+        if (_disposed) return;
         if (state == AppLifecycleState.resumed) {
           debugPrint('[INCOMING] app lifecycle resumed, checking hint');
           unawaited(handleIncomingCallHintIfAny());
@@ -1148,8 +1161,11 @@ class CallNotifier extends Notifier<CallState> {
       _connectivitySubscription?.cancel();
       _reconnectTimer?.cancel();
       _healthCheckTimer?.cancel();
-      _disposeWatchdog();
+      _cancelDialTimeout();
       _cancelRegistrationErrorTimer();
+      _cancelFailureTimer();
+      _cancelRetrySuppressionTimer();
+      _disposeWatchdog();
       unawaited(_releaseAudioFocus());
       _unregisterGlobalCallNotifierInstance(this);
     });
@@ -1171,6 +1187,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _bootstrapIfNeeded(CallState snapshot) {
+    if (_disposed) return;
     if (kDebugMode && _bootstrapDone) {
       debugPrint('[CALLS] bootstrapIfNeeded skip already done');
       return;
@@ -1206,6 +1223,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void ensureBootstrapped(String reason) {
+    if (_disposed) return;
     if (kDebugMode) {
       final status =
           state.errorMessage ??
@@ -1246,6 +1264,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _handleConnectivityChanged(bool online) {
+    if (_disposed) return;
     final now = DateTime.now();
     if (!online) {
       debugPrint('[CALLS_CONN] net offline');
@@ -1316,6 +1335,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _maybeBootstrapFromCurrentSnapshot(String reason) {
+    if (_disposed) return;
     if (_bootstrapDone || _bootstrapInFlight) return;
     final skip = _bootstrapPrerequisitesSkipReason();
     if (skip != null) return;
@@ -1326,7 +1346,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void debugDumpConnectivityAndSipHealth(String tag) {
-    if (!kDebugMode) return;
+    if (_disposed || !kDebugMode) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     final activeCall = state.activeCall;
@@ -1368,6 +1388,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _checkSipHealth(Timer timer) {
+    if (_disposed) return;
     if (!_lastKnownOnline) return;
     if (_hasActiveCall) return;
     final AuthStatus authStatus =
@@ -1530,7 +1551,13 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
+  void _commitSafe(CallState next, {bool syncFgs = true}) {
+    if (!_alive) return;
+    _commit(next, syncFgs: syncFgs);
+  }
+
   Future<void> _onEvent(SipEvent event) async {
+    if (_disposed) return;
     final now = DateTime.now();
     if (event.type == SipEventType.registration) {
       final registrationState = event.registrationState;
@@ -1556,7 +1583,7 @@ class CallNotifier extends Notifier<CallState> {
         _registeredUserId = _lastKnownUser?.pbxSipUserId;
         _cancelRegistrationErrorTimer();
         _pendingRegistrationError = null;
-        _clearError();
+        _clearErrorSafe();
       } else if (registrationState == SipRegistrationState.failed) {
         _isRegistered = false;
         _handleRegistrationFailure(event.message ?? 'SIP registration failed');
@@ -1948,7 +1975,9 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _drainPendingCallActions() async {
+    if (_disposed) return;
     final ready = await _ensureIncomingReady();
+    if (_disposed) return;
     if (!ready) {
       debugPrint(
         '[CALLS] drainPendingCallActions aborted: registration not ready',
@@ -1958,6 +1987,7 @@ class CallNotifier extends Notifier<CallState> {
     final raw = await _notificationsChannel.invokeMethod<List<dynamic>>(
       'drainPendingCallActions',
     );
+    if (_disposed) return;
     if (raw == null || raw.isEmpty) return;
     final now = DateTime.now();
     _processedPendingCallActions.removeWhere(
@@ -2096,6 +2126,16 @@ class CallNotifier extends Notifier<CallState> {
     state = state.copyWith(errorMessage: message);
   }
 
+  void _setErrorSafe(String message) {
+    if (!_alive) return;
+    _setError(message);
+  }
+
+  void _clearErrorSafe() {
+    if (!_alive) return;
+    _clearError();
+  }
+
   void _rejectBusyCall(String callId, SipEventType type) {
     final now = DateTime.now();
     _busyRejected.removeWhere((_, ts) => now.difference(ts) > _busyRejectTtl);
@@ -2142,11 +2182,12 @@ class CallNotifier extends Notifier<CallState> {
     _pendingRegistrationError = message;
     _cancelRegistrationErrorTimer();
     _registrationErrorTimer = Timer(const Duration(seconds: 2), () {
+      if (_disposed) return;
       if (_isRegistered) {
         _pendingRegistrationError = null;
         return;
       }
-      _setError(_pendingRegistrationError ?? 'SIP registration failed');
+      _setErrorSafe(_pendingRegistrationError ?? 'SIP registration failed');
     });
   }
 
@@ -2159,6 +2200,7 @@ class CallNotifier extends Notifier<CallState> {
     _cancelDialTimeout();
     _dialTimeoutCallId = callId;
     _dialTimeoutTimer = Timer(_dialTimeout, () async {
+      if (_disposed) return;
       final targetCallId = _dialTimeoutCallId;
       if (targetCallId == null) return;
       final activeId = state.activeCallId;
@@ -2190,6 +2232,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> _refreshAudioRoute() async {
+    if (_disposed) return;
     final now = DateTime.now();
     if (_audioRouteRefreshInFlight) return;
     if (_lastAudioRouteRefresh != null &&
@@ -2205,6 +2248,7 @@ class CallNotifier extends Notifier<CallState> {
     _lastAudioRouteRefresh = now;
     try {
       final info = await AudioRouteService.getRouteInfo();
+      if (_disposed) return;
       if (info == null) return;
       final availableRoutes = Set<AudioRoute>.from(info.available)
         ..add(AudioRoute.systemDefault);
@@ -2296,6 +2340,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _handleWatchdogStateChange(CallWatchdogState newState) {
+    if (_disposed) return;
     debugPrint(
       'Watchdog($_watchdogCallId) state -> ${newState.status}: ${newState.message}',
     );
@@ -2315,6 +2360,7 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _handleWatchdogFailure(String callId) {
+    if (_disposed) return;
     if (state.activeCall?.id != callId) return;
     debugPrint('Watchdog failure triggered for $callId');
     _watchdogErrorActive = true;
@@ -2329,6 +2375,7 @@ class CallNotifier extends Notifier<CallState> {
     _cancelFailureTimer();
     _failureTimerCallId = callId;
     _watchdogFailureTimer = Timer(const Duration(seconds: 20), () {
+      if (_disposed) return;
       if (_failureTimerCallId != callId) return;
       if (state.activeCall?.id != callId) return;
       if (state.watchdogState.status != CallWatchdogStatus.failed) return;
@@ -2338,7 +2385,7 @@ class CallNotifier extends Notifier<CallState> {
       }
       debugPrint('Watchdog hangup timer expired for $callId');
       _watchdogErrorActive = true;
-      _setError('Network is unstable, ending call');
+      _setErrorSafe('Network is unstable, ending call');
       final engineCallId = _resolveEngineCallId(callId);
       if (engineCallId != null) {
         unawaited(_engine.hangup(engineCallId));
@@ -2366,6 +2413,7 @@ class CallNotifier extends Notifier<CallState> {
   void _startRetrySuppressionTimer() {
     _retrySuppressionTimer?.cancel();
     _retrySuppressionTimer = Timer(const Duration(seconds: 10), () {
+      if (_disposed) return;
       debugPrint('Retry suppression ended for $_watchdogCallId');
       _userInitiatedRetry = false;
       _retrySuppressionTimer = null;
@@ -2386,7 +2434,8 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _clearWatchdogError() {
-    if (_watchdogErrorActive &&
+    if (!_disposed &&
+        _watchdogErrorActive &&
         (state.errorMessage == 'Network is unstable' ||
             state.errorMessage == 'Network is unstable, ending call')) {
       state = state.copyWith(errorMessage: null);
@@ -2402,7 +2451,7 @@ class CallNotifier extends Notifier<CallState> {
     _cancelRetrySuppressionTimer();
     _userInitiatedRetry = false;
     _clearWatchdogError();
-    if (state.watchdogState.status != CallWatchdogStatus.ok) {
+    if (!_disposed && state.watchdogState.status != CallWatchdogStatus.ok) {
       state = state.copyWith(watchdogState: CallWatchdogState.ok());
     }
   }
