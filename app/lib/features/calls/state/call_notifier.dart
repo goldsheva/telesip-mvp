@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/config/env_config.dart';
 import 'package:app/core/providers.dart';
 import 'package:app/core/providers/sip_providers.dart';
-import 'package:app/core/storage/fcm_storage.dart';
 import 'package:app/core/storage/general_sip_credentials_storage.dart';
 import 'package:app/core/storage/sip_auth_storage.dart';
 import 'package:app/features/calls/call_watchdog.dart';
@@ -31,8 +30,10 @@ import 'package:app/features/auth/state/auth_state.dart';
 
 import 'call_models.dart';
 import 'call_notification_cleanup.dart';
+import 'call_incoming_hint_handler.dart';
 
 export 'call_models.dart';
+export 'call_incoming_hint_handler.dart';
 
 CallNotifier? _globalCallNotifierInstance;
 
@@ -120,6 +121,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
   late final CallNotificationCleanup _notifCleanup;
+  late final CallIncomingHintHandler _incomingHintHandler;
   bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
@@ -147,12 +149,6 @@ class CallNotifier extends Notifier<CallState> {
   static const Duration _busyGrace = Duration(seconds: 2);
   final Map<String, DateTime> _processedPendingCallActions = {};
   static const Duration _pendingCallActionDedupTtl = Duration(seconds: 120);
-
-  DateTime? _lastHandledHintTimestamp;
-  DateTime? _lastHintAttemptAt;
-  bool _isHandlingHint = false;
-  static const Duration _incomingHintExpiry = Duration(seconds: 60);
-  static const Duration _incomingHintRetryTtl = Duration(seconds: 30);
 
   bool get isBusy {
     final baseBusy =
@@ -361,154 +357,8 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
-  Future<void> handleIncomingCallHintIfAny() async {
-    if (_disposed) return;
-    await _ensureStoredIncomingCredentialsLoaded();
-    if (_disposed) return;
-    if (_isHandlingHint) return;
-    _isHandlingHint = true;
-    try {
-      final raw = await FcmStorage.readPendingIncomingHint();
-      if (_disposed) return;
-      if (raw == null) return;
-
-      final payload = raw['payload'] as Map<String, dynamic>?;
-      final timestampRaw = raw['timestamp'] as String?;
-      final timestamp = DateTime.tryParse(timestampRaw ?? '');
-      final callUuid = payload?['call_uuid']?.toString() ?? '<none>';
-
-      if (payload == null || timestamp == null) {
-        debugPrint(
-          '[INCOMING] invalid pending hint (call_uuid=$callUuid), clearing',
-        );
-        await FcmStorage.clearPendingIncomingHint();
-        return;
-      }
-
-      final now = DateTime.now();
-      if (now.difference(timestamp) > _incomingHintExpiry) {
-        debugPrint(
-          '[INCOMING] pending hint expired after ${now.difference(timestamp).inSeconds}s (call_uuid=$callUuid)',
-        );
-        await FcmStorage.clearPendingIncomingHint();
-        return;
-      }
-
-      if (_lastHandledHintTimestamp != null &&
-          _lastHandledHintTimestamp!.isAtSameMomentAs(timestamp)) {
-        return;
-      }
-
-      if (_lastHintAttemptAt != null &&
-          now.difference(_lastHintAttemptAt!) < _incomingHintRetryTtl) {
-        final remaining =
-            _incomingHintRetryTtl - now.difference(_lastHintAttemptAt!);
-        debugPrint(
-          '[INCOMING] hint retry suppressed for ${remaining.inSeconds}s (call_uuid=$callUuid)',
-        );
-        return;
-      }
-
-      if (isBusy) {
-        debugPrint(
-          '[INCOMING] busy when handling hint (call_uuid=$callUuid), will retry later',
-        );
-        return;
-      }
-
-      _lastHintAttemptAt = now;
-      final candidate =
-          _incomingUser ??
-          (_storedIncomingCredentials != null
-              ? _incomingUserFromStoredCredentials(_storedIncomingCredentials!)
-              : null);
-      late final SipAuthSnapshot snapshot;
-      if (candidate != null) {
-        _incomingUser = candidate;
-        final wsConnections = candidate.pbxSipConnections
-            .where((c) => c.pbxSipProtocol.toLowerCase().contains('ws'))
-            .toList();
-        late final String wsUrl;
-        String uriHost = '';
-        if (wsConnections.isNotEmpty) {
-          final connection = wsConnections.first;
-          final protocol = connection.pbxSipProtocol.toLowerCase();
-          final scheme = protocol.contains('wss')
-              ? 'wss'
-              : protocol.contains('ws')
-              ? 'ws'
-              : null;
-          if (scheme == null) {
-            debugPrint(
-              '[INCOMING] unsupported SIP transport for incoming user, skipping hint (call_uuid=$callUuid)',
-            );
-            return;
-          }
-          wsUrl = '$scheme://${connection.pbxSipUrl}:${connection.pbxSipPort}/';
-          uriHost = Uri.tryParse(wsUrl)?.host ?? connection.pbxSipUrl;
-        } else {
-          final defaultWs = EnvConfig.sipWebSocketUrl;
-          if (defaultWs == null || defaultWs.isEmpty) {
-            debugPrint(
-              '[INCOMING] no WS endpoint configured for incoming user, skipping hint (call_uuid=$callUuid)',
-            );
-            return;
-          }
-          wsUrl = defaultWs;
-          uriHost = Uri.tryParse(wsUrl)?.host ?? '';
-        }
-        if (uriHost.isEmpty) {
-          debugPrint(
-            '[INCOMING] invalid WS URL for incoming user, skipping hint (call_uuid=$callUuid)',
-          );
-          return;
-        }
-        snapshot = SipAuthSnapshot(
-          uri: 'sip:${candidate.sipLogin}@$uriHost',
-          password: candidate.sipPassword,
-          wsUrl: wsUrl,
-          displayName: candidate.sipLogin,
-          timestamp: DateTime.now(),
-        );
-        debugPrint(
-          '[INCOMING] registering SIP from stored incoming user (call_uuid=$callUuid)',
-        );
-      } else {
-        final storedSnapshot = await ref
-            .read(sipAuthStorageProvider)
-            .readSnapshot();
-        if (storedSnapshot == null) {
-          debugPrint(
-            '[INCOMING] no stored SIP credentials to register (call_uuid=$callUuid)',
-          );
-          return;
-        }
-        snapshot = storedSnapshot;
-        debugPrint(
-          '[INCOMING] registering SIP from hint (call_uuid=$callUuid)',
-        );
-      }
-      bool registered = false;
-      try {
-        _startHintForegroundGuard();
-        registered = await registerWithSnapshot(snapshot);
-        if (registered) {
-          _lastHandledHintTimestamp = timestamp;
-          await FcmStorage.clearPendingIncomingHint();
-          debugPrint(
-            '[INCOMING] pending hint handled and cleared (call_uuid=$callUuid)',
-          );
-        } else {
-          debugPrint(
-            '[INCOMING] hint handling failed, retry allowed after ${_incomingHintRetryTtl.inSeconds}s (call_uuid=$callUuid)',
-          );
-        }
-      } finally {
-        _releaseHintForegroundGuard(registered: registered, sync: !registered);
-      }
-    } finally {
-      _isHandlingHint = false;
-    }
+  Future<void> handleIncomingCallHintIfAny() {
+    return _incomingHintHandler.handleIncomingCallHintIfAny();
   }
 
   Future<void> handleIncomingCallCancelled(String callId) async {
@@ -1067,6 +917,21 @@ class CallNotifier extends Notifier<CallState> {
     _notifCleanup = CallNotificationCleanup(
       getState: () => state,
       sipToLocalCallId: _sipToLocalCallId,
+    );
+    _incomingHintHandler = CallIncomingHintHandler(
+      isDisposed: () => _disposed,
+      ensureStoredIncomingCredentialsLoaded:
+          _ensureStoredIncomingCredentialsLoaded,
+      registerWithSnapshot: registerWithSnapshot,
+      getIncomingUser: () => _incomingUser,
+      setIncomingUser: (user) => _incomingUser = user,
+      getStoredIncomingCredentials: () => _storedIncomingCredentials,
+      incomingUserFromStoredCredentials: _incomingUserFromStoredCredentials,
+      readStoredSnapshot: () => ref.read(sipAuthStorageProvider).readSnapshot(),
+      startHintForegroundGuard: _startHintForegroundGuard,
+      releaseHintForegroundGuard: _releaseHintForegroundGuard,
+      isBusy: () => isBusy,
+      log: (message) => debugPrint(message),
     );
     final initialStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
