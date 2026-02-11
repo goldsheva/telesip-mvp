@@ -384,6 +384,15 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       return;
     }
     _pendingBootstrapReason = null;
+    if (kDebugMode) {
+      final status =
+          ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      debugPrint(
+        '[CALLS] ensureBootstrapped call reason=$reason mounted=$mounted resumed=$_isResumed '
+        'lifecycle=$lifecycle authStatus=$status pending=${_pendingBootstrapReason != null}',
+      );
+    }
     ref.read(callControllerProvider.notifier).ensureBootstrapped(reason);
   }
 

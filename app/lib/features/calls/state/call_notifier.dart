@@ -1387,6 +1387,16 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _bootstrapIfNeeded(CallState snapshot) {
+    if (kDebugMode && _bootstrapDone) {
+      debugPrint('[CALLS] bootstrapIfNeeded skip already done');
+      return;
+    }
+    if (kDebugMode) {
+      debugPrint(
+        '[CALLS] bootstrapIfNeeded enter scheduled=$_bootstrapScheduled done=$_bootstrapDone '
+        'active=${snapshot.activeCallId} status=${snapshot.activeCall?.status}',
+      );
+    }
     if (_bootstrapDone) return;
     _bootstrapDone = true;
     _syncForegroundServiceState(snapshot);
@@ -1394,10 +1404,16 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void ensureBootstrapped(String reason) {
+    if (kDebugMode) {
+      final status =
+          state.errorMessage ??
+          state.activeCall?.status.toString() ??
+          'no-call';
+      debugPrint(
+        '[CALLS] ensureBootstrapped reason=$reason scheduled=$_bootstrapScheduled done=$_bootstrapDone stateActive=${state.activeCallId} status=$status',
+      );
+    }
     if (_bootstrapDone) return;
-    debugPrint(
-      '[CALLS] bootstrap trigger reason=$reason scheduled=$_bootstrapScheduled done=$_bootstrapDone',
-    );
     if (!_bootstrapScheduled) {
       _bootstrapScheduled = true;
       final snapshot = state;
