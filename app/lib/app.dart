@@ -138,6 +138,11 @@ class _AuthGateState extends ConsumerState<_AuthGate>
 
   Future<void> _maybeAskBatteryOptimizations() async {
     if (!Platform.isAndroid) return;
+    final isEmulator = await SystemSettings.isRunningOnEmulator();
+    if (isEmulator) {
+      debugPrint('[CALLS] battery prompt suppressed: emulator detected');
+      return;
+    }
     final status =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     if (status != AuthStatus.authenticated) return;
@@ -181,15 +186,17 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (!mounted || !_isResumed) return;
     _batteryPromptInFlight = true;
     try {
-      final batteryDisabled = await ref
+      final isIgnoring = await ref
           .read(callControllerProvider.notifier)
           .isBatteryOptimizationDisabled();
-      if (batteryDisabled) {
+      if (isIgnoring) {
         await BatteryOptimizationPromptStorage.markPromptShown();
         return;
       }
       if (!mounted || !_isResumed) return;
-      debugPrint('[CALLS] showing battery optimization prompt');
+      debugPrint(
+        '[CALLS] showing battery optimization prompt isIgnoring=$isIgnoring',
+      );
       _batteryPromptScheduled = true;
       final openedSettings = await showDialog<bool>(
         context: context,
@@ -200,9 +207,10 @@ class _AuthGateState extends ConsumerState<_AuthGate>
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                unawaited(SystemSettings.openIgnoreBatteryOptimizations());
-                Navigator.of(ctx).pop(true);
+              onPressed: () async {
+                final navigator = Navigator.of(ctx);
+                final opened = await _launchBatterySettings(ctx);
+                navigator.pop(opened);
               },
               child: const Text('Open settings'),
             ),
@@ -214,6 +222,13 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         ),
       );
       final opened = openedSettings == true;
+      await Future.delayed(const Duration(milliseconds: 400));
+      final postIgnoring = await ref
+          .read(callControllerProvider.notifier)
+          .isBatteryOptimizationDisabled();
+      debugPrint(
+        '[CALLS] battery prompt post-return snapshot opened=$opened ignoring=$postIgnoring',
+      );
       if (opened) {
         await BatteryOptimizationPromptStorage.markPromptShown();
         await BatteryOptimizationPromptStorage.clearSnooze();
@@ -226,6 +241,36 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       _batteryPromptInFlight = false;
       _batteryPromptScheduled = false;
     }
+  }
+
+  Future<bool> _launchBatterySettings(BuildContext context) async {
+    try {
+      return await SystemSettings.openIgnoreBatteryOptimizations();
+    } catch (error) {
+      debugPrint('[CALLS] battery intent failed: $error');
+      await _showBatteryManualInstructions(context);
+      return false;
+    }
+  }
+
+  Future<void> _showBatteryManualInstructions(BuildContext context) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Manual battery steps'),
+        content: const Text(
+          'Open Settings → Apps → [This App] → Battery → Background restrictions, '
+          'and disable battery optimizations manually.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Understood'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _processIncomingActivity() async {

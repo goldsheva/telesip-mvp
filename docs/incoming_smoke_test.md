@@ -42,6 +42,8 @@ Each step lists the device state, what UI/logs to expect, and the pass/fail cond
 
 Use the title-long-press in debug builds to open the Incoming Smoke dialog:
 
+> Note: the battery prompt is automatically suppressed on emulators (`[CALLS] battery prompt suppressed: emulator detected`).
+
 1. **Show ringing**
    - Expect `[SMOKE] showRinging start ...`, `[SMOKE] showRinging done`, `[CALLS_NOTIF] showIncoming ...`, and `NotificationHelper: notify ... keyguardLocked=...`.
    - Pass: Notification appears with expected logs and no extra wings.

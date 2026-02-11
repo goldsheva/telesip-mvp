@@ -96,18 +96,31 @@ class MainActivity : FlutterFragmentActivity() {
               )
             }
           }
-          "isIgnoringBatteryOptimizations" -> {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-              result.success(true)
-              return@setMethodCallHandler
-            }
-            val pm = getSystemService(PowerManager::class.java)
-            val ignoring = pm?.isIgnoringBatteryOptimizations(packageName) ?: false
-            result.success(ignoring)
+        "isIgnoringBatteryOptimizations" -> {
+          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            result.success(true)
+            return@setMethodCallHandler
           }
-          else -> result.notImplemented()
+          val pm = getSystemService(PowerManager::class.java)
+          val ignoring = pm?.isIgnoringBatteryOptimizations(packageName) ?: false
+          result.success(ignoring)
         }
+        "isRunningOnEmulator" -> {
+          val fingerprint = (Build.FINGERPRINT ?: "").lowercase()
+          val model = (Build.MODEL ?: "").lowercase()
+          val product = (Build.PRODUCT ?: "").lowercase()
+          val isEmulator =
+            fingerprint.contains("generic") ||
+            fingerprint.contains("vbox") ||
+            fingerprint.contains("test-keys") ||
+            model.contains("google_sdk") ||
+            model.contains("emulator") ||
+            product.contains("sdk_gphone")
+          result.success(isEmulator)
+        }
+        else -> result.notImplemented()
       }
+    }
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.boot_state")
       .setMethodCallHandler { call, result ->
         if (call.method == "wasBootCompleted") {

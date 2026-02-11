@@ -4,12 +4,18 @@ import 'package:flutter/services.dart';
 class SystemSettings {
   static const _channel = MethodChannel('app.system_settings');
 
-  static Future<void> openIgnoreBatteryOptimizations() async {
+  static Future<bool> openIgnoreBatteryOptimizations() async {
     try {
-      await _channel.invokeMethod('openIgnoreBatteryOptimizations');
-      debugPrint('[SYSTEM] ignore battery optimizations intent triggered');
+      final result = await _channel.invokeMethod<bool>(
+        'openIgnoreBatteryOptimizations',
+      );
+      debugPrint(
+        '[SYSTEM] ignore battery optimizations intent triggered result=$result',
+      );
+      return result ?? false;
     } catch (error) {
       debugPrint('Battery optimization settings unavailable: $error');
+      return Future.error(error);
     }
   }
 
@@ -21,6 +27,16 @@ class SystemSettings {
       return result ?? false;
     } catch (error) {
       debugPrint('Battery optimization query failed: $error');
+      return false;
+    }
+  }
+
+  static Future<bool> isRunningOnEmulator() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isRunningOnEmulator');
+      return result ?? false;
+    } catch (error) {
+      debugPrint('[SYSTEM] emulator check failed: $error');
       return false;
     }
   }

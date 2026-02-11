@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/calls/debug/incoming_smoke_harness.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
+import 'package:app/platform/system_settings.dart';
 import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/features/dongles/models/dongle.dart';
 import 'package:app/features/dongles/state/dongles_provider.dart';
@@ -300,6 +301,24 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: const Text('Log android state'),
             ),
             ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _showBatteryOptState(ref);
+              },
+              child: const Text('Battery opt state'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                final opened =
+                    await SystemSettings.openIgnoreBatteryOptimizations();
+                debugPrint(
+                  '[CALLS] manual open battery settings opened=$opened',
+                );
+              },
+              child: const Text('Open battery settings'),
+            ),
+            ElevatedButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 IncomingSmokeHarness.runSequence();
@@ -309,6 +328,17 @@ class _HomePageState extends ConsumerState<HomePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showBatteryOptState(WidgetRef ref) async {
+    final isEmulator = await SystemSettings.isRunningOnEmulator();
+    final ignoring = await ref
+        .read(callControllerProvider.notifier)
+        .isBatteryOptimizationDisabled();
+    final shouldShowPrompt = !isEmulator && !ignoring;
+    debugPrint(
+      '[CALLS] battery opt state emulator=$isEmulator ignoring=$ignoring shouldShowPrompt=$shouldShowPrompt',
     );
   }
 }
