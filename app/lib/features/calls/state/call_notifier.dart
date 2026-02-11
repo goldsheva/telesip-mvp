@@ -33,7 +33,7 @@ import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
 import 'call_reconnect_coordinator.dart';
 import 'call_reconnect_log.dart';
-import 'call_reconnect_policy.dart';
+import 'call_reconnect_perform_coordinator.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
@@ -1359,38 +1359,23 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final performBlock = CallReconnectPolicy.performBlockReason(
+    final performDecision = CallReconnectPerformCoordinator.decidePerform(
+      reason: reason,
+      authStatusName: authStatus.name,
+      activeCallId: state.activeCallId ?? '<none>',
       disposed: _disposed,
       reconnectInFlight: _reconnectInFlight,
-      lastKnownOnline: _lastKnownOnline,
+      online: _lastKnownOnline,
       hasActiveCall: _hasActiveCall,
       authenticated: authStatus == AuthStatus.authenticated,
     );
-    if (performBlock != null) {
-      switch (performBlock) {
-        case CallReconnectPerformBlockReason.disposed:
-        case CallReconnectPerformBlockReason.inFlight:
-          return;
-        case CallReconnectPerformBlockReason.offline:
-          debugPrint(CallReconnectLog.reconnectSkipOffline(reason));
-          return;
-        case CallReconnectPerformBlockReason.hasActiveCall:
-          debugPrint(
-            CallReconnectLog.reconnectSkipHasActiveCall(
-              reason,
-              state.activeCallId ?? '<none>',
-            ),
-          );
-          return;
-        case CallReconnectPerformBlockReason.notAuthenticated:
-          debugPrint(
-            CallReconnectLog.reconnectSkipNotAuthenticated(
-              reason,
-              authStatus.name,
-            ),
-          );
-          return;
+    if (performDecision is ReconnectPerformDecisionSkip) {
+      if (performDecision.disposed || performDecision.inFlight) return;
+      final message = performDecision.message;
+      if (message != null) {
+        debugPrint(message);
       }
+      return;
     }
     final reconnectUser = _lastKnownUser ?? _incomingUser;
     _reconnectInFlight = true;
