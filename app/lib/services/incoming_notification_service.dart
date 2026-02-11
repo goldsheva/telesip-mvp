@@ -15,7 +15,7 @@ class IncomingNotificationService {
     String? callUuid,
     bool isRinging = true,
   }) async {
-    await _logAndroidNotificationState('showIncoming');
+    _logAndroidNotificationState('showIncoming');
     try {
       final args = <String, dynamic>{'callId': callId, 'from': from};
       if (displayName != null) {
@@ -41,7 +41,7 @@ class IncomingNotificationService {
     String? callUuid,
     required bool isRinging,
   }) async {
-    await _logAndroidNotificationState('updateIncomingState');
+    _logAndroidNotificationState('updateIncomingState');
     try {
       final args = <String, dynamic>{
         'callId': callId,
@@ -70,7 +70,7 @@ class IncomingNotificationService {
     required String callId,
     String? callUuid,
   }) async {
-    await _logAndroidNotificationState('cancelIncoming');
+    _logAndroidNotificationState('cancelIncoming');
     try {
       final args = <String, dynamic>{'callId': callId};
       if (callUuid != null) {
@@ -133,8 +133,17 @@ class IncomingNotificationService {
     }
   }
 
+  static const Duration _androidStateLogMinGap = Duration(seconds: 1);
+  static DateTime? _lastAndroidStateLogAt;
+
   static Future<void> _logAndroidNotificationState(String method) async {
     if (!kDebugMode) return;
+    final now = DateTime.now();
+    if (_lastAndroidStateLogAt != null &&
+        now.difference(_lastAndroidStateLogAt!) < _androidStateLogMinGap) {
+      return;
+    }
+    _lastAndroidStateLogAt = now;
     final state = await getNotificationDebugState();
     if (state == null) return;
     debugPrint(
