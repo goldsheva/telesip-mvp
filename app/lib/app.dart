@@ -47,6 +47,8 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   String? _deferredCallId;
   late bool _isResumed;
   bool _batteryPromptInFlight = false;
+  bool _batteryPromptScheduled = false;
+  DateTime? _lastIncomingActivityAt;
 
   @override
   void initState() {
@@ -56,10 +58,14 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == AppLifecycleState.resumed || lifecycleState == null;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _lastIncomingActivityAt = DateTime.now();
       ref
           .read(incomingWakeCoordinatorProvider)
           .checkPendingHint()
-          .whenComplete(() => _handlePendingCallAction());
+          .whenComplete(() {
+        _lastIncomingActivityAt = DateTime.now();
+        _handlePendingCallAction();
+      });
     });
     _authSubscription = ref.listenManual<AsyncValue<AuthState>>(
       authNotifierProvider,
@@ -126,11 +132,20 @@ class _AuthGateState extends ConsumerState<_AuthGate>
           _deferredCallId = null;
         }
       }
+      _batteryPromptScheduled = false;
+      _batteryPromptInFlight = false;
+      _lastIncomingActivityAt = DateTime.now();
       ref
           .read(incomingWakeCoordinatorProvider)
           .checkPendingHint()
-          .whenComplete(() => _handlePendingCallAction());
+          .whenComplete(() {
+            _lastIncomingActivityAt = DateTime.now();
+            _handlePendingCallAction();
+          });
       unawaited(_maybeAskBatteryOptimizations());
+    } else {
+      _batteryPromptScheduled = false;
+      _lastIncomingActivityAt = null;
     }
   }
 
@@ -139,10 +154,19 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     final status =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     if (status != AuthStatus.authenticated) return;
+    if (_batteryPromptInFlight || _batteryPromptScheduled) return;
     final promptShown =
         await BatteryOptimizationPromptStorage.readPromptShown();
     if (promptShown) {
       debugPrint('[CALLS] battery optimization prompt already shown, skipping');
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastIncomingActivityAt != null &&
+        now.difference(_lastIncomingActivityAt!) < const Duration(seconds: 10)) {
+      debugPrint(
+        '[CALLS] battery prompt suppressed: recent incoming activity',
+      );
       return;
     }
     final callState = ref.read(callControllerProvider);
@@ -157,7 +181,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       return;
     }
     if (!mounted || !_isResumed) return;
-    if (_batteryPromptInFlight) return;
+    _batteryPromptScheduled = true;
     _batteryPromptInFlight = true;
     try {
       final batteryDisabled = await ref
@@ -198,6 +222,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   }
 
   Future<void> _handlePendingCallAction() async {
+    _lastIncomingActivityAt = DateTime.now();
     final rawAction = await IncomingNotificationService.readCallAction();
     if (rawAction == null) return;
     final callId =
