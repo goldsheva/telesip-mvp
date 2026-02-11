@@ -1274,12 +1274,10 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    if (!_lastKnownOnline || authStatus != AuthStatus.authenticated) {
+    if (!_shouldStartHealthWatchdogNow(authStatus)) {
       _stopHealthWatchdog();
       return;
     }
-    if (_healthWatchdog.isRunning) return;
-    if (_isSipHealthyNow()) return;
     _healthStartedAt = DateTime.now();
     _healthWatchdog.start();
   }
@@ -1308,6 +1306,15 @@ class CallNotifier extends Notifier<CallState> {
     if (now.difference(activityAt) > _sipHealthTimeout) {
       _scheduleReconnect('health-timeout');
     }
+  }
+
+  bool _shouldStartHealthWatchdogNow(AuthStatus authStatus) {
+    if (!_lastKnownOnline || authStatus != AuthStatus.authenticated) {
+      return false;
+    }
+    if (_healthWatchdog.isRunning) return false;
+    if (_isSipHealthyNow()) return false;
+    return true;
   }
 
   void _scheduleReconnect(String reason) {
