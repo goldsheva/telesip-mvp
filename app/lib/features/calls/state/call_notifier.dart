@@ -1120,13 +1120,7 @@ class CallNotifier extends Notifier<CallState> {
           activeCallId: callId,
         );
         _clearError();
-        final resetState = nextState.copyWith(
-          isMuted: false,
-          audioRoute: AudioRoute.systemDefault,
-        );
-        _commit(resetState, syncFgs: false);
-        unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
-        unawaited(_refreshAudioRoute());
+        _commit(nextState, syncFgs: false);
         _pendingCallId = callId;
         pendingId = callId;
         _phase = _CallPhase.ringing;
