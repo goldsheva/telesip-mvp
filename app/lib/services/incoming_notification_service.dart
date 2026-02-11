@@ -15,6 +15,7 @@ class IncomingNotificationService {
     String? callUuid,
     bool isRinging = true,
   }) async {
+    await _logAndroidNotificationState('showIncoming');
     try {
       final args = <String, dynamic>{'callId': callId, 'from': from};
       if (displayName != null) {
@@ -40,6 +41,7 @@ class IncomingNotificationService {
     String? callUuid,
     required bool isRinging,
   }) async {
+    await _logAndroidNotificationState('updateIncomingState');
     try {
       final args = <String, dynamic>{
         'callId': callId,
@@ -68,6 +70,7 @@ class IncomingNotificationService {
     required String callId,
     String? callUuid,
   }) async {
+    await _logAndroidNotificationState('cancelIncoming');
     try {
       final args = <String, dynamic>{'callId': callId};
       if (callUuid != null) {
@@ -118,5 +121,27 @@ class IncomingNotificationService {
     } catch (error) {
       debugPrint('[CALLS_NOTIF] setEngineAlive failed: $error');
     }
+  }
+
+  static Future<Map<String, dynamic>?> getNotificationDebugState() async {
+    try {
+      return await _channel.invokeMapMethod<String, dynamic>(
+        'getNotificationDebugState',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _logAndroidNotificationState(String method) async {
+    if (!kDebugMode) return;
+    final state = await getNotificationDebugState();
+    if (state == null) return;
+    debugPrint(
+      '[CALLS_NOTIF] androidState $method enabled=${state['notificationsEnabled']} '
+      'postPerm=${state['hasPostNotificationsPermission']} channelExists=${state['channelExists']} '
+      'channelEnabled=${state['channelEnabled']} importance=${state['channelImportance']} '
+      'keyguardLocked=${state['keyguardLocked']}',
+    );
   }
 }
