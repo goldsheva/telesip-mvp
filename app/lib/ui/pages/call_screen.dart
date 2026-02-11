@@ -14,6 +14,17 @@ class CallScreen extends ConsumerStatefulWidget {
 }
 
 class _CallScreenState extends ConsumerState<CallScreen> {
+  bool _exiting = false;
+
+  void _scheduleExit() {
+    if (_exiting) return;
+    _exiting = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).maybePop();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(callControllerProvider);
@@ -26,22 +37,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final earpieceAvailable = availableRoutes.contains(AudioRoute.earpiece);
     final activeCallId = state.activeCallId;
     if (call == null || call.status == CallStatus.ended) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).maybePop();
-        }
-      });
+      _scheduleExit();
       return const Scaffold(body: SizedBox.shrink());
     }
     if (activeCallId != null &&
         activeCallId != widget.callId &&
         call.status != CallStatus.ringing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).maybePop();
-        }
-      });
-      return const Scaffold(body: SizedBox.shrink());
+        _scheduleExit();
+        return const Scaffold(body: SizedBox.shrink());
     }
 
     final notifier = ref.read(callControllerProvider.notifier);
