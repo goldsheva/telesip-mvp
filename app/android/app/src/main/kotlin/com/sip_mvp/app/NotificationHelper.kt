@@ -15,7 +15,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.app.Person
-import com.sip_mvp.app.BuildConfig
 
 object NotificationHelper {
   private const val CHANNEL_ID = "calls"
@@ -50,9 +49,7 @@ object NotificationHelper {
   ) {
     ensureChannel(context, notificationManager)
     if (isSuppressed(callId, callUuid)) {
-      if (BuildConfig.DEBUG) {
-        Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
-      }
+      Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
       return
     }
     val meta = prepareIncomingNotification(
@@ -64,12 +61,10 @@ object NotificationHelper {
       attachFullScreen = true,
     )
     val notification = buildNotification(meta, isRinging)
-    if (BuildConfig.DEBUG) {
-      Log.d(
-        "NotificationHelper",
-        "notify baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${meta.usedCallStyle}",
-      )
-    }
+    Log.d(
+      "NotificationHelper",
+      "notify baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${meta.usedCallStyle}",
+    )
     notificationManager.notify(meta.baseId, notification)
   }
 
@@ -92,12 +87,10 @@ object NotificationHelper {
       attachFullScreen = false,
     )
     val notification = buildNotification(meta, isRinging)
-    if (BuildConfig.DEBUG) {
-      Log.d(
-        "NotificationHelper",
-        "update baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging api=${Build.VERSION.SDK_INT}",
-      )
-    }
+    Log.d(
+      "NotificationHelper",
+      "update baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging api=${Build.VERSION.SDK_INT}",
+    )
     notificationManager.notify(meta.baseId, notification)
   }
 
@@ -284,7 +277,7 @@ object NotificationHelper {
         }
       }
     }
-    if (BuildConfig.DEBUG && addedKeys.isNotEmpty()) {
+    if (addedKeys.isNotEmpty()) {
       Log.d(
         "NotificationHelper",
         "markSuppressed keys=$addedKeys deltaMs=${expiry - now}",

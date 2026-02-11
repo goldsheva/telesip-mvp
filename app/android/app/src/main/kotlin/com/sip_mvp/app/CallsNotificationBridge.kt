@@ -6,7 +6,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
-import com.sip_mvp.app.BuildConfig
 
 class CallsNotificationBridge(
     private val context: Context,
@@ -104,10 +103,6 @@ class CallsNotificationBridge(
           result.success(null)
         }
         "getNotificationDebugState" -> {
-          if (!BuildConfig.DEBUG) {
-            result.error("not_available", "debug only", null)
-            return@setMethodCallHandler
-          }
           result.success(
             NotificationHelper.getNotificationDebugState(context, notificationManager)
           )
