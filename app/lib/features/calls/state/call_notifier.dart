@@ -34,6 +34,7 @@ import 'call_connectivity_listener.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
+import 'call_auth_listener.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -83,7 +84,6 @@ class CallNotifier extends Notifier<CallState> {
   DateTime? _healthStartedAt;
   DateTime? _bootstrapCompletedAt;
   bool _reconnectInFlight = false;
-  late final CallHealthWatchdog _healthWatchdog;
   bool _isRegistered = false;
   AuthStatus? _lastAuthStatus;
   bool _authListenerActive = false;
@@ -123,6 +123,10 @@ class CallNotifier extends Notifier<CallState> {
   late final CallIncomingHintHandler _incomingHintHandler;
   late final CallConnectivityListener _connectivityListener;
   late final CallReconnectScheduler _reconnectScheduler;
+  late final CallHealthWatchdog _healthWatchdog;
+  late final CallAuthListener _authListener = CallAuthListener(
+    isDisposed: () => _disposed,
+  );
   bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
@@ -948,7 +952,7 @@ class CallNotifier extends Notifier<CallState> {
     _lastAuthStatus ??= initialStatus;
     if (!_authListenerActive) {
       _authListenerActive = true;
-      ref.listen<AsyncValue<AuthState>>(authNotifierProvider, (previous, next) {
+      _authListener.start(ref, (previous, next) {
         final currentStatus = next.value?.status ?? AuthStatus.unknown;
         final previousStatus = _lastAuthStatus ?? AuthStatus.unknown;
         if (currentStatus == previousStatus) return;
@@ -1036,6 +1040,7 @@ class CallNotifier extends Notifier<CallState> {
       _connectivityListener.dispose();
       _reconnectScheduler.cancel();
       _healthWatchdog.stop();
+      _authListener.dispose();
       _cancelDialTimeout();
       _cancelRegistrationErrorTimer();
       _cancelFailureTimer();
