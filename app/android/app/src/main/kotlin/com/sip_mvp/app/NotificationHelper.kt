@@ -52,7 +52,14 @@ object NotificationHelper {
       }
       return
     }
-    val meta = prepareIncomingNotification(context, callId, from, displayName, callUuid)
+    val meta = prepareIncomingNotification(
+      context,
+      callId,
+      from,
+      displayName,
+      callUuid,
+      attachFullScreen = true,
+    )
     val notification = buildNotification(meta, isRinging)
     if (BuildConfig.DEBUG) {
       Log.d(
@@ -73,7 +80,14 @@ object NotificationHelper {
     isRinging: Boolean
   ) {
     ensureChannel(context, notificationManager)
-    val meta = prepareIncomingNotification(context, callId, from, displayName, callUuid)
+    val meta = prepareIncomingNotification(
+      context,
+      callId,
+      from,
+      displayName,
+      callUuid,
+      attachFullScreen = false,
+    )
     val notification = buildNotification(meta, isRinging)
     if (BuildConfig.DEBUG) {
       Log.d(
@@ -100,7 +114,8 @@ object NotificationHelper {
     callId: String,
     from: String,
     displayName: String?,
-    callUuid: String?
+    callUuid: String?,
+    attachFullScreen: Boolean,
   ): IncomingNotificationMeta {
     val effectiveCallUuid = callUuid ?: callId
     val baseId = getNotificationId(callId)
@@ -163,7 +178,7 @@ object NotificationHelper {
       .setWhen(System.currentTimeMillis())
       .setShowWhen(false)
       .apply {
-        if (keyguardLocked) {
+        if (attachFullScreen && keyguardLocked) {
           setFullScreenIntent(fullScreenIntent, true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
