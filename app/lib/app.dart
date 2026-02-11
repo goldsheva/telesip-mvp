@@ -1,11 +1,16 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/app_theme.dart';
+import 'package:app/core/storage/battery_optimization_prompt_storage.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 import 'package:app/features/calls/incoming/incoming_wake_coordinator.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
+import 'package:app/platform/system_settings.dart';
 import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/firebase_messaging_service.dart';
 import 'package:app/services/incoming_notification_service.dart';
@@ -41,6 +46,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   String? _scheduledCallId;
   String? _deferredCallId;
   late bool _isResumed;
+  bool _batteryPromptInFlight = false;
 
   @override
   void initState() {
@@ -76,6 +82,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       FirebaseMessagingService.requestPermission();
     } else if (!authenticated) {
       _requestedFcmPermission = false;
+    }
+    if (authenticated) {
+      unawaited(_maybeAskBatteryOptimizations());
     }
   }
 
@@ -121,6 +130,54 @@ class _AuthGateState extends ConsumerState<_AuthGate>
           .read(incomingWakeCoordinatorProvider)
           .checkPendingHint()
           .whenComplete(() => _handlePendingCallAction());
+      unawaited(_maybeAskBatteryOptimizations());
+    }
+  }
+
+  Future<void> _maybeAskBatteryOptimizations() async {
+    if (!Platform.isAndroid) return;
+    final status =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    if (status != AuthStatus.authenticated) return;
+    final promptShown =
+        await BatteryOptimizationPromptStorage.readPromptShown();
+    if (promptShown) return;
+    if (!mounted || !_isResumed) return;
+    if (_batteryPromptInFlight) return;
+    _batteryPromptInFlight = true;
+    try {
+      final batteryDisabled =
+          await ref.read(callControllerProvider.notifier).isBatteryOptimizationDisabled();
+      if (batteryDisabled) {
+        await BatteryOptimizationPromptStorage.markPromptShown();
+        return;
+      }
+      if (!mounted || !_isResumed) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Allow background calling'),
+          content: const Text(
+            'Disable battery optimizations so incoming calls stay reliable even when the screen is off.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                SystemSettings.openIgnoreBatteryOptimizations();
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('Open settings'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Not now'),
+            ),
+          ],
+        ),
+      );
+      await BatteryOptimizationPromptStorage.markPromptShown();
+    } finally {
+      _batteryPromptInFlight = false;
     }
   }
 
