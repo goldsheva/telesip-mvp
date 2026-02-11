@@ -1520,12 +1520,25 @@ class CallNotifier extends Notifier<CallState> {
     try {
       final info = await AudioRouteService.getRouteInfo();
       if (info == null) return;
-      final availableRoutes = Set<AudioRoute>.from(info.available);
+      final availableRoutes = Set<AudioRoute>.from(info.available)
+        ..add(AudioRoute.systemDefault);
+      AudioRoute desiredRoute = info.current;
+      if (!availableRoutes.contains(desiredRoute)) {
+        if (availableRoutes.contains(AudioRoute.bluetooth)) {
+          desiredRoute = AudioRoute.bluetooth;
+        } else if (availableRoutes.contains(AudioRoute.earpiece)) {
+          desiredRoute = AudioRoute.earpiece;
+        } else if (availableRoutes.contains(AudioRoute.speaker)) {
+          desiredRoute = AudioRoute.speaker;
+        } else {
+          desiredRoute = AudioRoute.systemDefault;
+        }
+      }
       final availableChanged = !setEquals(availableRoutes, state.availableAudioRoutes);
-      if (info.current != state.audioRoute || availableChanged) {
+      if (desiredRoute != state.audioRoute || availableChanged) {
         _commit(
           state.copyWith(
-            audioRoute: info.current,
+            audioRoute: desiredRoute,
             availableAudioRoutes: availableRoutes,
           ),
           syncFgs: false,
