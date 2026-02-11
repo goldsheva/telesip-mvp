@@ -1463,7 +1463,7 @@ class CallNotifier extends Notifier<CallState> {
 
     var activeCallId = previousState.activeCallId;
     if (status == CallStatus.ended) {
-      await _endCallAndCleanup(callId, reason: _describe(event));
+      await _endCallAndCleanup(callId, reason: _endReasonForEvent(event.type));
       final postCleanupState = state;
       final callCleared = postCleanupState.activeCallId == null;
       final endedPreviousActive = callId == previousState.activeCallId;
@@ -1682,6 +1682,13 @@ class CallNotifier extends Notifier<CallState> {
   String _describe(SipEvent event) {
     final payload = event.message != null ? ' (${event.message})' : '';
     return '${event.type.name.toUpperCase()}$payload';
+  }
+
+  String _endReasonForEvent(SipEventType type) {
+    if (type == SipEventType.error) {
+      return 'sip-error';
+    }
+    return 'sip-ended';
   }
 
   void _setError(String message) {
