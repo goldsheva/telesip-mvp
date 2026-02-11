@@ -23,12 +23,13 @@ class CallActionReceiver : BroadcastReceiver() {
     }
     val notificationManager =
       context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+    val isCallIdValid = callId.isNotBlank() && callId != "<none>"
     var cancelAttempted = false
     var cancelSucceeded = false
-    notificationManager?.let { manager ->
+    if (isCallIdValid && notificationManager != null) {
       cancelAttempted = true
       try {
-        NotificationHelper.cancel(manager, callId)
+        NotificationHelper.cancel(notificationManager, callId)
         cancelSucceeded = true
       } catch (error: Throwable) {
         Log.d("CallActionReceiver", "notification cancel failed action=$action call=$callId: $error")
@@ -47,6 +48,7 @@ class CallActionReceiver : BroadcastReceiver() {
       }
     }
     val now = System.currentTimeMillis()
+    var duplicateSuppressed = false
     val entry = JSONObject().apply {
       put("type", action)
       put("callId", callId)
@@ -55,15 +57,32 @@ class CallActionReceiver : BroadcastReceiver() {
       put("action", action)
       put("timestamp", now)
     }
-    existing.add(entry)
-    while (existing.size > 10) {
-      existing.removeAt(0)
+    val dedupWindow = 2000L
+    for (existingEntry in existing) {
+      val existingAction = existingEntry.optString("type").ifEmpty { existingEntry.optString("action") }
+      val existingCallId = existingEntry.optString("callId").ifEmpty { existingEntry.optString("call_id") }
+      if (existingAction == action && existingCallId == callId) {
+        val previousTs = existingEntry.optLong("ts", 0L)
+        if (now - previousTs <= dedupWindow) {
+          duplicateSuppressed = true
+          Log.d(
+            "CallActionReceiver",
+            "duplicate pending action suppressed action=$action call=$callId ts=$previousTs",
+          )
+          break
+        }
+      }
     }
-    val updated = JSONArray()
-    existing.forEach { updated.put(it) }
-    prefs.edit().putString("pending_call_actions", updated.toString()).apply()
+    if (!duplicateSuppressed) {
+      existing.add(entry)
+      while (existing.size > 10) {
+        existing.removeAt(0)
+      }
+      val updated = JSONArray()
+      existing.forEach { updated.put(it) }
+      prefs.edit().putString("pending_call_actions", updated.toString()).apply()
+    }
     CallActionStore.save(context, callId, action, System.currentTimeMillis())
-    NotificationHelper.cancel(context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager, callId)
     val main = Intent(context, MainActivity::class.java).apply {
       putExtra("call_id", callId)
       putExtra("action", action)
