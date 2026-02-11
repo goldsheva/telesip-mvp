@@ -1421,6 +1421,14 @@ class CallNotifier extends Notifier<CallState> {
     final previous =
         state.calls[callId] ??
         (pendingCallId != null ? state.calls[pendingCallId] : null);
+    if (previous == null &&
+        status != CallStatus.dialing &&
+        status != CallStatus.ringing) {
+      debugPrint(
+        '[CALLS] ignoring late non-dialing/ringing event=${event.type.name} sipId=$sipCallId effectiveId=$callId localId=${_sipToLocalCallId.containsKey(callId) ? _sipToLocalCallId[callId] : callId}',
+      );
+      return;
+    }
     final destination = previous?.destination ?? event.message ?? 'call';
     final logs = List<String>.from(previous?.timeline ?? [])
       ..add(_describe(event));
