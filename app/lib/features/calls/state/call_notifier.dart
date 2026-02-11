@@ -721,6 +721,13 @@ class CallNotifier extends Notifier<CallState> {
     _clearSipMappingsForLocalCall(localId);
     _callDongleMap.remove(localId);
 
+    if (nextActiveCallId != null &&
+        !updatedCalls.containsKey(nextActiveCallId)) {
+      debugPrint(
+        '[CALLS] clearing dangling activeCallId=$nextActiveCallId reason=$reason',
+      );
+      nextActiveCallId = null;
+    }
     final nextState = previousState.copyWith(
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
@@ -1495,6 +1502,14 @@ class CallNotifier extends Notifier<CallState> {
     final errorMessage = event.type == SipEventType.error
         ? event.message ?? 'SIP error'
         : null;
+    if (!updated.containsKey(activeCallId)) {
+      activeCallId = updated.containsKey(callId) ? callId : null;
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS] corrected activeCallId -> $activeCallId (post-update)',
+        );
+      }
+    }
     final baseNext = previousState.copyWith(
       calls: updated,
       activeCallId: activeCallId,
