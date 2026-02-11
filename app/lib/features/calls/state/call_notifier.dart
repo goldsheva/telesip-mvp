@@ -722,17 +722,26 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> setCallAudioRoute(AudioRoute route) async {
-    if (state.activeCall == null ||
+    final activeCall = state.activeCall;
+    if (state.activeCallId == null ||
+        activeCall == null ||
+        activeCall.status == CallStatus.ended ||
         (_phase != _CallPhase.connecting &&
             _phase != _CallPhase.active &&
             _phase != _CallPhase.ringing)) {
       debugPrint(
-        '[CALLS] ignoring audio route change without an active call (phase=$_phase)',
+        '[CALLS] setCallAudioRoute ignored: no active call (phase=$_phase route=$route)',
       );
       return;
     }
     final available = state.availableAudioRoutes;
     final clampedRoute = _clampToAvailableRoute(route, available);
+    if (!available.contains(route) && clampedRoute == state.audioRoute) {
+      debugPrint(
+        '[CALLS] setCallAudioRoute noop: requested=$route not available, staying on ${state.audioRoute}',
+      );
+      return;
+    }
     if (clampedRoute != route) {
       debugPrint(
         '[CALLS] clamp audio route requested=$route -> $clampedRoute available=$available',
@@ -1572,6 +1581,9 @@ class CallNotifier extends Notifier<CallState> {
         } else {
           desiredRoute = AudioRoute.systemDefault;
         }
+        debugPrint(
+          '[CALLS] refreshAudioRoute fallback: nativeCurrentMissing native=${info.current} -> desired=$desiredRoute',
+        );
       }
       final availableChanged = !setEquals(availableRoutes, state.availableAudioRoutes);
       final shouldLog = desiredRoute != state.audioRoute || availableChanged;
