@@ -556,6 +556,16 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> handleIncomingCallCancelled(String callId) async {
     await IncomingNotificationService.cancelIncoming(callId: callId);
+    try {
+      final pendingAction = await IncomingNotificationService.readCallAction();
+      final actionCallId = pendingAction?['call_id']?.toString() ??
+          pendingAction?['callId']?.toString();
+      if (actionCallId == callId) {
+        await IncomingNotificationService.clearCallAction();
+      }
+    } catch (_) {
+      // best-effort
+    }
     final pending = await FcmStorage.readPendingIncomingHint();
     final payload = pending?['payload'] as Map<String, dynamic>?;
     final pendingCallId = payload?['call_id']?.toString();
