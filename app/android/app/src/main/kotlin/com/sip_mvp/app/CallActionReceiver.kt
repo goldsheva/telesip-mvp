@@ -1,8 +1,10 @@
 package com.sip_mvp.app
 
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -19,6 +21,23 @@ class CallActionReceiver : BroadcastReceiver() {
       ACTION_DECLINE -> "decline"
       else -> return
     }
+    val notificationManager =
+      context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+    var cancelAttempted = false
+    var cancelSucceeded = false
+    notificationManager?.let { manager ->
+      cancelAttempted = true
+      try {
+        NotificationHelper.cancel(manager, callId)
+        cancelSucceeded = true
+      } catch (error: Throwable) {
+        Log.d("CallActionReceiver", "notification cancel failed action=$action call=$callId: $error")
+      }
+    }
+    Log.d(
+      "CallActionReceiver",
+      "action=$action call=$callId cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded",
+    )
     val prefs = context.getSharedPreferences("pending_call_actions", Context.MODE_PRIVATE)
     val raw = prefs.getString("pending_call_actions", "[]")
     val existing = mutableListOf<JSONObject>()
