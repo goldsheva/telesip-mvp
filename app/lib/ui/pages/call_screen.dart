@@ -28,23 +28,23 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(callControllerProvider);
-    final call = state.calls[widget.callId];
+    final effectiveCallId = state.activeCallId ?? widget.callId;
+    final call = state.calls[effectiveCallId];
     final isMuted = state.isMuted;
     final isSpeakerOn = state.audioRoute == AudioRoute.speaker;
     final availableRoutes = state.availableAudioRoutes;
     final speakerAvailable = availableRoutes.contains(AudioRoute.speaker);
     final bluetoothAvailable = availableRoutes.contains(AudioRoute.bluetooth);
     final earpieceAvailable = availableRoutes.contains(AudioRoute.earpiece);
-    final activeCallId = state.activeCallId;
-    if (call == null || call.status == CallStatus.ended) {
-      _scheduleExit();
-      return const SizedBox.shrink();
-    }
-    if (activeCallId != null &&
-        activeCallId != widget.callId &&
-        call.status != CallStatus.ringing) {
-      _scheduleExit();
-      return const SizedBox.shrink();
+    if (state.activeCallId == null) {
+      if (call == null || call.status == CallStatus.ended) {
+        _scheduleExit();
+        return const SizedBox.shrink();
+      }
+    } else {
+      if (call == null || call.status == CallStatus.ended) {
+        return const SizedBox.shrink();
+      }
     }
 
     final notifier = ref.read(callControllerProvider.notifier);
@@ -104,7 +104,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => notifier.decline(call.id),
+                        onPressed: () => notifier.decline(effectiveCallId),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Colors.redAccent),
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -118,7 +118,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () => notifier.answer(call.id),
+                        onPressed: () => notifier.answer(effectiveCallId),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
@@ -180,10 +180,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _Keypad(onKey: (key) => notifier.sendDtmf(call.id, key)),
+                _Keypad(
+                  onKey: (key) => notifier.sendDtmf(effectiveCallId, key),
+                ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () => notifier.hangup(call.id),
+                  onPressed: () => notifier.hangup(effectiveCallId),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
                     padding: const EdgeInsets.symmetric(vertical: 16),
