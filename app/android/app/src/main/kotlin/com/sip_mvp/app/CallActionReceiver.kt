@@ -24,25 +24,28 @@ class CallActionReceiver : BroadcastReceiver() {
     val notificationManager =
       context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
     val callUuid = intent.getStringExtra("call_uuid")
+    val validCallId = callId.takeIf { it.isNotBlank() && it != "<none>" }
+    val validCallUuid = callUuid?.takeIf { it.isNotBlank() && it != "<none>" }
     val idsToCancel = buildSet<String> {
-      if (callId.isNotBlank() && callId != "<none>") add(callId)
-      val uuid = callUuid?.takeIf { it.isNotBlank() && it != "<none>" }
-      if (uuid != null) add(uuid)
+      validCallId?.let { add(it) }
+      validCallUuid?.let { add(it) }
     }
-    var cancelAttempted = false
-    var cancelSucceeded = false
-    if (idsToCancel.isNotEmpty() && notificationManager != null) {
-      cancelAttempted = true
-      for (id in idsToCancel) {
-        try {
-          NotificationHelper.cancel(notificationManager, id)
-          cancelSucceeded = true
-        } catch (error: Throwable) {
-          Log.d("CallActionReceiver", "notification cancel failed action=$action call=$id: $error")
+    var cancelAttempted = 0
+    var cancelSucceeded = 0
+    if (idsToCancel.isNotEmpty()) {
+      if (notificationManager != null) {
+        cancelAttempted = idsToCancel.size
+        for (id in idsToCancel) {
+          try {
+            NotificationHelper.cancel(notificationManager, id)
+            cancelSucceeded += 1
+          } catch (error: Throwable) {
+            Log.d("CallActionReceiver", "notification cancel failed action=$action call=$id: $error")
+          }
         }
       }
+      NotificationHelper.markSuppressed(idsToCancel)
     }
-    NotificationHelper.markSuppressed(callId, callUuid)
     val prefs = context.getSharedPreferences("pending_call_actions", Context.MODE_PRIVATE)
     val raw = prefs.getString("pending_call_actions", "[]")
     val existing = mutableListOf<JSONObject>()
@@ -91,9 +94,11 @@ class CallActionReceiver : BroadcastReceiver() {
     }
     Log.d(
       "CallActionReceiver",
-      "action=$action call_id=$callId call_uuid=$callUuid cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
+      "action=$action ids=$idsToCancel hasManager=${notificationManager != null} "
+        + "cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
     )
-    CallActionStore.save(context, callId, action, System.currentTimeMillis())
+    val primaryId = validCallId ?: validCallUuid ?: "<none>"
+    CallActionStore.save(context, primaryId, action, System.currentTimeMillis())
     Log.d(
       "CallActionReceiver",
       "action_enqueued action=$action call_id=$callId call_uuid=$callUuid duplicateSuppressed=$duplicateSuppressed",

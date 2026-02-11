@@ -271,17 +271,17 @@ object NotificationHelper {
     return callId.hashCode() and 0x7fffffff
   }
 
-  fun markSuppressed(callId: String, callUuid: String?) {
+  fun markSuppressed(keys: Collection<String>) {
     val now = SystemClock.uptimeMillis()
     val expiry = now + SUPPRESSION_TTL_MS
     val addedKeys = mutableListOf<String>()
     synchronized(suppressionExpiry) {
       cleanupSuppression()
-      if (addSuppression(callId, expiry)) {
-        addedKeys.add(callId)
-      }
-      if (!callUuid.isNullOrBlank() && addSuppression(callUuid, expiry)) {
-        addedKeys.add(callUuid)
+      for (key in keys) {
+        if (key.isBlank() || key == "<none>") continue
+        if (addSuppression(key, expiry)) {
+          addedKeys.add(key)
+        }
       }
     }
     if (BuildConfig.DEBUG && addedKeys.isNotEmpty()) {
