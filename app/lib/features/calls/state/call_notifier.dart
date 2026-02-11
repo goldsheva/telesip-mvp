@@ -674,15 +674,19 @@ class CallNotifier extends Notifier<CallState> {
       callInfo = previousState.calls[callInfoKey];
     }
     final updatedCalls = Map<String, CallInfo>.from(previousState.calls);
-    var endedInState = false;
-    if (callInfo != null && callInfo.status != CallStatus.ended) {
-      final timeline = List<String>.from(callInfo.timeline)..add(reason);
-      updatedCalls[callInfoKey] = callInfo.copyWith(
-        status: CallStatus.ended,
-        endedAt: now,
-        timeline: timeline,
-      );
-      endedInState = true;
+    final endedInState =
+        callInfo != null && callInfo.status != CallStatus.ended;
+    final removedKeys = <String>[];
+    if (updatedCalls.containsKey(callInfoKey)) {
+      updatedCalls.remove(callInfoKey);
+      removedKeys.add(callInfoKey);
+    }
+    final secondaryKey = callIdIsSip ? localId : pairedSipId;
+    if (secondaryKey != null && secondaryKey != callInfoKey) {
+      if (updatedCalls.containsKey(secondaryKey)) {
+        updatedCalls.remove(secondaryKey);
+        removedKeys.add(secondaryKey);
+      }
     }
 
     final activeWas = previousState.activeCallId;
@@ -710,6 +714,11 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId: nextActiveCallId,
     );
     _commit(nextState);
+    if (removedKeys.isNotEmpty) {
+      debugPrint(
+        '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
+      );
+    }
     debugPrint(
       '[CALLS] endCall reason=$reason callId=$callId localId=$localId '
       'activeWas=$activeWas endedKey=$callInfoKey endedInState=$endedInState '
