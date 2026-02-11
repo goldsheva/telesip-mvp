@@ -582,6 +582,27 @@ class CallNotifier extends Notifier<CallState> {
     final now = DateTime.now();
     final callIdIsSip = _sipToLocalCallId.containsKey(callId);
     final localId = callIdIsSip ? _sipToLocalCallId[callId]! : callId;
+    final previousState = state;
+    final activeMatches =
+        previousState.activeCallId != null &&
+        (previousState.activeCallId == callId ||
+            previousState.activeCallId == localId);
+    final pendingMatches =
+        (_pendingCallId != null &&
+            (_pendingCallId == callId || _pendingCallId == localId)) ||
+        (_pendingLocalCallId != null && _pendingLocalCallId == localId);
+    final hasCallInfo =
+        previousState.calls.containsKey(callId) ||
+        (localId != callId && previousState.calls.containsKey(localId));
+    final relevant =
+        reason == 'cancelled' || activeMatches || pendingMatches || hasCallInfo;
+    if (!relevant) {
+      debugPrint(
+        '[CALLS] endCall reason=$reason callId=$callId localId=$localId relevant=false skipping cleanup',
+      );
+      return;
+    }
+
     String? pairedSipId;
     if (!callIdIsSip) {
       for (final entry in _sipToLocalCallId.entries) {
@@ -591,6 +612,7 @@ class CallNotifier extends Notifier<CallState> {
         }
       }
     }
+
     bool matchesCallId(String? candidate) =>
         candidate != null && (candidate == callId || candidate == localId);
     var clearedHint = false;
@@ -606,7 +628,8 @@ class CallNotifier extends Notifier<CallState> {
 
     if (clearPendingAction) {
       try {
-        final pendingAction = await IncomingNotificationService.readCallAction();
+        final pendingAction =
+            await IncomingNotificationService.readCallAction();
         final actionCallId =
             pendingAction?['call_id']?.toString() ??
             pendingAction?['callId']?.toString();
@@ -642,7 +665,6 @@ class CallNotifier extends Notifier<CallState> {
       _recentlyEnded[pairedSipId] = now;
     }
 
-    final previousState = state;
     var callInfoKey = callId;
     var callInfo = previousState.calls[callInfoKey];
     if (callInfo == null && localId != callId) {
@@ -689,7 +711,8 @@ class CallNotifier extends Notifier<CallState> {
     debugPrint(
       '[CALLS] endCall reason=$reason callId=$callId localId=$localId '
       'activeWas=$activeWas endedKey=$callInfoKey endedInState=$endedInState '
-      'clearedActive=$clearedActive clearedHint=$clearedHint clearedAction=$clearedAction',
+      'clearedActive=$clearedActive clearedHint=$clearedHint clearedAction=$clearedAction '
+      'relevant=true',
     );
   }
 
@@ -976,7 +999,7 @@ class CallNotifier extends Notifier<CallState> {
     unawaited(_ensureStoredIncomingCredentialsLoaded());
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
-      (previous, next) => next.whenData(_onEvent),
+      (previous, next) => next.whenData((event) => unawaited(_onEvent(event))),
     );
     ref.listen<AsyncValue<AppLifecycleState>>(
       appLifecycleProvider,
@@ -1078,7 +1101,7 @@ class CallNotifier extends Notifier<CallState> {
     }
   }
 
-  void _onEvent(SipEvent event) {
+  Future<void> _onEvent(SipEvent event) async {
     if (event.type == SipEventType.registration) {
       final registrationState = event.registrationState;
       if (registrationState != null) {
@@ -1122,6 +1145,7 @@ class CallNotifier extends Notifier<CallState> {
     var pendingId = _pendingCallId;
     var activeCall = state.activeCall;
     var hasActive = activeCall != null && activeCall.status != CallStatus.ended;
+    final previousState = state;
     final activeLabel = activeId ?? '<none>';
     debugPrint(
       '[SIP] event=${event.type.name} sipId=$sipCallId effectiveId=$effectiveId active=$activeLabel',
@@ -1297,46 +1321,42 @@ class CallNotifier extends Notifier<CallState> {
       _callDongleMap.remove(pendingCallId);
     }
 
-    var activeCallId = state.activeCallId;
+    var activeCallId = previousState.activeCallId;
     if (status == CallStatus.ended) {
-      _recentlyEnded[callId] = now;
-      if (pendingCallId != null && pendingCallId != callId) {
-        _recentlyEnded[pendingCallId] = now;
+      await _endCallAndCleanup(callId, reason: _describe(event));
+      final postCleanupState = state;
+      final callCleared = postCleanupState.activeCallId == null;
+      final endedPreviousActive = callId == previousState.activeCallId;
+      final shouldResetAudio = callCleared || endedPreviousActive;
+      _applyPhase(status, callId);
+      _handleWatchdogActivation(previousState, postCleanupState);
+      if (shouldResetAudio) {
+        unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
       }
-      if (activeCallId == callId || activeCallId == pendingCallId) {
-        activeCallId = null;
-      }
+      Future.microtask(() {
+        unawaited(handleIncomingCallHintIfAny());
+      });
+      return;
+    }
+
+    _busyUntil = null;
+    if (status != CallStatus.dialing) {
       _cancelDialTimeout();
+    }
+    activeCallId = callId;
+    if (_dialTimeoutCallId != null) {
+      _dialTimeoutCallId = callId;
+    }
+    if (pendingCallId != null && pendingCallId != callId) {
+      _clearSipMappingsForLocalCall(pendingCallId);
       _pendingCallId = null;
       _pendingLocalCallId = null;
-      _clearSipMappingsForLocalCall(callId);
-      _callDongleMap.remove(callId);
-      if (pendingCallId != null) {
-        _clearSipMappingsForLocalCall(pendingCallId);
-        _callDongleMap.remove(pendingCallId);
-      }
-      _busyUntil = now.add(_busyGrace);
-    } else {
-      _busyUntil = null;
-      if (status != CallStatus.dialing) {
-        _cancelDialTimeout();
-      }
-      activeCallId = callId;
-      if (_dialTimeoutCallId != null) {
-        _dialTimeoutCallId = callId;
-      }
-      if (pendingCallId != null && pendingCallId != callId) {
-        _clearSipMappingsForLocalCall(pendingCallId);
-        _pendingCallId = null;
-        _pendingLocalCallId = null;
-      }
     }
 
     final errorMessage = event.type == SipEventType.error
         ? event.message ?? 'SIP error'
         : null;
-    final previousState = state;
-    final baseNext = state.copyWith(
+    final baseNext = previousState.copyWith(
       calls: updated,
       activeCallId: activeCallId,
       errorMessage: errorMessage,
@@ -1363,11 +1383,6 @@ class CallNotifier extends Notifier<CallState> {
         status == CallStatus.ringing ||
         status == CallStatus.dialing) {
       unawaited(_refreshAudioRoute());
-    }
-    if (status == CallStatus.ended) {
-      Future.microtask(() {
-        unawaited(handleIncomingCallHintIfAny());
-      });
     }
   }
 
