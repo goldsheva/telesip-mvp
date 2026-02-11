@@ -187,6 +187,8 @@ class CallNotifier extends Notifier<CallState> {
   int _reconnectBackoffIndex = 0;
   Timer? _healthCheckTimer;
   bool _isRegistered = false;
+  AuthStatus? _lastAuthStatus;
+  bool _authListenerActive = false;
   String? _lastErrorMessage;
   DateTime? _lastErrorTimestamp;
   SipRegistrationState _lastRegistrationState = SipRegistrationState.none;
@@ -1352,6 +1354,27 @@ class CallNotifier extends Notifier<CallState> {
   CallState build() {
     _registerGlobalCallNotifierInstance(this);
     _engine = ref.read(sipEngineProvider);
+    final initialStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    _lastAuthStatus ??= initialStatus;
+    if (!_authListenerActive) {
+      _authListenerActive = true;
+      ref.listen<AsyncValue<AuthState>>(authNotifierProvider, (previous, next) {
+        final currentStatus = next.value?.status ?? AuthStatus.unknown;
+        final previousStatus = _lastAuthStatus ?? AuthStatus.unknown;
+        if (currentStatus == previousStatus) return;
+        _lastAuthStatus = currentStatus;
+        if (currentStatus == AuthStatus.authenticated &&
+            previousStatus != AuthStatus.authenticated) {
+          debugPrint(
+            '[CALLS_CONN] auth authenticated -> ensureBootstrapped reason=auth-authenticated',
+          );
+          ensureBootstrapped('auth-authenticated');
+          _maybeStartHealthWatchdog();
+          debugDumpConnectivityAndSipHealth('auth-authenticated');
+        }
+      });
+    }
     if (!_connectivityListenerActive) {
       _connectivityListenerActive = true;
       _connectivitySubscription = _connectivityService.onOnlineChanged.listen(
