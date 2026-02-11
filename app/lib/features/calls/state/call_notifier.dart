@@ -31,6 +31,7 @@ import 'package:app/features/auth/state/auth_state.dart';
 import 'call_models.dart';
 import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
+import 'call_connectivity_listener.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -72,8 +73,6 @@ class CallNotifier extends Notifier<CallState> {
   bool get _alive => !_disposed;
   final NetworkConnectivityService _connectivityService =
       NetworkConnectivityService();
-  bool _connectivityListenerActive = false;
-  StreamSubscription<bool>? _connectivitySubscription;
   DateTime? _lastOnlineHandledAt;
   bool _lastKnownOnline = false;
   static const Duration _connectivityDebounce = Duration(seconds: 2);
@@ -122,6 +121,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _bootstrapScheduled = false;
   late final CallNotificationCleanup _notifCleanup;
   late final CallIncomingHintHandler _incomingHintHandler;
+  late final CallConnectivityListener _connectivityListener;
   bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
@@ -954,26 +954,26 @@ class CallNotifier extends Notifier<CallState> {
         }
       });
     }
-    if (!_connectivityListenerActive) {
-      _connectivityListenerActive = true;
-      _connectivitySubscription = _connectivityService.onOnlineChanged.listen(
-        _handleConnectivityChanged,
-      );
-      unawaited(
-        _connectivityService.isOnline().then((online) {
-          _lastKnownOnline = online;
-          logConnectivitySnapshot('connectivity-init');
-          if (online) {
-            debugPrint(
-              '[CALLS_CONN] net online (init) -> ensureBootstrapped reason=net-online-init',
-            );
-            ensureBootstrapped('net-online-init');
-            _maybeStartHealthWatchdog();
-          }
-          debugDumpConnectivityAndSipHealth('connectivity-init');
-        }),
-      );
-    }
+    _connectivityListener = CallConnectivityListener(
+      connectivityService: _connectivityService,
+      isDisposed: () => _disposed,
+      onOnlineChanged: _handleConnectivityChanged,
+      onInitialOnlineResolved: (online) {
+        _lastKnownOnline = online;
+        if (online) {
+          debugPrint(
+            '[CALLS_CONN] net online (init) -> ensureBootstrapped reason=net-online-init',
+          );
+          ensureBootstrapped('net-online-init');
+          _maybeStartHealthWatchdog();
+        }
+      },
+      logSnapshot: (tag) {
+        logConnectivitySnapshot(tag);
+        debugDumpConnectivityAndSipHealth(tag);
+      },
+    );
+    unawaited(_connectivityListener.start());
     Future.microtask(
       () => _maybeBootstrapFromCurrentSnapshot('build-snapshot'),
     );
@@ -1023,7 +1023,7 @@ class CallNotifier extends Notifier<CallState> {
     ref.onDispose(() {
       _disposed = true;
       _eventSubscription?.close();
-      _connectivitySubscription?.cancel();
+      _connectivityListener.dispose();
       _reconnectTimer?.cancel();
       _healthCheckTimer?.cancel();
       _cancelDialTimeout();
