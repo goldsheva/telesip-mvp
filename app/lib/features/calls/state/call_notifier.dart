@@ -166,6 +166,7 @@ const Set<AudioRoute> _defaultAvailableAudioRoutes = {AudioRoute.systemDefault};
 class CallNotifier extends Notifier<CallState> {
   late final SipEngine _engine;
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
+  Future<void> _eventChain = Future<void>.value();
   bool _isRegistered = false;
   String? _lastErrorMessage;
   DateTime? _lastErrorTimestamp;
@@ -999,7 +1000,14 @@ class CallNotifier extends Notifier<CallState> {
     unawaited(_ensureStoredIncomingCredentialsLoaded());
     _eventSubscription = ref.listen<AsyncValue<SipEvent>>(
       sipEventsProvider,
-      (previous, next) => next.whenData((event) => unawaited(_onEvent(event))),
+      (previous, next) => next.whenData((event) {
+        _eventChain = _eventChain.then((_) => _onEvent(event)).catchError(
+          (error, stack) {
+            debugPrint('[CALLS] event processing failed: $error');
+            debugPrint(stack.toString());
+          },
+        );
+      }),
     );
     ref.listen<AsyncValue<AppLifecycleState>>(
       appLifecycleProvider,
