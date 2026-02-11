@@ -35,6 +35,7 @@ import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
 import 'call_auth_listener.dart';
+import 'call_sip_health_policy.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -1312,20 +1313,22 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   bool _shouldStartHealthWatchdogNow(AuthStatus authStatus) {
-    if (!_lastKnownOnline || authStatus != AuthStatus.authenticated) {
-      return false;
-    }
-    if (_healthWatchdog.isRunning) return false;
-    if (_isSipHealthyNow()) return false;
-    return true;
+    final authenticated = authStatus == AuthStatus.authenticated;
+    return CallSipHealthPolicy.shouldStartWatchdog(
+      online: _lastKnownOnline,
+      authenticated: authenticated,
+      watchdogRunning: _healthWatchdog.isRunning,
+      sipHealthyNow: _isSipHealthyNow(),
+    );
   }
 
   bool _shouldStopHealthWatchdogNow(AuthStatus authStatus) {
-    if (!_lastKnownOnline || authStatus != AuthStatus.authenticated) {
-      return true;
-    }
-    if (_isSipHealthyNow()) return true;
-    return false;
+    final authenticated = authStatus == AuthStatus.authenticated;
+    return CallSipHealthPolicy.shouldStopWatchdog(
+      online: _lastKnownOnline,
+      authenticated: authenticated,
+      sipHealthyNow: _isSipHealthyNow(),
+    );
   }
 
   void _scheduleReconnect(String reason) {
