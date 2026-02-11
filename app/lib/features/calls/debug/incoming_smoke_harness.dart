@@ -3,59 +3,121 @@ import 'package:flutter/foundation.dart';
 import 'package:app/services/incoming_notification_service.dart';
 
 class IncomingSmokeHarness {
-  static const _sampleCallId = 'smoke_call';
-  static const _sampleCallUuid = 'smoke_uuid';
   static const _sampleFrom = '1001';
   static const _sampleDisplayName = 'Smoke Call';
 
-  static Future<void> showRinging() async {
+  static _RunIds _createIds() {
+    final suffix = DateTime.now().millisecondsSinceEpoch % 1000000;
+    return _RunIds(
+      callId: 'smoke_call_$suffix',
+      callUuid: 'smoke_uuid_$suffix',
+    );
+  }
+
+  static Future<void> showRinging({
+    String? callId,
+    String? callUuid,
+    String? from,
+    String? displayName,
+  }) async {
+    final base = _createIds();
+    final ids = _RunIds(
+      callId: callId ?? base.callId,
+      callUuid: callUuid ?? base.callUuid,
+    );
     if (kDebugMode) {
       debugPrint(
-        '[SMOKE] showRinging start callId=$_sampleCallId callUuid=$_sampleCallUuid from=$_sampleFrom display=$_sampleDisplayName',
+        '[SMOKE ${DateTime.now().toIso8601String()}] showRinging start callId=${ids.callId} '
+        'callUuid=${ids.callUuid} from=${from ?? _sampleFrom} display=${displayName ?? _sampleDisplayName}',
       );
     }
     await IncomingNotificationService.showIncoming(
-      callId: _sampleCallId,
-      from: _sampleFrom,
-      displayName: _sampleDisplayName,
-      callUuid: _sampleCallUuid,
+      callId: ids.callId,
+      from: from ?? _sampleFrom,
+      displayName: displayName ?? _sampleDisplayName,
+      callUuid: ids.callUuid,
       isRinging: true,
     );
     if (kDebugMode) {
-      debugPrint('[SMOKE] showRinging done');
+      debugPrint(
+        '[SMOKE ${DateTime.now().toIso8601String()}] showRinging done',
+      );
     }
   }
 
-  static Future<void> updateNotRinging() async {
+  static Future<void> updateNotRinging({
+    String? callId,
+    String? callUuid,
+    String? from,
+    String? displayName,
+  }) async {
+    final base = _createIds();
+    final ids = _RunIds(
+      callId: callId ?? base.callId,
+      callUuid: callUuid ?? base.callUuid,
+    );
     if (kDebugMode) {
       debugPrint(
-        '[SMOKE] updateNotRinging start callId=$_sampleCallId callUuid=$_sampleCallUuid from=$_sampleFrom display=$_sampleDisplayName',
+        '[SMOKE ${DateTime.now().toIso8601String()}] updateNotRinging start callId=${ids.callId} '
+        'callUuid=${ids.callUuid} from=${from ?? _sampleFrom} display=${displayName ?? _sampleDisplayName}',
       );
     }
     await IncomingNotificationService.updateIncomingState(
-      callId: _sampleCallId,
-      from: _sampleFrom,
-      displayName: _sampleDisplayName,
-      callUuid: _sampleCallUuid,
+      callId: ids.callId,
+      from: from ?? _sampleFrom,
+      displayName: displayName ?? _sampleDisplayName,
+      callUuid: ids.callUuid,
       isRinging: false,
     );
     if (kDebugMode) {
-      debugPrint('[SMOKE] updateNotRinging done');
+      debugPrint(
+        '[SMOKE ${DateTime.now().toIso8601String()}] updateNotRinging done',
+      );
     }
   }
 
-  static Future<void> cancel() async {
+  static Future<void> cancel({String? callId, String? callUuid}) async {
+    final base = _createIds();
+    final ids = _RunIds(
+      callId: callId ?? base.callId,
+      callUuid: callUuid ?? base.callUuid,
+    );
     if (kDebugMode) {
       debugPrint(
-        '[SMOKE] cancel start callId=$_sampleCallId callUuid=$_sampleCallUuid',
+        '[SMOKE ${DateTime.now().toIso8601String()}] cancel start callId=${ids.callId} callUuid=${ids.callUuid}',
       );
     }
     await IncomingNotificationService.cancelIncoming(
-      callId: _sampleCallId,
-      callUuid: _sampleCallUuid,
+      callId: ids.callId,
+      callUuid: ids.callUuid,
     );
     if (kDebugMode) {
-      debugPrint('[SMOKE] cancel done');
+      debugPrint('[SMOKE ${DateTime.now().toIso8601String()}] cancel done');
     }
   }
+
+  static Future<void> runSequence() async {
+    const delay = Duration(milliseconds: 400);
+    final ids = _createIds();
+    if (kDebugMode) {
+      debugPrint(
+        '[SMOKE ${DateTime.now().toIso8601String()}] sequence start callId=${ids.callId} callUuid=${ids.callUuid}',
+      );
+    }
+    await showRinging(callId: ids.callId, callUuid: ids.callUuid);
+    await Future.delayed(delay);
+    await updateNotRinging(callId: ids.callId, callUuid: ids.callUuid);
+    await Future.delayed(delay);
+    await cancel(callId: ids.callId, callUuid: ids.callUuid);
+    if (kDebugMode) {
+      debugPrint('[SMOKE ${DateTime.now().toIso8601String()}] sequence done');
+    }
+  }
+}
+
+class _RunIds {
+  _RunIds({required this.callId, required this.callUuid});
+
+  final String callId;
+  final String callUuid;
 }

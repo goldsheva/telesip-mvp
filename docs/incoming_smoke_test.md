@@ -37,3 +37,23 @@ Each step lists the device state, what UI/logs to expect, and the pass/fail cond
    - Trigger any action (Answer or Decline) from notification.
    - Logs: look for `[CALLS] drainPendingCallActions summary total=... processed=... dedupSkipped=... unknownCleared=...`.
    - Pass: Summary line present with processed>0 and unknownCleared reflecting cleanup.
+
+## Debug harness (no PBX)
+
+Use the title-long-press in debug builds to open the Incoming Smoke dialog:
+
+1. **Show ringing**
+   - Expect `[SMOKE] showRinging start ...`, `[SMOKE] showRinging done`, `[CALLS_NOTIF] showIncoming ...`, and `NotificationHelper: notify ... keyguardLocked=...`.
+   - Pass: Notification appears with expected logs and no extra wings.
+
+2. **Update not ringing**
+   - Expect `[SMOKE] updateNotRinging start ...`, `[CALLS_NOTIF] updateIncomingState ... isRinging=false`, and `NotificationHelper: update ...`.
+   - Pass: Notification persists without re-triggering full-screen; log markers show update.
+
+3. **Cancel**
+   - Expect `[SMOKE] cancel start ...`, `[CALLS_NOTIF] cancelIncoming ...`, `NotificationHelper: cancel` logs, `[SMOKE] cancel done`.
+   - Pass: Notification disappears and logs record the cancellation sequence.
+
+4. **Run sequence**
+   - Expect `[SMOKE] sequence start ...` → show→update→cancel with 400ms gaps, plus `[CALLS_NOTIF] androidState ...` for each call and `NotificationHelper` logs for each stage.
+   - Pass: Sequence completes without duplicate notifications, suppression logs indicate cleanup, and final `[SMOKE] sequence done ...` shows finish.

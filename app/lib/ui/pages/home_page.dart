@@ -291,6 +291,13 @@ class _HomePageState extends ConsumerState<HomePage> {
               },
               child: const Text('Cancel'),
             ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                IncomingSmokeHarness.runSequence();
+              },
+              child: const Text('Run sequence'),
+            ),
           ],
         ),
       ),
