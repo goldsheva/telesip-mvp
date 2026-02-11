@@ -91,11 +91,15 @@ class CallsNotificationBridge(
         }
         "cancelIncoming" -> {
           val callId = call.argument<String>("callId")
+          val callUuid = call.argument<String>("callUuid")
           if (callId == null) {
             result.error("invalid_args", "callId is required", null)
             return@setMethodCallHandler
           }
           NotificationHelper.cancel(notificationManager, callId)
+          if (callUuid?.isNotBlank() == true && callUuid != callId) {
+            NotificationHelper.cancel(notificationManager, callUuid)
+          }
           result.success(null)
         }
         "cancelAll" -> {

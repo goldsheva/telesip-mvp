@@ -812,7 +812,11 @@ class CallNotifier extends Notifier<CallState> {
     final ids = _notificationCallIds(callId);
     for (final id in ids) {
       try {
-        await IncomingNotificationService.cancelIncoming(callId: id);
+        final callUuid = id == callId ? null : id;
+        await IncomingNotificationService.cancelIncoming(
+          callId: callId,
+          callUuid: callUuid,
+        );
       } catch (_) {
         // best-effort
       }

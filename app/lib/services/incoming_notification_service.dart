@@ -58,11 +58,16 @@ class IncomingNotificationService {
     }
   }
 
-  static Future<void> cancelIncoming({required String callId}) async {
+  static Future<void> cancelIncoming({
+    required String callId,
+    String? callUuid,
+  }) async {
     try {
-      await _channel.invokeMethod('cancelIncoming', <String, dynamic>{
-        'callId': callId,
-      });
+      final args = <String, dynamic>{'callId': callId};
+      if (callUuid != null) {
+        args['callUuid'] = callUuid;
+      }
+      await _channel.invokeMethod('cancelIncoming', args);
       await clearCallAction();
     } catch (error) {
       debugPrint('[CALLS_NOTIF] cancelIncoming failed: $error');
