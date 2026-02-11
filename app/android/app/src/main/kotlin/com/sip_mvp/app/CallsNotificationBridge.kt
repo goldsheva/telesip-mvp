@@ -29,12 +29,14 @@ class CallsNotificationBridge(
             result.error("invalid_args", "callId/from are required", null)
             return@setMethodCallHandler
           }
+          val isRinging = call.argument<Boolean>("isRinging") ?: true
           NotificationHelper.showIncoming(
             context,
             notificationManager,
             callId,
             from,
-            displayName
+            displayName,
+            isRinging
           )
           result.success(null)
         }

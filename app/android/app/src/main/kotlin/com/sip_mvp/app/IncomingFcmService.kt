@@ -34,7 +34,8 @@ class IncomingFcmService : FirebaseMessagingService() {
       notificationManager,
       callId,
       from,
-      displayName
+      displayName,
+      true
     )
   }
 

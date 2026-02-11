@@ -12,12 +12,14 @@ class IncomingNotificationService {
     required String callId,
     required String from,
     String? displayName,
+    bool isRinging = true,
   }) async {
     try {
       final args = <String, dynamic>{'callId': callId, 'from': from};
       if (displayName != null) {
         args['displayName'] = displayName;
       }
+      args['isRinging'] = isRinging;
       await _channel.invokeMethod('showIncoming', args);
     } catch (error) {
       debugPrint('[CALLS_NOTIF] showIncoming failed: $error');

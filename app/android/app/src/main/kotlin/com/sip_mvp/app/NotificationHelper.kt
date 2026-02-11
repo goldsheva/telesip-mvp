@@ -36,7 +36,8 @@ object NotificationHelper {
     notificationManager: NotificationManager,
     callId: String,
     from: String,
-    displayName: String?
+    displayName: String?,
+    isRinging: Boolean
   ) {
     ensureChannel(context, notificationManager)
     val incomingIntent = Intent(context, IncomingCallActivity::class.java).apply {
@@ -117,7 +118,7 @@ object NotificationHelper {
     }
 
     val notification = builder.build()
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && isRinging) {
       notification.flags = notification.flags or Notification.FLAG_INSISTENT
     }
     notificationManager.notify(getNotificationId(callId), notification)
