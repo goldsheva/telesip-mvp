@@ -184,9 +184,11 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   Future<void> _handlePendingCallAction() async {
     final rawAction = await IncomingNotificationService.readCallAction();
     if (rawAction == null) return;
-    final callId = rawAction['call_id']?.toString();
-    final action = rawAction['action']?.toString();
-    final timestampMillis = _timestampToMillis(rawAction['timestamp']);
+    final callId = rawAction['call_id']?.toString() ?? rawAction['callId']?.toString();
+    final action = (rawAction['action'] ?? rawAction['type'])?.toString();
+    final timestampMillis = _timestampToMillis(
+      rawAction['timestamp'] ?? rawAction['ts'],
+    );
     if (callId == null || action == null || timestampMillis == null) {
       await IncomingNotificationService.clearCallAction();
       return;
