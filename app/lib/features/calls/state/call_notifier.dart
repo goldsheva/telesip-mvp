@@ -40,6 +40,7 @@ import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
 import 'call_reconnect_executor.dart';
 import 'call_sip_snapshot_builder.dart';
+import 'call_connectivity_debug_dumper.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -130,6 +131,8 @@ class CallNotifier extends Notifier<CallState> {
   late final CallReconnectScheduler _reconnectScheduler;
   late final CallHealthWatchdog _healthWatchdog;
   late final CallReconnectExecutor _reconnectExecutor;
+  final CallConnectivityDebugDumper _debugDumper =
+      const CallConnectivityDebugDumper();
   final CallReconnectService _reconnectService = const CallReconnectService();
   late final CallAuthListener _authListener = CallAuthListener(
     isDisposed: () => _disposed,
@@ -1171,8 +1174,12 @@ class CallNotifier extends Notifier<CallState> {
     if (!kDebugMode) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final lastNetAge = _netAgeString();
-    final activeStatusString = _activeCallStatusString();
+    final lastActivity = _lastNetworkActivityAt;
+    final lastNetAge = lastActivity == null
+        ? '<none>'
+        : '${DateTime.now().difference(lastActivity).inSeconds}s';
+    final activeStatus = state.activeCall?.status;
+    final activeStatusString = (activeStatus ?? '<none>').toString();
     debugPrint(
       CallConnectivitySnapshot.formatShort(
         tag: tag,
@@ -1208,44 +1215,29 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void debugDumpConnectivityAndSipHealth(String tag) {
-    if (_disposed || !kDebugMode) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final lastNetAge = _netAgeString();
-    final healthTimerActive = _healthWatchdog.isRunning;
-    final reconnectTimerActive = _reconnectScheduler.hasScheduledTimer;
-    final activeStatusString = _activeCallStatusString();
-    debugPrint(
-      CallConnectivitySnapshot.format(
-        tag: tag,
-        authStatus: authStatus.name,
-        online: _lastKnownOnline,
-        bootstrapScheduled: _bootstrapScheduled,
-        bootstrapDone: _bootstrapDone,
-        bootstrapInFlight: _bootstrapInFlight,
-        registered: _isRegistered,
-        stateRegistered: state.isRegistered,
-        lastRegistrationState: _lastRegistrationState.name,
-        lastNetAge: lastNetAge,
-        healthTimerActive: healthTimerActive,
-        reconnectTimerActive: reconnectTimerActive,
-        reconnectInFlight: _reconnectInFlight,
-        backoffIndex: _reconnectScheduler.backoffIndex,
-        activeCallId: state.activeCallId ?? '<none>',
-        activeCallStatus: activeStatusString,
-      ),
+    _debugDumper.dump(
+      disposed: _disposed,
+      kDebugModeEnabled: kDebugMode,
+      tag: tag,
+      authStatusName: authStatus.name,
+      online: _lastKnownOnline,
+      bootstrapScheduled: _bootstrapScheduled,
+      bootstrapDone: _bootstrapDone,
+      bootstrapInFlight: _bootstrapInFlight,
+      engineRegistered: _isRegistered,
+      stateRegistered: state.isRegistered,
+      lastRegistrationStateName: _lastRegistrationState.name,
+      lastNetworkActivityAt: _lastNetworkActivityAt,
+      healthTimerActive: _healthWatchdog.isRunning,
+      reconnectTimerActive: _reconnectScheduler.hasScheduledTimer,
+      reconnectInFlight: _reconnectInFlight,
+      backoffIndex: _reconnectScheduler.backoffIndex,
+      activeCallId: state.activeCallId ?? '<none>',
+      activeCallStatus: state.activeCall?.status,
+      log: debugPrint,
     );
-  }
-
-  String _activeCallStatusString() {
-    final activeStatus = state.activeCall?.status;
-    return (activeStatus ?? '<none>').toString();
-  }
-
-  String _netAgeString() {
-    final lastActivity = _lastNetworkActivityAt;
-    if (lastActivity == null) return '<none>';
-    return '${DateTime.now().difference(lastActivity).inSeconds}s';
   }
 
   void _maybeStartHealthWatchdog() {
