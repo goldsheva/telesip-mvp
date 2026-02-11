@@ -167,7 +167,6 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       return;
     }
     if (!mounted || !_isResumed) return;
-    _batteryPromptScheduled = true;
     _batteryPromptInFlight = true;
     try {
       final batteryDisabled = await ref
@@ -179,6 +178,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       }
       if (!mounted || !_isResumed) return;
       debugPrint('[CALLS] showing battery optimization prompt');
+      _batteryPromptScheduled = true;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -204,6 +204,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       await BatteryOptimizationPromptStorage.markPromptShown();
     } finally {
       _batteryPromptInFlight = false;
+      _batteryPromptScheduled = false;
     }
   }
 
