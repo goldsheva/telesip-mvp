@@ -286,10 +286,7 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> hangup(String callId) async {
     await _engine.hangup(callId);
-    await _endCallAndCleanup(
-      callId,
-      reason: 'user-hangup',
-    );
+    await _endCallAndCleanup(callId, reason: 'user-hangup');
   }
 
   Future<void> sendDtmf(String callId, String digits) async {
@@ -1623,13 +1620,15 @@ class CallNotifier extends Notifier<CallState> {
       '[INCOMING] busy rejecting callId=$callId event=${type.name} active=$activeInfo (fallback hangup)',
     );
     unawaited(_engine.hangup(callId));
-    unawaited(_endCallAndCleanup(
-      callId,
-      reason: 'busy-reject',
-      cancelNotification: true,
-      clearPendingHint: true,
-      clearPendingAction: true,
-    ));
+    unawaited(
+      _endCallAndCleanup(
+        callId,
+        reason: 'busy-reject',
+        cancelNotification: true,
+        clearPendingHint: true,
+        clearPendingAction: true,
+      ),
+    );
   }
 
   void _clearError() {
@@ -1671,10 +1670,7 @@ class CallNotifier extends Notifier<CallState> {
       }
       _setError('Call timed out, ending');
       await _engine.hangup(targetCallId);
-      await _endCallAndCleanup(
-        targetCallId,
-        reason: 'dial-timeout',
-      );
+      await _endCallAndCleanup(targetCallId, reason: 'dial-timeout');
       _cancelDialTimeout();
     });
   }
