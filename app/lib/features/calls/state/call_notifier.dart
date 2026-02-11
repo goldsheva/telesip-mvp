@@ -1309,14 +1309,19 @@ class CallNotifier extends Notifier<CallState> {
     );
   }
 
+  String _activeCallIdForLogs() => state.activeCallId ?? '<none>';
+
+  AuthStatus _currentAuthStatus() =>
+      ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+
   void _scheduleReconnect(String reason) {
     if (_disposed) return;
-    final AuthStatus authStatus =
-        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    final authStatus = _currentAuthStatus();
+    final activeCallIdForLogs = _activeCallIdForLogs();
     final decision = CallReconnectCoordinator.decideSchedule(
       reason: reason,
       authStatusName: authStatus.name,
-      activeCallId: state.activeCallId ?? '<none>',
+      activeCallId: activeCallIdForLogs,
       disposed: _disposed,
       authenticated: authStatus == AuthStatus.authenticated,
       online: _lastKnownOnline,
@@ -1358,12 +1363,12 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> _performReconnect(String reason) async {
     if (_disposed) return;
-    final AuthStatus authStatus =
-        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
+    final authStatus = _currentAuthStatus();
+    final activeCallIdForLogs = _activeCallIdForLogs();
     final performDecision = CallReconnectPerformCoordinator.decidePerform(
       reason: reason,
       authStatusName: authStatus.name,
-      activeCallId: state.activeCallId ?? '<none>',
+      activeCallId: activeCallIdForLogs,
       disposed: _disposed,
       reconnectInFlight: _reconnectInFlight,
       online: _lastKnownOnline,
