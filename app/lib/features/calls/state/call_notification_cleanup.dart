@@ -4,6 +4,7 @@ import 'package:app/core/storage/fcm_storage.dart';
 import 'package:app/services/incoming_notification_service.dart';
 
 import 'call_models.dart';
+import 'call_notification_payload.dart';
 
 class CallNotificationCleanup {
   CallNotificationCleanup({
@@ -37,11 +38,10 @@ class CallNotificationCleanup {
     }
     if (clearPendingAction) {
       try {
-        final pendingAction =
-            await IncomingNotificationService.readCallAction();
-        final actionCallId =
-            pendingAction?['call_id']?.toString() ??
-            pendingAction?['callId']?.toString();
+        final pendingAction = PendingCallAction.tryParse(
+          await IncomingNotificationService.readCallAction(),
+        );
+        final actionCallId = pendingAction?.callId;
         if (_callIdMatches(callId, actionCallId)) {
           await IncomingNotificationService.clearCallAction();
           clearedAction = true;
@@ -52,10 +52,11 @@ class CallNotificationCleanup {
     }
     if (clearPendingHint) {
       try {
-        final pending = await FcmStorage.readPendingIncomingHint();
-        final payload = pending?['payload'] as Map<String, dynamic>?;
-        final pendingCallId = payload?['call_id']?.toString();
-        final pendingCallUuid = payload?['call_uuid']?.toString();
+        final pendingHint = PendingIncomingHint.tryParse(
+          await FcmStorage.readPendingIncomingHint(),
+        );
+        final pendingCallId = pendingHint?.callId;
+        final pendingCallUuid = pendingHint?.callUuid;
         if (_callIdMatches(callId, pendingCallId) ||
             _callIdMatches(callId, pendingCallUuid)) {
           await FcmStorage.clearPendingIncomingHint();
@@ -137,26 +138,14 @@ class CallNotificationCleanup {
     String? payloadCallId;
     String? payloadCallUuid;
     try {
-      final pending = await FcmStorage.readPendingIncomingHint();
-      final payload = pending == null
-          ? null
-          : pending['payload'] as Map<String, dynamic>?;
-      if (payload == null) return;
-      final rawFrom = payload['from'];
-      if (rawFrom == null) return;
-      payloadFrom = rawFrom.toString().trim();
-      final rawDisplay = payload['display_name'];
-      if (rawDisplay != null) {
-        payloadDisplayName = rawDisplay.toString().trim();
-      }
-      final rawCallId = payload['call_id'];
-      if (rawCallId != null) {
-        payloadCallId = rawCallId.toString();
-      }
-      final rawCallUuid = payload['call_uuid'];
-      if (rawCallUuid != null) {
-        payloadCallUuid = rawCallUuid.toString();
-      }
+      final pendingHint = PendingIncomingHint.tryParse(
+        await FcmStorage.readPendingIncomingHint(),
+      );
+      if (pendingHint == null) return;
+      payloadFrom = pendingHint.from;
+      payloadDisplayName = pendingHint.displayName;
+      payloadCallId = pendingHint.callId;
+      payloadCallUuid = pendingHint.callUuid;
     } catch (_) {
       // best-effort
     }
