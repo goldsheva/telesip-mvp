@@ -36,6 +36,7 @@ import 'call_reconnect_scheduler.dart';
 import 'call_reconnect_service.dart';
 import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
+import 'call_bootstrap_service.dart';
 import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
 import 'call_reconnect_executor.dart';
@@ -134,6 +135,7 @@ class CallNotifier extends Notifier<CallState> {
   final CallConnectivityDebugDumper _debugDumper =
       const CallConnectivityDebugDumper();
   final CallReconnectService _reconnectService = const CallReconnectService();
+  final CallBootstrapService _bootstrapService = const CallBootstrapService();
   late final CallAuthListener _authListener = CallAuthListener(
     isDisposed: () => _disposed,
   );
@@ -515,19 +517,14 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<bool> _ensureIncomingReady({
     Duration timeout = const Duration(seconds: 4),
-  }) async {
-    if (_disposed) return false;
-    await handleIncomingCallHintIfAny();
-    if (_disposed) return false;
-    final deadline = DateTime.now().add(timeout);
-    while (!_incomingRegistrationReady && DateTime.now().isBefore(deadline)) {
-      if (_disposed) return false;
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (_disposed) return false;
-    }
-    if (_incomingRegistrationReady) return true;
-    debugPrint('[INCOMING] registration not ready after ${timeout.inSeconds}s');
-    return false;
+  }) {
+    return _bootstrapService.ensureIncomingReady(
+      isDisposed: () => _disposed,
+      handleIncomingCallHint: handleIncomingCallHintIfAny,
+      incomingRegistrationReady: () => _incomingRegistrationReady,
+      log: debugPrint,
+      timeout: timeout,
+    );
   }
 
   Future<bool> isBatteryOptimizationDisabled() async {
@@ -1048,39 +1045,22 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _bootstrapIfNeeded(CallState snapshot) {
-    if (_disposed) return;
-    if (kDebugMode && _bootstrapDone) {
-      debugPrint('[CALLS] bootstrapIfNeeded skip already done');
-      return;
-    }
-    if (kDebugMode) {
-      debugPrint(
-        '[CALLS] bootstrapIfNeeded enter scheduled=$_bootstrapScheduled done=$_bootstrapDone '
-        'active=${snapshot.activeCallId} status=${snapshot.activeCall?.status}',
-      );
-    }
-    if (_bootstrapDone) return;
-    if (_bootstrapInFlight) {
-      if (kDebugMode) {
-        debugPrint('[CALLS] bootstrapIfNeeded skip already in-flight');
-      }
-      return;
-    }
-    _bootstrapInFlight = true;
-    try {
-      final skipReason = _bootstrapPrerequisitesSkipReason();
-      if (skipReason != null) {
-        debugPrint('[CALLS] bootstrapIfNeeded skip: $skipReason');
-        return;
-      }
-      _bootstrapDone = true;
-      _bootstrapCompletedAt = DateTime.now();
-      _syncForegroundServiceState(snapshot);
-      unawaited(handleIncomingCallHintIfAny());
-      _maybeStartHealthWatchdog();
-    } finally {
-      _bootstrapInFlight = false;
-    }
+    _bootstrapService.bootstrapIfNeeded(
+      isDisposed: () => _disposed,
+      debugMode: kDebugMode,
+      bootstrapDone: _bootstrapDone,
+      bootstrapInFlight: _bootstrapInFlight,
+      bootstrapScheduled: _bootstrapScheduled,
+      snapshot: snapshot,
+      debugPrint: debugPrint,
+      prerequisitesSkipReason: () => _bootstrapPrerequisitesSkipReason(),
+      setBootstrapInFlight: (value) => _bootstrapInFlight = value,
+      markBootstrapDone: () => _bootstrapDone = true,
+      setBootstrapCompletedAt: (date) => _bootstrapCompletedAt = date,
+      syncForegroundServiceState: _syncForegroundServiceState,
+      handleIncomingCallHint: handleIncomingCallHintIfAny,
+      maybeStartHealthWatchdog: _maybeStartHealthWatchdog,
+    );
   }
 
   void ensureBootstrapped(String reason) {
@@ -1829,84 +1809,22 @@ class CallNotifier extends Notifier<CallState> {
             state.activeCall!.status != CallStatus.ended);
   }
 
-  Future<void> _drainPendingCallActions() async {
-    if (_disposed) return;
-    final ready = await _ensureIncomingReady();
-    if (_disposed) return;
-    if (!ready) {
-      debugPrint(
-        '[CALLS] drainPendingCallActions aborted: registration not ready',
-      );
-      return;
-    }
-    final raw = await _notificationsChannel.invokeMethod<List<dynamic>>(
-      'drainPendingCallActions',
+  Future<void> _drainPendingCallActions() {
+    return _bootstrapService.drainPendingCallActions(
+      isDisposed: () => _disposed,
+      debugMode: kDebugMode,
+      handleIncomingCallHint: handleIncomingCallHintIfAny,
+      incomingRegistrationReady: () => _incomingRegistrationReady,
+      fetchPendingCallActions: () => _notificationsChannel
+          .invokeMethod<List<dynamic>>('drainPendingCallActions'),
+      log: debugPrint,
+      processedPendingCallActions: _processedPendingCallActions,
+      pendingCallActionDedupTtl: _pendingCallActionDedupTtl,
+      isCallAlive: _isCallAlive,
+      notifCleanup: _notifCleanup,
+      answerFromNotification: answerFromNotification,
+      declineFromNotification: declineFromNotification,
     );
-    if (_disposed) return;
-    if (raw == null || raw.isEmpty) return;
-    final now = DateTime.now();
-    _processedPendingCallActions.removeWhere(
-      (_, timestamp) => now.difference(timestamp) > _pendingCallActionDedupTtl,
-    );
-    var dedupSkipped = 0;
-    var unknownCleared = 0;
-    var processed = 0;
-    for (final item in raw) {
-      if (item is! Map) continue;
-      final type = item['type']?.toString();
-      final callId = item['callId']?.toString();
-      if (type == null || callId == null) continue;
-      final tsKey = item['ts']?.toString() ?? '';
-      final dedupKey = '$type|$callId|$tsKey';
-      if (_processedPendingCallActions.containsKey(dedupKey)) {
-        debugPrint(
-          '[CALLS] drainPendingCallActions skipping duplicate type=$type callId=$callId ts=$tsKey',
-        );
-        dedupSkipped++;
-        continue;
-      }
-      _processedPendingCallActions[dedupKey] = now;
-      if (type == 'answer') {
-        processed++;
-        if (!_isCallAlive(callId)) {
-          debugPrint(
-            '[CALLS] pending answer for unknown call $callId, clearing',
-          );
-          await _notifCleanup.clearCallNotificationState(
-            callId,
-            cancelNotification: true,
-            clearPendingAction: true,
-            clearPendingHint: true,
-          );
-          unknownCleared++;
-          continue;
-        }
-        await answerFromNotification(callId);
-      } else if (type == 'decline') {
-        processed++;
-        if (!_isCallAlive(callId)) {
-          debugPrint(
-            '[CALLS] pending decline for unknown call $callId, clearing',
-          );
-          await _notifCleanup.clearCallNotificationState(
-            callId,
-            cancelNotification: true,
-            clearPendingAction: true,
-            clearPendingHint: true,
-          );
-          unknownCleared++;
-          continue;
-        }
-        await declineFromNotification(callId);
-      }
-    }
-    if (kDebugMode) {
-      final totalConsidered = processed + dedupSkipped;
-      debugPrint(
-        '[CALLS] drainPendingCallActions summary total=$totalConsidered '
-        'processed=$processed dedupSkipped=$dedupSkipped unknownCleared=$unknownCleared',
-      );
-    }
   }
 
   bool _isPhaseEventAllowed(CallStatus status) {
