@@ -141,7 +141,10 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     if (status != AuthStatus.authenticated) return;
     final promptShown =
         await BatteryOptimizationPromptStorage.readPromptShown();
-    if (promptShown) return;
+    if (promptShown) {
+      debugPrint('[CALLS] battery optimization prompt already shown, skipping');
+      return;
+    }
     if (!mounted || !_isResumed) return;
     if (_batteryPromptInFlight) return;
     _batteryPromptInFlight = true;
@@ -154,6 +157,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         return;
       }
       if (!mounted || !_isResumed) return;
+      debugPrint('[CALLS] showing battery optimization prompt');
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(

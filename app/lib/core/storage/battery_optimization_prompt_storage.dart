@@ -1,15 +1,15 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class BatteryOptimizationPromptStorage {
   static const _key = 'battery_opt_prompt_shown';
-  static final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   static Future<bool> readPromptShown() async {
-    final value = await _storage.read(key: _key);
-    return value == '1';
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_key) ?? false;
   }
 
-  static Future<void> markPromptShown() {
-    return _storage.write(key: _key, value: '1');
+  static Future<void> markPromptShown() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_key, true);
   }
 }
