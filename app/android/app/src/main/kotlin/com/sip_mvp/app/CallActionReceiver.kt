@@ -62,8 +62,11 @@ class CallActionReceiver : BroadcastReceiver() {
       val existingAction = existingEntry.optString("type").ifEmpty { existingEntry.optString("action") }
       val existingCallId = existingEntry.optString("callId").ifEmpty { existingEntry.optString("call_id") }
       if (existingAction == action && existingCallId == callId) {
-        val previousTs = existingEntry.optLong("ts", 0L)
-        if (now - previousTs <= dedupWindow) {
+        var previousTs = existingEntry.optLong("ts", 0L)
+        if (previousTs == 0L) {
+          previousTs = existingEntry.optLong("timestamp", 0L)
+        }
+        if (previousTs > 0 && now - previousTs <= dedupWindow) {
           duplicateSuppressed = true
           Log.d(
             "CallActionReceiver",
