@@ -1,6 +1,7 @@
 package com.sip_mvp.app
 
 import android.app.KeyguardManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -115,7 +116,11 @@ object NotificationHelper {
       )
     }
 
-    notificationManager.notify(getNotificationId(callId), builder.build())
+    val notification = builder.build()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+      notification.flags = notification.flags or Notification.FLAG_INSISTENT
+    }
+    notificationManager.notify(getNotificationId(callId), notification)
   }
 
   private fun mainIntent(context: Context, callId: String, from: String, displayName: String?): Intent {

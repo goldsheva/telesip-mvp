@@ -746,11 +746,7 @@ class CallNotifier extends Notifier<CallState> {
     var clearedAction = false;
     var clearedHint = false;
     if (cancelNotification) {
-      try {
-        await IncomingNotificationService.cancelIncoming(callId: callId);
-      } catch (_) {
-        // best-effort
-      }
+      await _cancelIncomingNotificationsForCall(callId);
     }
     if (clearPendingAction) {
       try {
@@ -805,6 +801,40 @@ class CallNotifier extends Notifier<CallState> {
       }
     }
     return false;
+  }
+
+  Future<void> _cancelIncomingNotificationsForCall(String callId) async {
+    final ids = _notificationCallIds(callId);
+    for (final id in ids) {
+      try {
+        await IncomingNotificationService.cancelIncoming(callId: id);
+      } catch (_) {
+        // best-effort
+      }
+    }
+  }
+
+  Set<String> _notificationCallIds(String callId) {
+    final ids = <String>{};
+    ids.add(callId);
+    final localId = _sipToLocalCallId.containsKey(callId)
+        ? _sipToLocalCallId[callId]!
+        : callId;
+    ids.add(localId);
+    final sipId = _sipIdForLocal(localId);
+    if (sipId != null) {
+      ids.add(sipId);
+    }
+    return ids;
+  }
+
+  String? _sipIdForLocal(String localId) {
+    for (final entry in _sipToLocalCallId.entries) {
+      if (entry.value == localId) {
+        return entry.key;
+      }
+    }
+    return null;
   }
 
   bool get _incomingRegistrationReady =>
