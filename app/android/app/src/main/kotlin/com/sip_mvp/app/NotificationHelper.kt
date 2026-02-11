@@ -42,6 +42,7 @@ object NotificationHelper {
     ensureChannel(context, notificationManager)
     val incomingIntent = Intent(context, IncomingCallActivity::class.java).apply {
       putExtra("call_id", callId)
+      putExtra("call_uuid", callId)
       putExtra("from", from)
       putExtra("display_name", displayName)
       action = "open_incoming"
@@ -54,26 +55,30 @@ object NotificationHelper {
       incomingIntent,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
+    val main = mainIntent(context, callId, from, displayName)
+    main.putExtra("call_uuid", callId)
     val contentIntent = PendingIntent.getActivity(
       context,
       reqCode(baseId, 1),
-      mainIntent(context, callId, from, displayName),
+      main,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
     val answerIntent = PendingIntent.getBroadcast(
       context,
       reqCode(baseId, 2),
-      Intent(CallActionReceiver.ACTION_ANSWER).apply {
-        putExtra("call_id", callId)
-      },
+        Intent(CallActionReceiver.ACTION_ANSWER).apply {
+          putExtra("call_id", callId)
+          putExtra("call_uuid", callId)
+        },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
     val declineIntent = PendingIntent.getBroadcast(
       context,
       reqCode(baseId, 3),
-      Intent(CallActionReceiver.ACTION_DECLINE).apply {
-        putExtra("call_id", callId)
-      },
+        Intent(CallActionReceiver.ACTION_DECLINE).apply {
+          putExtra("call_id", callId)
+          putExtra("call_uuid", callId)
+        },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
     val callerPerson = Person.Builder()

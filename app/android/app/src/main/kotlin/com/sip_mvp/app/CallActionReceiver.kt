@@ -23,21 +23,28 @@ class CallActionReceiver : BroadcastReceiver() {
     }
     val notificationManager =
       context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-    val isCallIdValid = callId.isNotBlank() && callId != "<none>"
+    val callUuid = intent.getStringExtra("call_uuid")
+    val idsToCancel = buildSet<String> {
+      if (callId.isNotBlank() && callId != "<none>") add(callId)
+      val uuid = callUuid?.takeIf { it.isNotBlank() && it != "<none>" }
+      if (uuid != null) add(uuid)
+    }
     var cancelAttempted = false
     var cancelSucceeded = false
-    if (isCallIdValid && notificationManager != null) {
+    if (idsToCancel.isNotEmpty() && notificationManager != null) {
       cancelAttempted = true
-      try {
-        NotificationHelper.cancel(notificationManager, callId)
-        cancelSucceeded = true
-      } catch (error: Throwable) {
-        Log.d("CallActionReceiver", "notification cancel failed action=$action call=$callId: $error")
+      for (id in idsToCancel) {
+        try {
+          NotificationHelper.cancel(notificationManager, id)
+          cancelSucceeded = true
+        } catch (error: Throwable) {
+          Log.d("CallActionReceiver", "notification cancel failed action=$action call=$id: $error")
+        }
       }
     }
     Log.d(
       "CallActionReceiver",
-      "action=$action call=$callId cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded",
+      "action=$action call_id=$callId call_uuid=$callUuid cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded",
     )
     val prefs = context.getSharedPreferences("pending_call_actions", Context.MODE_PRIVATE)
     val raw = prefs.getString("pending_call_actions", "[]")
