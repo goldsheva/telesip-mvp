@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/features/auth/state/auth_notifier.dart';
+import 'package:app/features/calls/debug/incoming_smoke_harness.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/features/dongles/models/dongle.dart';
 import 'package:app/features/dongles/state/dongles_provider.dart';
@@ -130,14 +132,22 @@ class _HomePageState extends ConsumerState<HomePage> {
     final sipUsers = ref.watch(sipUsersProvider);
     final dongles = ref.watch(donglesProvider);
 
+    final titleText = Text(
+      'SIP',
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+    );
+    final titleWidget = kDebugMode
+        ? GestureDetector(
+            onLongPress: () => _showSmokeHarnessDialog(context),
+            child: titleText,
+          )
+        : titleText;
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'SIP',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-        ),
+        title: titleWidget,
+        titleSpacing: kDebugMode ? 12.0 : null,
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
           IconButton(
@@ -248,6 +258,41 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
         ],
+      ),
+    );
+  }
+
+  void _showSmokeHarnessDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Incoming smoke harness'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                IncomingSmokeHarness.showRinging();
+              },
+              child: const Text('Show ringing'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                IncomingSmokeHarness.updateNotRinging();
+              },
+              child: const Text('Update not ringing'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                IncomingSmokeHarness.cancel();
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
       ),
     );
   }
