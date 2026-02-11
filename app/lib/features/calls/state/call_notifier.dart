@@ -24,13 +24,13 @@ import 'package:app/services/audio_route_service.dart';
 import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
 import 'package:app/services/audio_route_types.dart';
-import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/services/network_connectivity_service.dart';
 import 'package:app/sip/sip_engine.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 
 import 'call_models.dart';
+import 'call_notification_cleanup.dart';
 
 export 'call_models.dart';
 
@@ -118,6 +118,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _foregroundRequested = false;
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
+  late final CallNotificationCleanup _notifCleanup;
   bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
@@ -575,7 +576,7 @@ class CallNotifier extends Notifier<CallState> {
     var clearedHint = false;
     var clearedAction = false;
     if (requiresNotificationClear) {
-      final cleanupResult = await _clearCallNotificationState(
+      final cleanupResult = await _notifCleanup.clearCallNotificationState(
         callId,
         cancelNotification: cancelNotification,
         clearPendingHint: clearPendingHint,
@@ -664,206 +665,6 @@ class CallNotifier extends Notifier<CallState> {
       'clearedActive=$clearedActive clearedHint=$clearedHint clearedAction=$clearedAction '
       'relevant=true',
     );
-  }
-
-  Future<_CallNotificationCleanupResult> _clearCallNotificationState(
-    String callId, {
-    bool cancelNotification = false,
-    bool clearPendingHint = false,
-    bool clearPendingAction = false,
-  }) async {
-    var clearedAction = false;
-    var clearedHint = false;
-    if (cancelNotification) {
-      if (kDebugMode) {
-        debugPrint(
-          '[CALLS_NOTIF] cleanup order update->cancel->clear callId=$callId',
-        );
-      }
-      final ids = _notificationCallIds(callId);
-      if (kDebugMode) {
-        debugPrint('[CALLS_NOTIF] cancelIncoming ids=$ids');
-      }
-      await _maybeUpdateNotificationToNotRinging(callId);
-      await _cancelIncomingNotificationsForCall(callId);
-    }
-    if (clearPendingAction) {
-      try {
-        final pendingAction =
-            await IncomingNotificationService.readCallAction();
-        final actionCallId =
-            pendingAction?['call_id']?.toString() ??
-            pendingAction?['callId']?.toString();
-        if (_callIdMatches(callId, actionCallId)) {
-          await IncomingNotificationService.clearCallAction();
-          clearedAction = true;
-        }
-      } catch (_) {
-        // best-effort
-      }
-    }
-    if (clearPendingHint) {
-      try {
-        final pending = await FcmStorage.readPendingIncomingHint();
-        final payload = pending?['payload'] as Map<String, dynamic>?;
-        final pendingCallId = payload?['call_id']?.toString();
-        final pendingCallUuid = payload?['call_uuid']?.toString();
-        if (_callIdMatches(callId, pendingCallId) ||
-            _callIdMatches(callId, pendingCallUuid)) {
-          await FcmStorage.clearPendingIncomingHint();
-          clearedHint = true;
-        }
-      } catch (_) {
-        // best-effort
-      }
-    }
-    return _CallNotificationCleanupResult(
-      clearedAction: clearedAction,
-      clearedHint: clearedHint,
-    );
-  }
-
-  bool _callIdMatches(String referenceCallId, String? candidate) {
-    if (candidate == null) return false;
-    final localId = _sipToLocalCallId.containsKey(referenceCallId)
-        ? _sipToLocalCallId[referenceCallId]!
-        : referenceCallId;
-    if (candidate == referenceCallId || candidate == localId) {
-      return true;
-    }
-    for (final entry in _sipToLocalCallId.entries) {
-      if (entry.value == localId && candidate == entry.key) {
-        return true;
-      }
-      if (entry.key == referenceCallId && candidate == entry.value) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Future<void> _cancelIncomingNotificationsForCall(String callId) async {
-    final ids = _notificationCallIds(callId);
-    for (final id in ids) {
-      try {
-        final callUuid = id == callId ? null : id;
-        await IncomingNotificationService.cancelIncoming(
-          callId: callId,
-          callUuid: callUuid,
-        );
-      } catch (_) {
-        // best-effort
-      }
-    }
-  }
-
-  Set<String> _notificationCallIds(String callId) {
-    final ids = <String>{};
-    ids.add(callId);
-    final localId = _sipToLocalCallId.containsKey(callId)
-        ? _sipToLocalCallId[callId]!
-        : callId;
-    ids.add(localId);
-    final sipId = _sipIdForLocal(localId);
-    if (sipId != null) {
-      ids.add(sipId);
-    }
-    return ids;
-  }
-
-  String? _sipIdForLocal(String localId) {
-    for (final entry in _sipToLocalCallId.entries) {
-      if (entry.value == localId) {
-        return entry.key;
-      }
-    }
-    return null;
-  }
-
-  CallInfo? _callInfoForNotification(String callId) {
-    final baseInfo = state.calls[callId];
-    if (baseInfo != null) return baseInfo;
-    final localId = _sipToLocalCallId.containsKey(callId)
-        ? _sipToLocalCallId[callId]!
-        : callId;
-    final localInfo = state.calls[localId];
-    if (localInfo != null) return localInfo;
-    final sipId = _sipIdForLocal(localId);
-    if (sipId != null) {
-      return state.calls[sipId];
-    }
-    return null;
-  }
-
-  Future<void> _maybeUpdateNotificationToNotRinging(String callId) async {
-    final info = _callInfoForNotification(callId);
-    if (info == null) return;
-    String? payloadFrom;
-    String? payloadDisplayName;
-    String? payloadCallId;
-    String? payloadCallUuid;
-    try {
-      final pending = await FcmStorage.readPendingIncomingHint();
-      final payload = pending == null
-          ? null
-          : pending['payload'] as Map<String, dynamic>?;
-      if (payload == null) return;
-      final rawFrom = payload['from'];
-      if (rawFrom == null) return;
-      payloadFrom = rawFrom.toString().trim();
-      final rawDisplay = payload['display_name'];
-      if (rawDisplay != null) {
-        payloadDisplayName = rawDisplay.toString().trim();
-      }
-      final rawCallId = payload['call_id'];
-      if (rawCallId != null) {
-        payloadCallId = rawCallId.toString();
-      }
-      final rawCallUuid = payload['call_uuid'];
-      if (rawCallUuid != null) {
-        payloadCallUuid = rawCallUuid.toString();
-      }
-    } catch (_) {
-      // best-effort
-    }
-    if (payloadFrom == null || payloadFrom.isEmpty) return;
-    final matchesCallId =
-        payloadCallId != null &&
-        payloadCallId.isNotEmpty &&
-        _callIdMatches(callId, payloadCallId);
-    final matchesCallUuid =
-        payloadCallUuid != null &&
-        payloadCallUuid.isNotEmpty &&
-        _callIdMatches(callId, payloadCallUuid);
-    if (!matchesCallId && !matchesCallUuid) {
-      return;
-    }
-    String? callUuid;
-    if (matchesCallUuid) {
-      callUuid = payloadCallUuid;
-    } else if (matchesCallId && payloadCallUuid?.isNotEmpty == true) {
-      callUuid = payloadCallUuid;
-    }
-    final normalizedDisplay = (payloadDisplayName?.isNotEmpty == true
-        ? payloadDisplayName
-        : null);
-    if (kDebugMode) {
-      debugPrint(
-        '[CALLS_NOTIF] updateNotRinging callId=$callId callUuid=${callUuid ?? '<none>'} '
-        'from=$payloadFrom display=${normalizedDisplay ?? '<none>'}',
-      );
-    }
-    try {
-      await IncomingNotificationService.updateIncomingState(
-        callId: callId,
-        from: payloadFrom,
-        displayName: normalizedDisplay,
-        callUuid: callUuid,
-        isRinging: false,
-      );
-    } catch (_) {
-      // best-effort
-    }
   }
 
   bool get _incomingRegistrationReady =>
@@ -1106,7 +907,7 @@ class CallNotifier extends Notifier<CallState> {
     String callId, {
     required String source,
   }) async {
-    await _clearCallNotificationState(
+    await _notifCleanup.clearCallNotificationState(
       callId,
       cancelNotification: true,
       clearPendingAction: true,
@@ -1161,7 +962,7 @@ class CallNotifier extends Notifier<CallState> {
   }) async {
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
-      await _clearCallNotificationState(
+      await _notifCleanup.clearCallNotificationState(
         callId,
         cancelNotification: true,
         clearPendingHint: true,
@@ -1181,7 +982,7 @@ class CallNotifier extends Notifier<CallState> {
         '[CALLS] $source unknown call $callId active=${state.activeCallId} '
         'pending=$_pendingCallId',
       );
-      await _clearCallNotificationState(
+      await _notifCleanup.clearCallNotificationState(
         callId,
         cancelNotification: true,
         clearPendingHint: true,
@@ -1251,6 +1052,10 @@ class CallNotifier extends Notifier<CallState> {
   CallState build() {
     _registerGlobalCallNotifierInstance(this);
     _engine = ref.read(sipEngineProvider);
+    _notifCleanup = CallNotificationCleanup(
+      getState: () => state,
+      sipToLocalCallId: _sipToLocalCallId,
+    );
     final initialStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     _lastAuthStatus ??= initialStatus;
@@ -2182,7 +1987,7 @@ class CallNotifier extends Notifier<CallState> {
           debugPrint(
             '[CALLS] pending answer for unknown call $callId, clearing',
           );
-          await _clearCallNotificationState(
+          await _notifCleanup.clearCallNotificationState(
             callId,
             cancelNotification: true,
             clearPendingAction: true,
@@ -2198,7 +2003,7 @@ class CallNotifier extends Notifier<CallState> {
           debugPrint(
             '[CALLS] pending decline for unknown call $callId, clearing',
           );
-          await _clearCallNotificationState(
+          await _notifCleanup.clearCallNotificationState(
             callId,
             cancelNotification: true,
             clearPendingAction: true,
@@ -2658,16 +2463,6 @@ class CallNotifier extends Notifier<CallState> {
     _startRetrySuppressionTimer();
     await _webRtcWatchdog!.manualRestart();
   }
-}
-
-class _CallNotificationCleanupResult {
-  const _CallNotificationCleanupResult({
-    required this.clearedAction,
-    required this.clearedHint,
-  });
-
-  final bool clearedAction;
-  final bool clearedHint;
 }
 
 final callControllerProvider = NotifierProvider<CallNotifier, CallState>(
