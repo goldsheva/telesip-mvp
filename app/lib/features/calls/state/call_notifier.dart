@@ -740,6 +740,11 @@ class CallNotifier extends Notifier<CallState> {
     }
     if (clampedRoute == state.audioRoute) return;
     _commit(state.copyWith(audioRoute: clampedRoute), syncFgs: false);
+    final availabilitySnapshot =
+        state.availableAudioRoutes.map((route) => route.name).join(',');
+    debugPrint(
+      '[CALLS] applying route requested=$route clamped=$clampedRoute available=$availabilitySnapshot',
+    );
     unawaited(_applyNativeAudioRoute(clampedRoute));
     unawaited(_refreshAudioRoute());
   }
@@ -1569,6 +1574,15 @@ class CallNotifier extends Notifier<CallState> {
         }
       }
       final availableChanged = !setEquals(availableRoutes, state.availableAudioRoutes);
+      final shouldLog = desiredRoute != state.audioRoute || availableChanged;
+      if (shouldLog) {
+        final availableNames = availableRoutes.map((route) => route.name).toList()
+          ..sort();
+        debugPrint(
+          '[CALLS] refreshAudioRoute native=${info.current} desired=$desiredRoute '
+          'available=${availableNames.join(',')} commit=$shouldLog',
+        );
+      }
       if (desiredRoute != state.audioRoute || availableChanged) {
         _commit(
           state.copyWith(
