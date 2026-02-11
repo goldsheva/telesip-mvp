@@ -562,73 +562,134 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> handleIncomingCallCancelled(String callId) async {
-    await IncomingNotificationService.cancelIncoming(callId: callId);
-    try {
-      final pendingAction = await IncomingNotificationService.readCallAction();
-      final actionCallId =
-          pendingAction?['call_id']?.toString() ??
-          pendingAction?['callId']?.toString();
-      if (actionCallId == callId) {
-        await IncomingNotificationService.clearCallAction();
-      }
-    } catch (_) {
-      // best-effort
-    }
-    final pending = await FcmStorage.readPendingIncomingHint();
-    final payload = pending?['payload'] as Map<String, dynamic>?;
-    final pendingCallId = payload?['call_id']?.toString();
-    var clearedHint = false;
-    if (pendingCallId == callId) {
-      await FcmStorage.clearPendingIncomingHint();
-      clearedHint = true;
-    }
-    final previousState = state;
-    final callInfo = previousState.calls[callId];
-    final activeWas = previousState.activeCallId;
-    final shouldEndInState =
-        (callInfo != null && callInfo.status != CallStatus.ended) ||
-        activeWas == callId;
+    await _endCallAndCleanup(
+      callId,
+      reason: 'cancelled',
+      cancelNotification: true,
+      clearPendingHint: true,
+      clearPendingAction: true,
+    );
+  }
+
+  Future<void> _endCallAndCleanup(
+    String callId, {
+    required String reason,
+    bool cancelNotification = false,
+    bool clearPendingHint = false,
+    bool clearPendingAction = false,
+    bool markRecentlyEndedForSipPair = true,
+  }) async {
     final now = DateTime.now();
-    _recentlyEnded[callId] = now;
-    String? sipMappedId;
-    for (final entry in _sipToLocalCallId.entries) {
-      if (entry.value == callId) {
-        sipMappedId = entry.key;
-        break;
+    final callIdIsSip = _sipToLocalCallId.containsKey(callId);
+    final localId = callIdIsSip ? _sipToLocalCallId[callId]! : callId;
+    String? pairedSipId;
+    if (!callIdIsSip) {
+      for (final entry in _sipToLocalCallId.entries) {
+        if (entry.value == localId) {
+          pairedSipId = entry.key;
+          break;
+        }
       }
     }
-    if (sipMappedId != null) {
-      _recentlyEnded[sipMappedId] = now;
+    bool matchesCallId(String? candidate) =>
+        candidate != null && (candidate == callId || candidate == localId);
+    var clearedHint = false;
+    var clearedAction = false;
+
+    if (cancelNotification) {
+      try {
+        await IncomingNotificationService.cancelIncoming(callId: callId);
+      } catch (_) {
+        // best-effort
+      }
     }
-    if (!shouldEndInState) {
-      debugPrint(
-        '[INCOMING] cancelled callId=$callId endedInState=false activeWas=$activeWas clearedHint=$clearedHint',
-      );
-      return;
+
+    if (clearPendingAction) {
+      try {
+        final pendingAction = await IncomingNotificationService.readCallAction();
+        final actionCallId =
+            pendingAction?['call_id']?.toString() ??
+            pendingAction?['callId']?.toString();
+        if (matchesCallId(actionCallId)) {
+          await IncomingNotificationService.clearCallAction();
+          clearedAction = true;
+        }
+      } catch (_) {
+        // best-effort
+      }
+    }
+
+    if (clearPendingHint) {
+      try {
+        final pending = await FcmStorage.readPendingIncomingHint();
+        final payload = pending?['payload'] as Map<String, dynamic>?;
+        final pendingCallId = payload?['call_id']?.toString();
+        final pendingCallUuid = payload?['call_uuid']?.toString();
+        if (matchesCallId(pendingCallId) || matchesCallId(pendingCallUuid)) {
+          await FcmStorage.clearPendingIncomingHint();
+          clearedHint = true;
+        }
+      } catch (_) {
+        // best-effort
+      }
+    }
+
+    _recentlyEnded[callId] = now;
+    if (localId != callId) {
+      _recentlyEnded[localId] = now;
+    }
+    if (markRecentlyEndedForSipPair && pairedSipId != null) {
+      _recentlyEnded[pairedSipId] = now;
+    }
+
+    final previousState = state;
+    var callInfoKey = callId;
+    var callInfo = previousState.calls[callInfoKey];
+    if (callInfo == null && localId != callId) {
+      callInfoKey = localId;
+      callInfo = previousState.calls[callInfoKey];
     }
     final updatedCalls = Map<String, CallInfo>.from(previousState.calls);
     var endedInState = false;
     if (callInfo != null && callInfo.status != CallStatus.ended) {
-      final timeline = List<String>.from(callInfo.timeline)..add('cancelled');
-      updatedCalls[callId] = callInfo.copyWith(
+      final timeline = List<String>.from(callInfo.timeline)..add(reason);
+      updatedCalls[callInfoKey] = callInfo.copyWith(
         status: CallStatus.ended,
         endedAt: now,
         timeline: timeline,
       );
       endedInState = true;
     }
-    var nextActiveCallId = previousState.activeCallId;
-    if (activeWas == callId) {
+
+    final activeWas = previousState.activeCallId;
+    var nextActiveCallId = activeWas;
+    var clearedActive = false;
+    if (nextActiveCallId != null &&
+        (nextActiveCallId == callId || nextActiveCallId == localId)) {
       nextActiveCallId = null;
       _busyUntil = now.add(_busyGrace);
+      clearedActive = true;
     }
+
+    _cancelDialTimeout();
+    if (_pendingCallId == callId || _pendingCallId == localId) {
+      _pendingCallId = null;
+    }
+    if (_pendingLocalCallId == localId) {
+      _pendingLocalCallId = null;
+    }
+    _clearSipMappingsForLocalCall(localId);
+    _callDongleMap.remove(localId);
+
     final nextState = previousState.copyWith(
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
     );
     _commit(nextState);
     debugPrint(
-      '[INCOMING] cancelled callId=$callId endedInState=$endedInState activeWas=$activeWas clearedHint=$clearedHint',
+      '[CALLS] endCall reason=$reason callId=$callId localId=$localId '
+      'activeWas=$activeWas endedKey=$callInfoKey endedInState=$endedInState '
+      'clearedActive=$clearedActive clearedHint=$clearedHint clearedAction=$clearedAction',
     );
   }
 
