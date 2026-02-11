@@ -1429,18 +1429,20 @@ class CallNotifier extends Notifier<CallState> {
         (pendingCallId != null ? _callDongleMap[pendingCallId] : null);
 
     final updated = Map<String, CallInfo>.from(state.calls);
-    updated[callId] = CallInfo(
-      id: callId,
-      destination: destination,
-      status: status,
-      createdAt: previous?.createdAt ?? event.timestamp,
-      connectedAt: status == CallStatus.connected
-          ? event.timestamp
-          : previous?.connectedAt,
-      endedAt: status == CallStatus.ended ? event.timestamp : previous?.endedAt,
-      timeline: logs,
-      dongleId: originDongleId,
-    );
+    if (status != CallStatus.ended) {
+      updated[callId] = CallInfo(
+        id: callId,
+        destination: destination,
+        status: status,
+        createdAt: previous?.createdAt ?? event.timestamp,
+        connectedAt: status == CallStatus.connected
+            ? event.timestamp
+            : previous?.connectedAt,
+        endedAt: previous?.endedAt,
+        timeline: logs,
+        dongleId: originDongleId,
+      );
+    }
     if (pendingCallId != null && pendingCallId != callId) {
       updated.remove(pendingCallId);
     }
@@ -1458,7 +1460,6 @@ class CallNotifier extends Notifier<CallState> {
       final callCleared = postCleanupState.activeCallId == null;
       final endedPreviousActive = callId == previousState.activeCallId;
       final shouldResetAudio = callCleared || endedPreviousActive;
-      _applyPhase(status, callId);
       _handleWatchdogActivation(previousState, postCleanupState);
       if (shouldResetAudio) {
         unawaited(_applyNativeAudioRoute(AudioRoute.systemDefault));
