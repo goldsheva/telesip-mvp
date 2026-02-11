@@ -1607,6 +1607,12 @@ class CallNotifier extends Notifier<CallState> {
     );
   }
 
+  bool _isSipHealthyNow() {
+    if (!_isRegistered || _lastNetworkActivityAt == null) return false;
+    return DateTime.now().difference(_lastNetworkActivityAt!) <=
+        _sipHealthTimeout;
+  }
+
   void _maybeBootstrapFromCurrentSnapshot(String reason) {
     if (_bootstrapDone || _bootstrapInFlight) return;
     final skip = _bootstrapPrerequisitesSkipReason();
@@ -1648,6 +1654,7 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     if (_healthCheckTimer != null) return;
+    if (_isSipHealthyNow()) return;
     _healthStartedAt = DateTime.now();
     _healthCheckTimer = Timer.periodic(_healthCheckInterval, _checkSipHealth);
   }
@@ -1834,10 +1841,11 @@ class CallNotifier extends Notifier<CallState> {
             debugPrint(
               '[CALLS_CONN] reconnect cleared due to registration success',
             );
+            _reconnectTimer?.cancel();
+            _reconnectTimer = null;
+            _reconnectInFlight = false;
           }
-          _reconnectTimer?.cancel();
-          _reconnectTimer = null;
-          _reconnectInFlight = false;
+          _stopHealthWatchdog();
         }
         _lastRegistrationState = registrationState;
       }
@@ -1852,6 +1860,7 @@ class CallNotifier extends Notifier<CallState> {
         _handleRegistrationFailure(event.message ?? 'SIP registration failed');
         final stateName = registrationState?.name ?? 'unknown';
         _scheduleReconnect('registration-$stateName');
+        _maybeStartHealthWatchdog();
       } else if (registrationState == SipRegistrationState.unregistered ||
           registrationState == SipRegistrationState.none) {
         _isRegistered = false;
@@ -1859,6 +1868,7 @@ class CallNotifier extends Notifier<CallState> {
         if (registrationState == SipRegistrationState.unregistered) {
           final stateName = registrationState?.name ?? 'unknown';
           _scheduleReconnect('registration-$stateName');
+          _maybeStartHealthWatchdog();
         }
       }
       _commit(state.copyWith(isRegistered: _isRegistered));
