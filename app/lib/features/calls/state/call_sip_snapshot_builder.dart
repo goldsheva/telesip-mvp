@@ -77,3 +77,14 @@ CallSipSnapshotBuildResult buildSipSnapshot({
     ),
   );
 }
+
+String incomingHintFailureMessage(CallSipSnapshotBuildFailure failure) {
+  switch (failure) {
+    case CallSipSnapshotBuildFailure.unsupportedTransport:
+      return 'unsupported SIP transport for incoming user';
+    case CallSipSnapshotBuildFailure.missingWsEndpoint:
+      return 'no WS endpoint configured for incoming user';
+    case CallSipSnapshotBuildFailure.invalidUriHost:
+      return 'invalid WS URL for incoming user';
+  }
+}

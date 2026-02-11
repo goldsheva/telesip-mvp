@@ -117,25 +117,13 @@ class CallIncomingHintHandler {
           setError: (_) {},
         );
         if (result.snapshot == null) {
-          switch (result.failure) {
-            case CallSipSnapshotBuildFailure.unsupportedTransport:
-              log(
-                '[INCOMING] unsupported SIP transport for incoming user, skipping hint (call_uuid=$callUuid)',
-              );
-              return;
-            case CallSipSnapshotBuildFailure.missingWsEndpoint:
-              log(
-                '[INCOMING] no WS endpoint configured for incoming user, skipping hint (call_uuid=$callUuid)',
-              );
-              return;
-            case CallSipSnapshotBuildFailure.invalidUriHost:
-              log(
-                '[INCOMING] invalid WS URL for incoming user, skipping hint (call_uuid=$callUuid)',
-              );
-              return;
-            case null:
-              return;
+          final failure = result.failure;
+          if (failure != null) {
+            log(
+              '[INCOMING] ${incomingHintFailureMessage(failure)}, skipping hint (call_uuid=$callUuid)',
+            );
           }
+          return;
         }
         snapshot = result.snapshot!;
         log(

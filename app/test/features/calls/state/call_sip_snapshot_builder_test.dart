@@ -96,4 +96,25 @@ void main() {
       expect(errors, ['Unable to determine SIP domain']);
     });
   });
+
+  group('incomingHintFailureMessage', () {
+    test('maps each failure to the expected text', () {
+      expect(
+        incomingHintFailureMessage(
+          CallSipSnapshotBuildFailure.unsupportedTransport,
+        ),
+        'unsupported SIP transport for incoming user',
+      );
+      expect(
+        incomingHintFailureMessage(
+          CallSipSnapshotBuildFailure.missingWsEndpoint,
+        ),
+        'no WS endpoint configured for incoming user',
+      );
+      expect(
+        incomingHintFailureMessage(CallSipSnapshotBuildFailure.invalidUriHost),
+        'invalid WS URL for incoming user',
+      );
+    });
+  });
 }
