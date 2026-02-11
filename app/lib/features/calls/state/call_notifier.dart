@@ -916,7 +916,7 @@ class CallNotifier extends Notifier<CallState> {
       );
     }
     try {
-      await IncomingNotificationService.showIncoming(
+      await IncomingNotificationService.updateIncomingState(
         callId: callId,
         from: payloadFrom,
         displayName: normalizedDisplay,

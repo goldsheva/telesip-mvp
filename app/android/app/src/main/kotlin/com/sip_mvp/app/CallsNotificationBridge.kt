@@ -42,6 +42,27 @@ class CallsNotificationBridge(
           )
           result.success(null)
         }
+        "updateIncomingState" -> {
+          val callId = call.argument<String>("callId")
+          val from = call.argument<String>("from")
+          val displayName = call.argument<String>("displayName")
+          val isRinging = call.argument<Boolean>("isRinging")
+          if (callId == null || from == null || isRinging == null) {
+            result.error("invalid_args", "callId/from/isRinging are required", null)
+            return@setMethodCallHandler
+          }
+          val callUuid = call.argument<String>("callUuid")
+          NotificationHelper.updateIncomingState(
+            context,
+            notificationManager,
+            callId,
+            from,
+            displayName,
+            callUuid,
+            isRinging
+          )
+          result.success(null)
+        }
         "acquireAudioFocus" -> {
           val callId = call.argument<String>("callId") ?: "<none>"
           AudioFocusHelper.acquire(context, callId)

@@ -33,6 +33,31 @@ class IncomingNotificationService {
     }
   }
 
+  static Future<void> updateIncomingState({
+    required String callId,
+    required String from,
+    String? displayName,
+    String? callUuid,
+    required bool isRinging,
+  }) async {
+    try {
+      final args = <String, dynamic>{
+        'callId': callId,
+        'from': from,
+        'isRinging': isRinging,
+      };
+      if (displayName != null) {
+        args['displayName'] = displayName;
+      }
+      if (callUuid != null) {
+        args['callUuid'] = callUuid;
+      }
+      await _channel.invokeMethod('updateIncomingState', args);
+    } catch (error) {
+      debugPrint('[CALLS_NOTIF] updateIncomingState failed: $error');
+    }
+  }
+
   static Future<void> cancelIncoming({required String callId}) async {
     try {
       await _channel.invokeMethod('cancelIncoming', <String, dynamic>{
