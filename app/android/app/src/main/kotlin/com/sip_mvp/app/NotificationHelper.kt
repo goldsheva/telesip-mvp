@@ -63,7 +63,7 @@ object NotificationHelper {
       Intent(CallActionReceiver.ACTION_ANSWER).apply {
         putExtra("call_id", callId)
       },
-      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
     val declineIntent = PendingIntent.getBroadcast(
       context,
@@ -71,7 +71,7 @@ object NotificationHelper {
       Intent(CallActionReceiver.ACTION_DECLINE).apply {
         putExtra("call_id", callId)
       },
-      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setContentTitle(displayName ?: "Incoming call")
@@ -82,6 +82,10 @@ object NotificationHelper {
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setDefaults(NotificationCompat.DEFAULT_ALL)
       .setOngoing(true)
+      .setAutoCancel(false)
+      .setOnlyAlertOnce(true)
+      .setWhen(System.currentTimeMillis())
+      .setShowWhen(false)
       .apply {
         if (shouldUseFullScreenIntent(context)) {
           setFullScreenIntent(fullScreenIntent, true)
