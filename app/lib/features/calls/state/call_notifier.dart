@@ -31,6 +31,7 @@ import 'call_models.dart';
 import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
+import 'call_reconnect_policy.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
@@ -1335,23 +1336,29 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    if (authStatus != AuthStatus.authenticated) {
-      debugPrint(
-        '[CALLS_CONN] scheduleReconnect skip reason=$reason authStatus=${authStatus.name}',
-      );
-      return;
-    }
-    if (!_lastKnownOnline) {
-      debugPrint(
-        '[CALLS_CONN] scheduleReconnect skip reason=$reason online=false',
-      );
-      return;
-    }
-    if (_hasActiveCall) {
-      debugPrint(
-        '[CALLS_CONN] scheduleReconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
-      );
-      return;
+    final scheduleBlock = CallReconnectPolicy.scheduleBlockReason(
+      lastKnownOnline: _lastKnownOnline,
+      hasActiveCall: _hasActiveCall,
+      authenticated: authStatus == AuthStatus.authenticated,
+    );
+    if (scheduleBlock != null) {
+      switch (scheduleBlock) {
+        case CallReconnectScheduleBlockReason.notAuthenticated:
+          debugPrint(
+            '[CALLS_CONN] scheduleReconnect skip reason=$reason authStatus=${authStatus.name}',
+          );
+          return;
+        case CallReconnectScheduleBlockReason.offline:
+          debugPrint(
+            '[CALLS_CONN] scheduleReconnect skip reason=$reason online=false',
+          );
+          return;
+        case CallReconnectScheduleBlockReason.hasActiveCall:
+          debugPrint(
+            '[CALLS_CONN] scheduleReconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+          );
+          return;
+      }
     }
     if (_reconnectInFlight) {
       debugPrint(
@@ -1380,24 +1387,34 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> _performReconnect(String reason) async {
     if (_disposed) return;
-    if (_reconnectInFlight) return;
-    if (!_lastKnownOnline) {
-      debugPrint('[CALLS_CONN] reconnect skip reason=$reason online=false');
-      return;
-    }
-    if (_hasActiveCall) {
-      debugPrint(
-        '[CALLS_CONN] reconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
-      );
-      return;
-    }
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    if (authStatus != AuthStatus.authenticated) {
-      debugPrint(
-        '[CALLS_CONN] reconnect skip reason=$reason authStatus=${authStatus.name}',
-      );
-      return;
+    final performBlock = CallReconnectPolicy.performBlockReason(
+      disposed: _disposed,
+      reconnectInFlight: _reconnectInFlight,
+      lastKnownOnline: _lastKnownOnline,
+      hasActiveCall: _hasActiveCall,
+      authenticated: authStatus == AuthStatus.authenticated,
+    );
+    if (performBlock != null) {
+      switch (performBlock) {
+        case CallReconnectPerformBlockReason.disposed:
+        case CallReconnectPerformBlockReason.inFlight:
+          return;
+        case CallReconnectPerformBlockReason.offline:
+          debugPrint('[CALLS_CONN] reconnect skip reason=$reason online=false');
+          return;
+        case CallReconnectPerformBlockReason.hasActiveCall:
+          debugPrint(
+            '[CALLS_CONN] reconnect skip reason=$reason activeCallId=${state.activeCallId ?? '<none>'}',
+          );
+          return;
+        case CallReconnectPerformBlockReason.notAuthenticated:
+          debugPrint(
+            '[CALLS_CONN] reconnect skip reason=$reason authStatus=${authStatus.name}',
+          );
+          return;
+      }
     }
     final reconnectUser = _lastKnownUser ?? _incomingUser;
     if (reconnectUser == null) {
