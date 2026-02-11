@@ -52,7 +52,59 @@ object NotificationHelper {
       }
       return
     }
+    val meta = prepareIncomingNotification(context, callId, from, displayName, callUuid)
+    val notification = buildNotification(meta, isRinging)
+    if (BuildConfig.DEBUG) {
+      Log.d(
+        "NotificationHelper",
+        "notify baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${meta.usedCallStyle}",
+      )
+    }
+    notificationManager.notify(meta.baseId, notification)
+  }
+
+  fun updateIncomingState(
+    context: Context,
+    notificationManager: NotificationManager,
+    callId: String,
+    from: String,
+    displayName: String?,
+    callUuid: String? = null,
+    isRinging: Boolean
+  ) {
+    ensureChannel(context, notificationManager)
+    val meta = prepareIncomingNotification(context, callId, from, displayName, callUuid)
+    val notification = buildNotification(meta, isRinging)
+    if (BuildConfig.DEBUG) {
+      Log.d(
+        "NotificationHelper",
+        "update baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging api=${Build.VERSION.SDK_INT}",
+      )
+    }
+    notificationManager.notify(meta.baseId, notification)
+  }
+
+  private fun buildNotification(
+    meta: IncomingNotificationMeta,
+    isRinging: Boolean
+  ): Notification {
+    val notification = meta.builder.build()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && isRinging) {
+      notification.flags = notification.flags or Notification.FLAG_INSISTENT
+    }
+    return notification
+  }
+
+  private fun prepareIncomingNotification(
+    context: Context,
+    callId: String,
+    from: String,
+    displayName: String?,
+    callUuid: String?
+  ): IncomingNotificationMeta {
     val effectiveCallUuid = callUuid ?: callId
+    val baseId = getNotificationId(callId)
+    val keyguardLocked = shouldUseFullScreenIntent(context)
     val incomingIntent = Intent(context, IncomingCallActivity::class.java).apply {
       putExtra("call_id", callId)
       putExtra("call_uuid", effectiveCallUuid)
@@ -61,7 +113,6 @@ object NotificationHelper {
       action = "open_incoming"
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
-    val baseId = getNotificationId(callId)
     val fullScreenIntent = PendingIntent.getActivity(
       context,
       reqCode(baseId, 0),
@@ -79,22 +130,21 @@ object NotificationHelper {
     val answerIntent = PendingIntent.getBroadcast(
       context,
       reqCode(baseId, 2),
-        Intent(CallActionReceiver.ACTION_ANSWER).apply {
-          putExtra("call_id", callId)
-          putExtra("call_uuid", effectiveCallUuid)
-        },
+      Intent(CallActionReceiver.ACTION_ANSWER).apply {
+        putExtra("call_id", callId)
+        putExtra("call_uuid", effectiveCallUuid)
+      },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
     val declineIntent = PendingIntent.getBroadcast(
       context,
       reqCode(baseId, 3),
-        Intent(CallActionReceiver.ACTION_DECLINE).apply {
-          putExtra("call_id", callId)
-          putExtra("call_uuid", effectiveCallUuid)
-        },
+      Intent(CallActionReceiver.ACTION_DECLINE).apply {
+        putExtra("call_id", callId)
+        putExtra("call_uuid", effectiveCallUuid)
+      },
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
     )
-    val keyguardLocked = shouldUseFullScreenIntent(context)
     val callerPerson = Person.Builder()
       .setName(displayName ?: from)
       .setImportant(true)
@@ -126,8 +176,7 @@ object NotificationHelper {
       builder
         .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)
         .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declineIntent)
-    }
-    if (usedCallStyle) {
+    } else {
       builder.setStyle(
         NotificationCompat.CallStyle.forIncomingCall(
           callerPerson,
@@ -136,19 +185,22 @@ object NotificationHelper {
         )
       )
     }
-
-    val notification = builder.build()
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && isRinging) {
-      notification.flags = notification.flags or Notification.FLAG_INSISTENT
-    }
-    if (BuildConfig.DEBUG) {
-      Log.d(
-        "NotificationHelper",
-        "notify baseId=$baseId call_id=$callId call_uuid=$effectiveCallUuid isRinging=$isRinging keyguardLocked=$keyguardLocked api=${Build.VERSION.SDK_INT} callStyle=$usedCallStyle",
-      )
-    }
-    notificationManager.notify(getNotificationId(callId), notification)
+    return IncomingNotificationMeta(
+      builder = builder,
+      baseId = baseId,
+      effectiveCallUuid = effectiveCallUuid,
+      keyguardLocked = keyguardLocked,
+      usedCallStyle = usedCallStyle
+    )
   }
+
+  private data class IncomingNotificationMeta(
+    val builder: NotificationCompat.Builder,
+    val baseId: Int,
+    val effectiveCallUuid: String,
+    val keyguardLocked: Boolean,
+    val usedCallStyle: Boolean
+  )
 
   private fun mainIntent(context: Context, callId: String, from: String, displayName: String?): Intent {
     return Intent(context, MainActivity::class.java).apply {

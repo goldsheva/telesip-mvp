@@ -750,6 +750,7 @@ class CallNotifier extends Notifier<CallState> {
       if (kDebugMode) {
         debugPrint('[CALLS_NOTIF] cancelIncoming ids=$ids');
       }
+      await _maybeUpdateNotificationToNotRinging(callId);
       await _cancelIncomingNotificationsForCall(callId);
     }
     if (clearPendingAction) {
@@ -839,6 +840,86 @@ class CallNotifier extends Notifier<CallState> {
       }
     }
     return null;
+  }
+
+  CallInfo? _callInfoForNotification(String callId) {
+    final baseInfo = state.calls[callId];
+    if (baseInfo != null) return baseInfo;
+    final localId = _sipToLocalCallId.containsKey(callId)
+        ? _sipToLocalCallId[callId]!
+        : callId;
+    final localInfo = state.calls[localId];
+    if (localInfo != null) return localInfo;
+    final sipId = _sipIdForLocal(localId);
+    if (sipId != null) {
+      return state.calls[sipId];
+    }
+    return null;
+  }
+
+  Future<void> _maybeUpdateNotificationToNotRinging(String callId) async {
+    final info = _callInfoForNotification(callId);
+    if (info == null) return;
+    String? payloadFrom;
+    String? payloadDisplayName;
+    String? payloadCallId;
+    String? payloadCallUuid;
+    try {
+      final pending = await FcmStorage.readPendingIncomingHint();
+      final payload = pending == null
+          ? null
+          : pending['payload'] as Map<String, dynamic>?;
+      if (payload == null) return;
+      final rawFrom = payload['from'];
+      if (rawFrom == null) return;
+      payloadFrom = rawFrom.toString().trim();
+      final rawDisplay = payload['display_name'];
+      if (rawDisplay != null) {
+        payloadDisplayName = rawDisplay.toString().trim();
+      }
+      final rawCallId = payload['call_id'];
+      if (rawCallId != null) {
+        payloadCallId = rawCallId.toString();
+      }
+      final rawCallUuid = payload['call_uuid'];
+      if (rawCallUuid != null) {
+        payloadCallUuid = rawCallUuid.toString();
+      }
+    } catch (_) {
+      // best-effort
+    }
+    if (payloadFrom == null || payloadFrom.isEmpty) return;
+    final matchesCallId =
+        payloadCallId != null &&
+        payloadCallId.isNotEmpty &&
+        _callIdMatches(callId, payloadCallId);
+    final matchesCallUuid =
+        payloadCallUuid != null &&
+        payloadCallUuid.isNotEmpty &&
+        _callIdMatches(callId, payloadCallUuid);
+    if (!matchesCallId && !matchesCallUuid) {
+      return;
+    }
+    String? callUuid;
+    if (matchesCallUuid) {
+      callUuid = payloadCallUuid;
+    } else if (matchesCallId && payloadCallUuid?.isNotEmpty == true) {
+      callUuid = payloadCallUuid;
+    }
+    final normalizedDisplay = (payloadDisplayName?.isNotEmpty == true
+        ? payloadDisplayName
+        : null);
+    try {
+      await IncomingNotificationService.showIncoming(
+        callId: callId,
+        from: payloadFrom,
+        displayName: normalizedDisplay,
+        callUuid: callUuid,
+        isRinging: false,
+      );
+    } catch (_) {
+      // best-effort
+    }
   }
 
   bool get _incomingRegistrationReady =>
