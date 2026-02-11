@@ -166,6 +166,18 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       );
       return;
     }
+    final snoozeUntilMillis =
+        await BatteryOptimizationPromptStorage.readSnoozeUntilMillis();
+    if (snoozeUntilMillis != null) {
+      final until = DateTime.fromMillisecondsSinceEpoch(snoozeUntilMillis);
+      if (now.isBefore(until)) {
+        final remaining = until.difference(now).inSeconds;
+        debugPrint(
+          '[CALLS] battery prompt suppressed: snoozed for $remaining s',
+        );
+        return;
+      }
+    }
     if (!mounted || !_isResumed) return;
     _batteryPromptInFlight = true;
     try {
@@ -179,7 +191,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       if (!mounted || !_isResumed) return;
       debugPrint('[CALLS] showing battery optimization prompt');
       _batteryPromptScheduled = true;
-      await showDialog<void>(
+      final openedSettings = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Allow background calling'),
@@ -189,19 +201,27 @@ class _AuthGateState extends ConsumerState<_AuthGate>
           actions: [
             TextButton(
               onPressed: () {
-                SystemSettings.openIgnoreBatteryOptimizations();
-                Navigator.of(ctx).pop();
+                unawaited(SystemSettings.openIgnoreBatteryOptimizations());
+                Navigator.of(ctx).pop(true);
               },
               child: const Text('Open settings'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
+              onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('Not now'),
             ),
           ],
         ),
       );
-      await BatteryOptimizationPromptStorage.markPromptShown();
+      final opened = openedSettings == true;
+      if (opened) {
+        await BatteryOptimizationPromptStorage.markPromptShown();
+        await BatteryOptimizationPromptStorage.clearSnooze();
+      } else {
+        await BatteryOptimizationPromptStorage.setSnooze(
+          const Duration(days: 7),
+        );
+      }
     } finally {
       _batteryPromptInFlight = false;
       _batteryPromptScheduled = false;
