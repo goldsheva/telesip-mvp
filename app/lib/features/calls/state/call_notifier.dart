@@ -705,12 +705,24 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint('[CALLS] $source aborted: microphone denied');
       return;
     }
-    var call = _engine.getCall(callId);
-    if (call == null && state.activeCallId != null) {
-      call = _engine.getCall(state.activeCallId!);
+    final engineCallId = _resolveEngineCallId(callId);
+    if (engineCallId == null) {
+      debugPrint(
+        '[CALLS] $source unknown call $callId active=${state.activeCallId} '
+        'pending=$_pendingCallId',
+      );
+      return;
     }
+    if (engineCallId != callId) {
+      debugPrint(
+        '[CALLS] $source resolved callId requested=$callId engine=$engineCallId',
+      );
+    }
+    final call = _engine.getCall(engineCallId);
     if (call == null) {
-      debugPrint('[CALLS] $source unknown call $callId');
+      debugPrint(
+        '[CALLS] $source resolved call $engineCallId but engine call missing',
+      );
       return;
     }
     try {
@@ -736,18 +748,45 @@ class CallNotifier extends Notifier<CallState> {
       return;
     }
     var targetCallId = callId;
-    if (_engine.getCall(callId) == null && state.activeCallId != null) {
-      targetCallId = state.activeCallId!;
-    } else if (_engine.getCall(callId) == null && state.activeCallId == null) {
+    final engineCallId = _resolveEngineCallId(callId);
+    if (engineCallId == null) {
       debugPrint(
-        '[CALLS] $source call $callId missing (falling back to callId)',
+        '[CALLS] $source unknown call $callId active=${state.activeCallId} '
+        'pending=$_pendingCallId',
+      );
+      return;
+    }
+    if (engineCallId != callId) {
+      debugPrint(
+        '[CALLS] $source resolved callId requested=$callId engine=$engineCallId',
       );
     }
+    targetCallId = engineCallId;
     try {
       await _engine.hangup(targetCallId);
     } catch (error) {
       debugPrint('[CALLS] $source failed: $error');
     }
+  }
+
+  String? _resolveEngineCallId(String requestedId) {
+    if (_engine.getCall(requestedId) != null) {
+      return requestedId;
+    }
+    final activeId = state.activeCallId;
+    if (activeId != null && _engine.getCall(activeId) != null) {
+      return activeId;
+    }
+    final pendingId = _pendingCallId;
+    if (pendingId != null && _engine.getCall(pendingId) != null) {
+      return pendingId;
+    }
+    for (final entry in _sipToLocalCallId.entries) {
+      if (entry.value == requestedId && _engine.getCall(entry.key) != null) {
+        return entry.key;
+      }
+    }
+    return null;
   }
 
   @override
