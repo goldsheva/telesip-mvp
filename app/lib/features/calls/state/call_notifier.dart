@@ -1314,28 +1314,25 @@ class CallNotifier extends Notifier<CallState> {
   AuthStatus _currentAuthStatus() =>
       ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
 
-  bool _handleScheduleDecision({required ReconnectDecision decision}) {
-    if (decision is ReconnectDecisionSkip) {
-      if (decision.disposed) return true;
+  bool _handleReconnectDecision({
+    required ReconnectDecision decision,
+    required bool treatInFlightAsSilent,
+  }) {
+    if (decision is! ReconnectDecisionSkip) return false;
+    if (decision.disposed) return true;
+    if (decision.inFlight) {
+      if (treatInFlightAsSilent) return true;
       final message = decision.message;
       if (message != null) {
         debugPrint(message);
       }
       return true;
     }
-    return false;
-  }
-
-  bool _handlePerformDecision({required ReconnectDecision decision}) {
-    if (decision is ReconnectDecisionSkip) {
-      if (decision.disposed || decision.inFlight) return true;
-      final message = decision.message;
-      if (message != null) {
-        debugPrint(message);
-      }
-      return true;
+    final message = decision.message;
+    if (message != null) {
+      debugPrint(message);
     }
-    return false;
+    return true;
   }
 
   void _scheduleReconnect(String reason) {
@@ -1352,7 +1349,12 @@ class CallNotifier extends Notifier<CallState> {
       hasActiveCall: _hasActiveCall,
       reconnectInFlight: _reconnectInFlight,
     );
-    if (_handleScheduleDecision(decision: decision)) return;
+    if (_handleReconnectDecision(
+      decision: decision,
+      treatInFlightAsSilent: false,
+    )) {
+      return;
+    }
     _reconnectScheduler.cancel();
     final delay = _reconnectScheduler.currentDelay;
     final attemptNumber = _reconnectScheduler.currentAttemptNumber;
@@ -1392,7 +1394,10 @@ class CallNotifier extends Notifier<CallState> {
       hasActiveCall: _hasActiveCall,
       authenticated: authStatus == AuthStatus.authenticated,
     );
-    if (_handlePerformDecision(decision: performDecision)) {
+    if (_handleReconnectDecision(
+      decision: performDecision,
+      treatInFlightAsSilent: true,
+    )) {
       return;
     }
     final reconnectUser = _lastKnownUser ?? _incomingUser;
