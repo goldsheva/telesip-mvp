@@ -1,6 +1,8 @@
 import 'dart:async';
 
-class CallReconnectScheduler {
+import 'call_reconnect_scheduler_api.dart';
+
+class CallReconnectScheduler implements CallReconnectSchedulerApi {
   CallReconnectScheduler({
     required this.isDisposed,
     required this.backoffDelays,
@@ -12,6 +14,7 @@ class CallReconnectScheduler {
   Timer? _reconnectTimer;
   int _backoffIndex = 0;
 
+  @override
   int get backoffIndex => _backoffIndex;
   bool get hasScheduledTimer => _reconnectTimer != null;
 
@@ -20,22 +23,26 @@ class CallReconnectScheduler {
     return _backoffIndex.clamp(0, backoffDelays.length - 1);
   }
 
+  @override
   Duration get currentDelay {
     if (backoffDelays.isEmpty) return Duration.zero;
     return backoffDelays[currentDelayIndex];
   }
 
+  @override
   int get currentAttemptNumber => currentDelayIndex + 1;
 
   void resetBackoff() {
     _backoffIndex = 0;
   }
 
+  @override
   void cancel() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
   }
 
+  @override
   void schedule({required String reason, required void Function() onFire}) {
     cancel();
     if (isDisposed()) return;

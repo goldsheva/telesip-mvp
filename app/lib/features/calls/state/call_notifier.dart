@@ -31,11 +31,9 @@ import 'call_models.dart';
 import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
-import 'call_reconnect_coordinator.dart';
 import 'call_reconnect_helpers.dart';
-import 'call_reconnect_log.dart';
-import 'call_reconnect_perform_coordinator.dart';
 import 'call_reconnect_scheduler.dart';
+import 'call_reconnect_service.dart';
 import 'call_health_watchdog.dart';
 import 'call_connectivity_snapshot.dart';
 import 'call_auth_listener.dart';
@@ -132,6 +130,7 @@ class CallNotifier extends Notifier<CallState> {
   late final CallReconnectScheduler _reconnectScheduler;
   late final CallHealthWatchdog _healthWatchdog;
   late final CallReconnectExecutor _reconnectExecutor;
+  final CallReconnectService _reconnectService = const CallReconnectService();
   late final CallAuthListener _authListener = CallAuthListener(
     isDisposed: () => _disposed,
   );
@@ -1313,45 +1312,21 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final authStatus = currentAuthStatus(ref);
     final callIdForLogs = activeCallIdForLogs(state.activeCallId);
-    final decision = CallReconnectCoordinator.decideSchedule(
+    _reconnectService.scheduleReconnect(
       reason: reason,
-      authStatusName: authStatus.name,
-      activeCallId: callIdForLogs,
       disposed: _disposed,
-      authenticated: authStatus == AuthStatus.authenticated,
-      online: _lastKnownOnline,
+      authStatus: authStatus,
+      activeCallIdForLogs: callIdForLogs,
+      lastKnownOnline: _lastKnownOnline,
       hasActiveCall: _hasActiveCall,
       reconnectInFlight: _reconnectInFlight,
-    );
-    if (handleReconnectDecision(
-      decision: decision,
-      treatInFlightAsSilent: false,
+      isRegistered: _isRegistered,
+      lastNetworkActivityAt: _lastNetworkActivityAt,
+      reconnectScheduler: _reconnectScheduler,
       log: debugPrint,
-    )) {
-      return;
-    }
-    _reconnectScheduler.cancel();
-    final delay = _reconnectScheduler.currentDelay;
-    final attemptNumber = _reconnectScheduler.currentAttemptNumber;
-    final lastNetAge = _lastNetworkActivityAt == null
-        ? '<none>'
-        : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
-    debugPrint(
-      CallReconnectLog.scheduleScheduled(
-        reason: reason,
-        attemptNumber: attemptNumber,
-        delayMs: delay.inMilliseconds,
-        online: _lastKnownOnline,
-        authStatus: authStatus.name,
-        registered: _isRegistered,
-        lastNetAge: lastNetAge,
-        backoffIndex: _reconnectScheduler.backoffIndex,
-      ),
-    );
-    debugDumpConnectivityAndSipHealth('scheduleReconnect');
-    _reconnectScheduler.schedule(
-      reason: reason,
+      debugDumpConnectivityAndSipHealth: debugDumpConnectivityAndSipHealth,
       onFire: () => _performReconnect(reason),
+      now: DateTime.now(),
     );
   }
 
@@ -1359,34 +1334,29 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed) return;
     final authStatus = currentAuthStatus(ref);
     final callIdForLogs = activeCallIdForLogs(state.activeCallId);
-    final performDecision = CallReconnectPerformCoordinator.decidePerform(
+    await _reconnectService.performReconnect(
       reason: reason,
-      authStatusName: authStatus.name,
-      activeCallId: callIdForLogs,
       disposed: _disposed,
-      reconnectInFlight: _reconnectInFlight,
-      online: _lastKnownOnline,
+      authStatus: authStatus,
+      activeCallIdForLogs: callIdForLogs,
+      lastKnownOnline: _lastKnownOnline,
       hasActiveCall: _hasActiveCall,
-      authenticated: authStatus == AuthStatus.authenticated,
-    );
-    if (handleReconnectDecision(
-      decision: performDecision,
-      treatInFlightAsSilent: true,
+      reconnectInFlight: _reconnectInFlight,
       log: debugPrint,
-    )) {
-      return;
-    }
-    final reconnectUser = _lastKnownUser ?? _incomingUser;
-    _reconnectInFlight = true;
-    try {
-      await _reconnectExecutor.reconnect(
-        reason: reason,
-        reconnectUser: reconnectUser,
-        ensureRegistered: ensureRegistered,
-      );
-    } finally {
-      _reconnectInFlight = false;
-    }
+      executeReconnect: (executeReason) async {
+        final reconnectUser = _lastKnownUser ?? _incomingUser;
+        _reconnectInFlight = true;
+        try {
+          return await _reconnectExecutor.reconnect(
+            reason: executeReason,
+            reconnectUser: reconnectUser,
+            ensureRegistered: ensureRegistered,
+          );
+        } finally {
+          _reconnectInFlight = false;
+        }
+      },
+    );
   }
 
   void _commit(CallState next, {bool syncFgs = true}) {
