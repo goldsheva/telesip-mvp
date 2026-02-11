@@ -1193,12 +1193,8 @@ class CallNotifier extends Notifier<CallState> {
     if (!kDebugMode) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final activeCall = state.activeCall;
-    final lastNetAge = _lastNetworkActivityAt == null
-        ? '<none>'
-        : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
-    final activeStatus = activeCall?.status;
-    final activeStatusString = (activeStatus ?? '<none>').toString();
+    final lastNetAge = _netAgeString();
+    final activeStatusString = _activeCallStatusString();
     debugPrint(
       CallConnectivitySnapshot.formatShort(
         tag: tag,
@@ -1237,14 +1233,10 @@ class CallNotifier extends Notifier<CallState> {
     if (_disposed || !kDebugMode) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final activeCall = state.activeCall;
-    final lastNetAge = _lastNetworkActivityAt == null
-        ? '<none>'
-        : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
+    final lastNetAge = _netAgeString();
     final healthTimerActive = _healthWatchdog.isRunning;
     final reconnectTimerActive = _reconnectScheduler.hasScheduledTimer;
-    final activeStatus = activeCall?.status;
-    final activeStatusString = (activeStatus ?? '<none>').toString();
+    final activeStatusString = _activeCallStatusString();
     debugPrint(
       CallConnectivitySnapshot.format(
         tag: tag,
@@ -1265,6 +1257,17 @@ class CallNotifier extends Notifier<CallState> {
         activeCallStatus: activeStatusString,
       ),
     );
+  }
+
+  String _activeCallStatusString() {
+    final activeStatus = state.activeCall?.status;
+    return (activeStatus ?? '<none>').toString();
+  }
+
+  String _netAgeString() {
+    final lastActivity = _lastNetworkActivityAt;
+    if (lastActivity == null) return '<none>';
+    return '${DateTime.now().difference(lastActivity).inSeconds}s';
   }
 
   void _maybeStartHealthWatchdog() {
