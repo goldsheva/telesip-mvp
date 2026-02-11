@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -38,6 +39,7 @@ class MainActivity : FlutterFragmentActivity() {
         when (call.method) {
           "openIgnoreBatteryOptimizations" -> {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+              Log.d("SystemSettings", "Battery optimization prompt not needed pre-M")
               result.success(null)
               return@setMethodCallHandler
             }
@@ -45,14 +47,53 @@ class MainActivity : FlutterFragmentActivity() {
               val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
               intent.data = Uri.parse("package:$packageName")
               startActivity(intent)
+              Log.d("SystemSettings", "Opened ignore battery optimizations intent")
               result.success(null)
             } catch (error: Exception) {
+              Log.d("SystemSettings", "Primary battery intent failed: $error")
               try {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                Log.d("SystemSettings", "Opened legacy battery optimization settings")
                 result.success(null)
               } catch (fallback: Exception) {
-                result.error("UNAVAILABLE", "Battery optimizations intent failed", null)
+                Log.d("SystemSettings", "Legacy battery intent failed: $fallback")
+                try {
+                  val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                  appSettings.data = Uri.fromParts("package", packageName, null)
+                startActivity(appSettings)
+                Log.d(
+                  "SystemSettings",
+                  "Opened APPLICATION_DETAILS_SETTINGS fallback",
+                )
+                  result.success(null)
+                } catch (finalFallback: Exception) {
+                  Log.d("SystemSettings", "App settings fallback failed: $finalFallback")
+                  result.error(
+                    "UNAVAILABLE",
+                    "Battery optimizations intent failed",
+                    null,
+                  )
+                }
               }
+            }
+          }
+          "openAppSettings" -> {
+            try {
+              val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+              appSettings.data = Uri.fromParts("package", packageName, null)
+              startActivity(appSettings)
+            Log.d(
+              "SystemSettings",
+              "Opened APPLICATION_DETAILS_SETTINGS via openAppSettings",
+            )
+              result.success(null)
+            } catch (error: Exception) {
+              Log.d("SystemSettings", "App settings fallback failed: $error")
+              result.error(
+                "UNAVAILABLE",
+                "App settings fallback failed",
+                null,
+              )
             }
           }
           "isIgnoringBatteryOptimizations" -> {

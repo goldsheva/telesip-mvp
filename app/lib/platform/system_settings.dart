@@ -7,6 +7,7 @@ class SystemSettings {
   static Future<void> openIgnoreBatteryOptimizations() async {
     try {
       await _channel.invokeMethod('openIgnoreBatteryOptimizations');
+      debugPrint('[SYSTEM] ignore battery optimizations intent triggered');
     } catch (error) {
       debugPrint('Battery optimization settings unavailable: $error');
     }

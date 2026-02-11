@@ -145,6 +145,17 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       debugPrint('[CALLS] battery optimization prompt already shown, skipping');
       return;
     }
+    final callState = ref.read(callControllerProvider);
+    final activeId = callState.activeCallId;
+    final activeCall = activeId != null ? callState.calls[activeId] : null;
+    if (activeId != null &&
+        activeCall != null &&
+        activeCall.status != CallStatus.ended) {
+      debugPrint(
+        '[CALLS] battery prompt suppressed: call in progress activeId=$activeId status=${activeCall.status.name}',
+      );
+      return;
+    }
     if (!mounted || !_isResumed) return;
     if (_batteryPromptInFlight) return;
     _batteryPromptInFlight = true;
