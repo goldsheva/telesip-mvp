@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -32,6 +31,7 @@ import 'call_models.dart';
 import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
+import 'call_reconnect_scheduler.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';
@@ -80,9 +80,7 @@ class CallNotifier extends Notifier<CallState> {
   DateTime? _lastNetworkActivityAt;
   DateTime? _healthStartedAt;
   DateTime? _bootstrapCompletedAt;
-  Timer? _reconnectTimer;
   bool _reconnectInFlight = false;
-  int _reconnectBackoffIndex = 0;
   Timer? _healthCheckTimer;
   bool _isRegistered = false;
   AuthStatus? _lastAuthStatus;
@@ -122,6 +120,7 @@ class CallNotifier extends Notifier<CallState> {
   late final CallNotificationCleanup _notifCleanup;
   late final CallIncomingHintHandler _incomingHintHandler;
   late final CallConnectivityListener _connectivityListener;
+  late final CallReconnectScheduler _reconnectScheduler;
   bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
@@ -933,6 +932,10 @@ class CallNotifier extends Notifier<CallState> {
       isBusy: () => isBusy,
       log: (message) => debugPrint(message),
     );
+    _reconnectScheduler = CallReconnectScheduler(
+      isDisposed: () => _disposed,
+      backoffDelays: _backoffDelays,
+    );
     final initialStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     _lastAuthStatus ??= initialStatus;
@@ -1024,7 +1027,7 @@ class CallNotifier extends Notifier<CallState> {
       _disposed = true;
       _eventSubscription?.close();
       _connectivityListener.dispose();
-      _reconnectTimer?.cancel();
+      _reconnectScheduler.cancel();
       _healthCheckTimer?.cancel();
       _cancelDialTimeout();
       _cancelRegistrationErrorTimer();
@@ -1135,10 +1138,9 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint('[CALLS_CONN] net offline');
       _lastKnownOnline = false;
       _lastOnlineHandledAt = null;
-      _reconnectTimer?.cancel();
-      _reconnectTimer = null;
+      _reconnectScheduler.cancel();
       _reconnectInFlight = false;
-      _reconnectBackoffIndex = 0;
+      _reconnectScheduler.resetBackoff();
       _lastNetworkActivityAt = null;
       _lastSipRegisteredAt = null;
       _stopHealthWatchdog();
@@ -1188,7 +1190,7 @@ class CallNotifier extends Notifier<CallState> {
       'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
       'active=${state.activeCallId ?? '<none>'} '
       'status=${activeCall?.status ?? '<none>'} '
-      'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex '
+      'lastNetAge=$lastNetAge backoffIndex=${_reconnectScheduler.backoffIndex} '
       'registeredAt=${_lastSipRegisteredAt != null}',
     );
   }
@@ -1219,7 +1221,7 @@ class CallNotifier extends Notifier<CallState> {
         ? '<none>'
         : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
     final healthTimerActive = _healthCheckTimer != null;
-    final reconnectTimerActive = _reconnectTimer != null;
+    final reconnectTimerActive = _reconnectScheduler.hasScheduledTimer;
     debugPrint(
       '[CALLS_CONN] $tag authStatus=${authStatus.name} online=$_lastKnownOnline '
       'scheduled=$_bootstrapScheduled done=$_bootstrapDone inFlight=$_bootstrapInFlight '
@@ -1227,7 +1229,7 @@ class CallNotifier extends Notifier<CallState> {
       'lastRegistrationState=${_lastRegistrationState.name} '
       'lastNetAge=$lastNetAge healthTimer=$healthTimerActive '
       'reconnectTimer=$reconnectTimerActive reconnectInFlight=$_reconnectInFlight '
-      'backoffIndex=$_reconnectBackoffIndex '
+      'backoffIndex=${_reconnectScheduler.backoffIndex} '
       'active=${state.activeCallId ?? '<none>'} status=${activeCall?.status ?? '<none>'}',
     );
   }
@@ -1301,10 +1303,9 @@ class CallNotifier extends Notifier<CallState> {
       );
       return;
     }
-    _reconnectTimer?.cancel();
-    final idx = math.min(_reconnectBackoffIndex, _backoffDelays.length - 1);
-    final delay = _backoffDelays[idx];
-    final attemptNumber = idx + 1;
+    _reconnectScheduler.cancel();
+    final delay = _reconnectScheduler.currentDelay;
+    final attemptNumber = _reconnectScheduler.currentAttemptNumber;
     final lastNetAge = _lastNetworkActivityAt == null
         ? '<none>'
         : '${DateTime.now().difference(_lastNetworkActivityAt!).inSeconds}s';
@@ -1312,19 +1313,17 @@ class CallNotifier extends Notifier<CallState> {
       '[CALLS_CONN] scheduleReconnect reason=$reason attempt=$attemptNumber '
       'delayMs=${delay.inMilliseconds} online=$_lastKnownOnline '
       'authStatus=${authStatus.name} registered=$_isRegistered '
-      'lastNetAge=$lastNetAge backoffIndex=$_reconnectBackoffIndex',
+      'lastNetAge=$lastNetAge backoffIndex=${_reconnectScheduler.backoffIndex}',
     );
     debugDumpConnectivityAndSipHealth('scheduleReconnect');
-    _reconnectTimer = Timer(delay, () => _performReconnect(reason));
-    _reconnectBackoffIndex = math.min(
-      _reconnectBackoffIndex + 1,
-      _backoffDelays.length - 1,
+    _reconnectScheduler.schedule(
+      reason: reason,
+      onFire: () => _performReconnect(reason),
     );
   }
 
   Future<void> _performReconnect(String reason) async {
     if (_disposed) return;
-    _reconnectTimer = null;
     if (_reconnectInFlight) return;
     if (!_lastKnownOnline) {
       debugPrint('[CALLS_CONN] reconnect skip reason=$reason online=false');
@@ -1430,13 +1429,12 @@ class CallNotifier extends Notifier<CallState> {
         _lastNetworkActivityAt = now;
         if (registrationState == SipRegistrationState.registered) {
           _lastSipRegisteredAt = now;
-          _reconnectBackoffIndex = 0;
-          if (_reconnectTimer != null || _reconnectInFlight) {
+          _reconnectScheduler.resetBackoff();
+          if (_reconnectScheduler.hasScheduledTimer || _reconnectInFlight) {
             debugPrint(
               '[CALLS_CONN] reconnect cleared due to registration success',
             );
-            _reconnectTimer?.cancel();
-            _reconnectTimer = null;
+            _reconnectScheduler.cancel();
             _reconnectInFlight = false;
           }
           _stopHealthWatchdog();
