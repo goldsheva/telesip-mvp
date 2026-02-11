@@ -20,6 +20,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final call = state.calls[widget.callId];
     final isMuted = state.isMuted;
     final isSpeakerOn = state.audioRoute == AudioRoute.speaker;
+    final availableRoutes = state.availableAudioRoutes;
+    final speakerAvailable = availableRoutes.contains(AudioRoute.speaker);
+    final bluetoothAvailable = availableRoutes.contains(AudioRoute.bluetooth);
+    final earpieceAvailable = availableRoutes.contains(AudioRoute.earpiece);
     final activeCallId = state.activeCallId;
     if (call == null || call.status == CallStatus.ended) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -121,8 +125,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   ],
                 ),
               ] else ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 16,
+                  runSpacing: 12,
                   children: [
                     _buildToggle(
                       context,
@@ -131,18 +137,41 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       active: isMuted,
                       onPressed: () => notifier.setCallMuted(!isMuted),
                     ),
-                    _buildToggle(
-                      context,
-                      icon: Icons.volume_up,
-                      label: isSpeakerOn ? 'Speaker on' : 'Speaker off',
-                      active: isSpeakerOn,
-                      onPressed: () {
-                        final desired = !isSpeakerOn;
-                        notifier.setCallAudioRoute(
-                          desired ? AudioRoute.speaker : AudioRoute.earpiece,
-                        );
-                      },
-                    ),
+                    if (speakerAvailable)
+                      _buildToggle(
+                        context,
+                        icon: Icons.volume_up,
+                        label: isSpeakerOn ? 'Speaker on' : 'Speaker off',
+                        active: isSpeakerOn,
+                        onPressed: () {
+                          final desired = !isSpeakerOn;
+                          final fallbackRoute = earpieceAvailable
+                              ? AudioRoute.earpiece
+                              : AudioRoute.systemDefault;
+                          notifier.setCallAudioRoute(
+                            desired ? AudioRoute.speaker : fallbackRoute,
+                          );
+                        },
+                      ),
+                    if (bluetoothAvailable)
+                      _buildToggle(
+                        context,
+                        icon: Icons.bluetooth,
+                        label: state.audioRoute == AudioRoute.bluetooth
+                            ? 'Bluetooth on'
+                            : 'Bluetooth off',
+                        active: state.audioRoute == AudioRoute.bluetooth,
+                        onPressed: () {
+                          final fallbackRoute = earpieceAvailable
+                              ? AudioRoute.earpiece
+                              : AudioRoute.systemDefault;
+                          final isBluetoothOn =
+                              state.audioRoute == AudioRoute.bluetooth;
+                          notifier.setCallAudioRoute(
+                            isBluetoothOn ? fallbackRoute : AudioRoute.bluetooth,
+                          );
+                        },
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -172,7 +201,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     required bool active,
     required VoidCallback onPressed,
   }) {
-    return Expanded(
+    return SizedBox(
+      width: 140,
       child: OutlinedButton.icon(
         icon: Icon(icon, color: active ? Colors.greenAccent : Colors.white),
         label: Text(

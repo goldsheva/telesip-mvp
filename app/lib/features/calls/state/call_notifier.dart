@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -107,6 +108,7 @@ class CallState {
     required this.isRegistered,
     required this.isMuted,
     required this.audioRoute,
+    required this.availableAudioRoutes,
   });
 
   factory CallState.initial() => CallState(
@@ -116,6 +118,9 @@ class CallState {
     isRegistered: false,
     isMuted: false,
     audioRoute: AudioRoute.systemDefault,
+    availableAudioRoutes: const {
+      AudioRoute.systemDefault,
+    },
   );
 
   final Map<String, CallInfo> calls;
@@ -125,6 +130,7 @@ class CallState {
   final bool isRegistered;
   final bool isMuted;
   final AudioRoute audioRoute;
+  final Set<AudioRoute> availableAudioRoutes;
 
   CallInfo? get activeCall => activeCallId != null ? calls[activeCallId] : null;
 
@@ -139,6 +145,7 @@ class CallState {
     bool? isRegistered,
     bool? isMuted,
     AudioRoute? audioRoute,
+    Set<AudioRoute>? availableAudioRoutes,
   }) {
     return CallState(
       calls: calls ?? this.calls,
@@ -148,6 +155,7 @@ class CallState {
       isRegistered: isRegistered ?? this.isRegistered,
       isMuted: isMuted ?? this.isMuted,
       audioRoute: audioRoute ?? this.audioRoute,
+      availableAudioRoutes: availableAudioRoutes ?? this.availableAudioRoutes,
     );
   }
 }
@@ -1512,8 +1520,16 @@ class CallNotifier extends Notifier<CallState> {
     try {
       final info = await AudioRouteService.getRouteInfo();
       if (info == null) return;
-      if (info.current != state.audioRoute) {
-        _commit(state.copyWith(audioRoute: info.current), syncFgs: false);
+      final availableRoutes = Set<AudioRoute>.from(info.available);
+      final availableChanged = !setEquals(availableRoutes, state.availableAudioRoutes);
+      if (info.current != state.audioRoute || availableChanged) {
+        _commit(
+          state.copyWith(
+            audioRoute: info.current,
+            availableAudioRoutes: availableRoutes,
+          ),
+          syncFgs: false,
+        );
       }
     } catch (error) {
       debugPrint('[CALLS] refreshAudioRoute failed: $error');
