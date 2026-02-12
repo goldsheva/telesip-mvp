@@ -124,13 +124,16 @@ class CallNotifier extends Notifier<CallState> {
   bool _scoActive = false;
   _CallPhase _phase = _CallPhase.idle;
   int _startCallSeq = 0;
-  bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
   bool _foregroundNeedsMicrophone = false;
   bool _microphonePermissionGranted = false;
   int _fgsSeq = 0;
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
+  bool _bootstrapInFlight = false;
+  Completer<void>? _bootstrapCompleter;
+  bool _incomingPipelineInFlight = false;
+  String? _pendingIncomingPipelineReason;
   late final CallNotificationCleanup _notifCleanup;
   late final CallIncomingHintHandler _incomingHintHandler;
   late final CallConnectivityListener _connectivityListener;
@@ -145,7 +148,6 @@ class CallNotifier extends Notifier<CallState> {
   late final CallAuthListener _authListener = CallAuthListener(
     isDisposed: () => _disposed,
   );
-  bool _bootstrapInFlight = false;
   bool _hintForegroundGuard = false;
   DateTime? _lastAudioRouteRefresh;
   bool _audioRouteRefreshInFlight = false;
@@ -1248,37 +1250,38 @@ class CallNotifier extends Notifier<CallState> {
     if (!_bootstrapScheduled) {
       _bootstrapScheduled = true;
       final bootstrapSnapshot = CallState.initial();
-      Future.microtask(() => _bootstrapIfNeeded(bootstrapSnapshot));
-      if (!_pendingActionsDrained) {
-        _pendingActionsDrained = true;
-        Future.microtask(() => _drainPendingCallActions());
-      }
+      Future.microtask(() async => await _bootstrapIfNeeded(bootstrapSnapshot));
       return bootstrapSnapshot;
-    }
-    if (!_pendingActionsDrained) {
-      _pendingActionsDrained = true;
-      unawaited(_drainPendingCallActions());
     }
     return CallState.initial();
   }
 
-  void _bootstrapIfNeeded(CallState snapshot) {
-    _bootstrapService.bootstrapIfNeeded(
-      isDisposed: () => _disposed,
-      debugMode: kDebugMode,
-      bootstrapDone: _bootstrapDone,
-      bootstrapInFlight: _bootstrapInFlight,
-      bootstrapScheduled: _bootstrapScheduled,
-      snapshot: snapshot,
-      debugPrint: debugPrint,
-      prerequisitesSkipReason: () => _bootstrapPrerequisitesSkipReason(),
-      setBootstrapInFlight: (value) => _bootstrapInFlight = value,
-      markBootstrapDone: () => _bootstrapDone = true,
-      setBootstrapCompletedAt: (date) => _bootstrapCompletedAt = date,
-      syncForegroundServiceState: _syncForegroundServiceState,
-      handleIncomingCallHint: handleIncomingCallHintIfAny,
-      maybeStartHealthWatchdog: _maybeStartHealthWatchdog,
-    );
+  Future<void> _bootstrapIfNeeded(CallState snapshot) async {
+    try {
+      _bootstrapService.bootstrapIfNeeded(
+        isDisposed: () => _disposed,
+        debugMode: kDebugMode,
+        bootstrapDone: _bootstrapDone,
+        bootstrapInFlight: _bootstrapInFlight,
+        bootstrapScheduled: _bootstrapScheduled,
+        snapshot: snapshot,
+        debugPrint: debugPrint,
+        prerequisitesSkipReason: () => _bootstrapPrerequisitesSkipReason(),
+        setBootstrapInFlight: (value) => _bootstrapInFlight = value,
+        markBootstrapDone: () {
+          _bootstrapDone = true;
+          _completeBootstrapWaiters();
+        },
+        setBootstrapCompletedAt: (date) => _bootstrapCompletedAt = date,
+        syncForegroundServiceState: _syncForegroundServiceState,
+        handleIncomingCallHint: handleIncomingCallHintIfAny,
+        maybeStartHealthWatchdog: _maybeStartHealthWatchdog,
+      );
+    } finally {
+      if (_disposed) {
+        _completeBootstrapWaiters();
+      }
+    }
   }
 
   void ensureBootstrapped(String reason) {
@@ -1293,6 +1296,9 @@ class CallNotifier extends Notifier<CallState> {
       );
     }
     if (_bootstrapDone) return;
+    if (!_bootstrapInFlight) {
+      _bootstrapCompleter ??= Completer<void>();
+    }
     if (_bootstrapInFlight) {
       if (kDebugMode) {
         debugPrint(
@@ -1304,10 +1310,73 @@ class CallNotifier extends Notifier<CallState> {
     if (!_bootstrapScheduled) {
       _bootstrapScheduled = true;
       final snapshot = state;
-      Future.microtask(() => _bootstrapIfNeeded(snapshot));
+      Future.microtask(() async => await _bootstrapIfNeeded(snapshot));
       return;
     }
-    _bootstrapIfNeeded(state);
+    unawaited(_bootstrapIfNeeded(state));
+  }
+
+  Future<void> runIncomingPipeline(String reason) async {
+    if (_disposed) return;
+    if (_incomingPipelineInFlight) {
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS] incomingPipeline skip (in-flight) newReason=$reason',
+        );
+      }
+      _pendingIncomingPipelineReason = reason;
+      return;
+    }
+    _incomingPipelineInFlight = true;
+    if (kDebugMode) {
+      debugPrint('[CALLS] incomingPipeline start reason=$reason');
+    }
+    try {
+      ensureBootstrapped('pipeline-$reason');
+      await _waitForBootstrap();
+      if (!_bootstrapDone) {
+        final skipReason = _bootstrapPrerequisitesSkipReason();
+        debugPrint(
+          '[CALLS] incomingPipeline abort: bootstrap not ready reason=${skipReason ?? "<unknown>"}',
+        );
+        return;
+      }
+      await handleIncomingCallHintIfAny();
+      await _drainPendingCallActions();
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[CALLS] incomingPipeline failure reason=$reason error=$error\n$stackTrace',
+      );
+    } finally {
+      _incomingPipelineInFlight = false;
+      if (kDebugMode) {
+        debugPrint('[CALLS] incomingPipeline end reason=$reason');
+      }
+      final pendingReason = _pendingIncomingPipelineReason;
+      _pendingIncomingPipelineReason = null;
+      if (pendingReason != null && !_disposed) {
+        unawaited(runIncomingPipeline(pendingReason));
+      }
+    }
+  }
+
+  Future<void> _waitForBootstrap() async {
+    if (_bootstrapDone) {
+      return;
+    }
+    _bootstrapCompleter ??= Completer<void>();
+    try {
+      await _bootstrapCompleter!.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
+      );
+    } catch (_) {}
+    if (!_bootstrapDone) {
+      final skipReason = _bootstrapPrerequisitesSkipReason();
+      debugPrint(
+        '[CALLS] waitForBootstrap timed out skipReason=${skipReason ?? "<unknown>"}',
+      );
+    }
   }
 
   String? _bootstrapPrerequisitesSkipReason() {
@@ -2222,6 +2291,14 @@ class CallNotifier extends Notifier<CallState> {
       answerFromNotification: answerFromNotification,
       declineFromNotification: declineFromNotification,
     );
+  }
+
+  void _completeBootstrapWaiters() {
+    final completer = _bootstrapCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+    _bootstrapCompleter = null;
   }
 
   bool _isPhaseEventAllowed(CallStatus status) {

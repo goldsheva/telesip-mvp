@@ -157,6 +157,11 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       _batteryPromptInFlight = false;
       unawaited(_incomingActivityCoordinator.processIncomingActivity());
       _ensureCallsBootstrapped('app-resume');
+      unawaited(
+        ref
+            .read(callControllerProvider.notifier)
+            .runIncomingPipeline('app-resume'),
+      );
       unawaited(_maybeAskBatteryOptimizations());
     } else {
       _batteryPromptScheduled = false;
@@ -347,8 +352,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       try {
         debugPrint('[INCOMING][DEBUG] debugCheckPendingIncomingHint requested');
         final controller = ref.read(callControllerProvider.notifier);
-        controller.ensureBootstrapped('debug-check-pending-hint');
-        await controller.handleIncomingCallHintIfAny();
+        await controller.runIncomingPipeline('debug-check-pending-hint');
         debugPrint('[INCOMING][DEBUG] debugCheckPendingIncomingHint handled');
       } catch (error, stackTrace) {
         debugPrint(
