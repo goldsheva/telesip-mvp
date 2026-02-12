@@ -36,14 +36,11 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false
 
-  image_path: assets/icons/app_icon.png
-
-  adaptive_icon_foreground: assets/icons/app_icon_foreground.png
-  adaptive_icon_background: assets/icons/app_icon_background.png
-
-  remove_alpha_ios: true
+  adaptive_icon_background: assets/icons/sip_modern_adaptive_background.png
+  adaptive_icon_foreground: assets/icons/sip_modern_adaptive_foreground.png
+  image_path_android: assets/icons/sip_modern_legacy_icon.png
 
 flutter:
   uses-material-design: true
