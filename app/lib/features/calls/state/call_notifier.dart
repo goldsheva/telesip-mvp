@@ -27,6 +27,10 @@ import 'package:app/sip/sip_engine.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 
+export 'call_connectivity.dart';
+export 'call_notifications.dart';
+export 'call_models.dart';
+
 import 'call_models.dart';
 import 'call_sip_registration_handler.dart';
 import 'call_notifications.dart';
@@ -41,9 +45,6 @@ import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
 import 'call_reconnect_executor.dart';
 import 'call_sip_snapshot_builder.dart';
-
-export 'call_models.dart';
-export 'call_incoming_hint_handler.dart';
 
 CallNotifier? _globalCallNotifierInstance;
 

@@ -5,6 +5,10 @@ import 'package:app/services/incoming_notification_service.dart';
 
 import 'call_models.dart';
 
+// -----------------------------------------------------------------------------
+// Notification cleanup helpers
+// -----------------------------------------------------------------------------
+
 class CallNotificationCleanup {
   CallNotificationCleanup({
     required this.getState,
@@ -204,6 +208,10 @@ class CallNotificationCleanup {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Notification cleanup result
+// -----------------------------------------------------------------------------
+
 class CallNotificationCleanupResult {
   const CallNotificationCleanupResult({
     required this.clearedAction,
@@ -214,6 +222,11 @@ class CallNotificationCleanupResult {
   final bool clearedHint;
 }
 
+// -----------------------------------------------------------------------------
+// Pending notification payload parsing helpers
+// -----------------------------------------------------------------------------
+
+@visibleForTesting
 class PendingCallAction {
   const PendingCallAction({this.callId});
 
@@ -226,6 +239,7 @@ class PendingCallAction {
   }
 }
 
+@visibleForTesting
 class PendingIncomingHint {
   const PendingIncomingHint({
     this.callId,

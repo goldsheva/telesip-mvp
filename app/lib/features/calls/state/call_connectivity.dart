@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:app/services/network_connectivity_service.dart';
 
+// -----------------------------------------------------------------------------
+// Connectivity listener
+// -----------------------------------------------------------------------------
+
 class CallConnectivityListener {
   CallConnectivityListener({
     required this.connectivityService,
@@ -38,6 +42,10 @@ class CallConnectivityListener {
     _subscription = null;
   }
 }
+
+// -----------------------------------------------------------------------------
+// Connectivity snapshot formatter
+// -----------------------------------------------------------------------------
 
 class CallConnectivitySnapshot {
   static String format({
@@ -102,6 +110,10 @@ class CallConnectivitySnapshot {
         'registeredAt=$hasSipRegisteredAt';
   }
 }
+
+// -----------------------------------------------------------------------------
+// Connectivity debug dumper
+// -----------------------------------------------------------------------------
 
 class CallConnectivityDebugDumper {
   const CallConnectivityDebugDumper();
