@@ -11,6 +11,7 @@ import android.os.Looper
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import androidx.core.content.ContextCompat
 
 class CallsAudioRouteBridge(
   private val context: Context,
@@ -62,7 +63,12 @@ class CallsAudioRouteBridge(
       override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
         handler.removeCallbacks(emitRunnable)
-        context.registerReceiver(receiver, createIntentFilter())
+        ContextCompat.registerReceiver(
+          context,
+          receiver,
+          createIntentFilter(),
+          ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         emitRouteInfoIfNeeded(initial = true)
       }
 

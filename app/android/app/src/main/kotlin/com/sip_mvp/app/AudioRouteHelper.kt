@@ -58,18 +58,22 @@ object AudioRouteHelper {
       "speaker" -> {
         audioManager.isSpeakerphoneOn = true
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        AudioManagerHelper.stopBluetoothSco(context)
       }
       "earpiece", ROUTE_SYSTEM -> {
         audioManager.isSpeakerphoneOn = false
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        AudioManagerHelper.stopBluetoothSco(context)
       }
       "wiredHeadset" -> {
         audioManager.isSpeakerphoneOn = false
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        AudioManagerHelper.stopBluetoothSco(context)
       }
       "bluetooth" -> {
         audioManager.isSpeakerphoneOn = false
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        AudioManagerHelper.startBluetoothSco(context)
       }
     }
   }
