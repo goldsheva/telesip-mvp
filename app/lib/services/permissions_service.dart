@@ -47,12 +47,13 @@ class PermissionsService {
     log('[PermissionsService] ${permission.value} queued');
     final future = _serial(() async {
       log('[PermissionsService] ${permission.value} start');
-      final status = await permission.request();
-      log('[PermissionsService] ${permission.value} done status=$status');
-      if (status.isPermanentlyDenied) {
+      await permission.request();
+      final after = await permission.status;
+      log('[PermissionsService] ${permission.value} done status=$after');
+      if (after.isPermanentlyDenied) {
         await openAppSettings();
       }
-      return status;
+      return after;
     });
     _pendingRequests[permission] = future;
     future.whenComplete(() => _pendingRequests.remove(permission));
