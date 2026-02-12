@@ -212,6 +212,7 @@ class MainActivity : FlutterFragmentActivity() {
     releaseIncomingChannel?.setMethodCallHandler { call, result ->
       when (call.method) {
         "refreshIncomingNotification" -> handleReleaseNotificationRefresh(result)
+        "clearPendingIncomingHint" -> handleReleasePendingHintClear(result)
         else -> result.notImplemented()
       }
     }
@@ -328,6 +329,17 @@ class MainActivity : FlutterFragmentActivity() {
     } catch (error: Exception) {
       Log.w("IncomingHint", "release refresh notification failed: $error")
       result.error("RELEASE_REFRESH_FAILED", error.message, null)
+    }
+  }
+
+  private fun handleReleasePendingHintClear(result: MethodChannel.Result) {
+    try {
+      PendingIncomingHintWriter.clear(applicationContext)
+      IncomingCallNotificationHelper.cancelIncomingNotification(this)
+      result.success(null)
+    } catch (error: Exception) {
+      Log.w("IncomingHint", "clear pending hint failed: $error")
+      result.error("CLEAR_PENDING_HINT_FAILED", error.message, null)
     }
   }
 

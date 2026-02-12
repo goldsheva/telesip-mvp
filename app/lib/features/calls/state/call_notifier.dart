@@ -402,7 +402,7 @@ class CallNotifier extends Notifier<CallState> {
     return result.snapshot;
   }
 
-  Future<void> handleIncomingCallHintIfAny() {
+  Future<bool> handleIncomingCallHintIfAny() {
     return _incomingHintHandler.handleIncomingCallHintIfAny();
   }
 
@@ -1342,7 +1342,7 @@ class CallNotifier extends Notifier<CallState> {
         await IncomingNotificationService.refreshPendingIncomingNotification();
         return;
       }
-      await handleIncomingCallHintIfAny();
+      final hintHandled = await handleIncomingCallHintIfAny();
       final activeCall = state.activeCall;
       if (activeCall != null && activeCall.status != CallStatus.ended) {
         if (kDebugMode) {
@@ -1357,6 +1357,9 @@ class CallNotifier extends Notifier<CallState> {
         );
       }
       await _drainPendingCallActions();
+      if (hintHandled) {
+        await IncomingNotificationService.clearPendingIncomingHintNotification();
+      }
     } catch (error, stackTrace) {
       debugPrint(
         '[CALLS] incomingPipeline failure reason=$reason error=$error\n$stackTrace',

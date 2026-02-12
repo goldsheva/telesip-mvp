@@ -194,4 +194,14 @@ class IncomingNotificationService {
       'keyguardLocked=${state['keyguardLocked']}',
     );
   }
+
+  static Future<void> clearPendingIncomingHintNotification() async {
+    try {
+      await _incomingChannel.invokeMethod<void>('clearPendingIncomingHint');
+    } catch (error) {
+      debugPrint(
+        '[CALLS_NOTIF] clearPendingIncomingHintNotification failed: $error',
+      );
+    }
+  }
 }

@@ -43,16 +43,16 @@ class CallIncomingHintHandler {
   DateTime? _lastHandledHintTimestamp;
   DateTime? _lastHintAttemptAt;
 
-  Future<void> handleIncomingCallHintIfAny() async {
-    if (isDisposed()) return;
+  Future<bool> handleIncomingCallHintIfAny() async {
+    if (isDisposed()) return false;
     await ensureStoredIncomingCredentialsLoaded();
-    if (isDisposed()) return;
-    if (_isHandlingHint) return;
+    if (isDisposed()) return false;
+    if (_isHandlingHint) return false;
     _isHandlingHint = true;
     try {
       final raw = await FcmStorage.readPendingIncomingHint();
-      if (isDisposed()) return;
-      if (raw == null) return;
+      if (isDisposed()) return false;
+      if (raw == null) return false;
 
       final payload = raw['payload'] as Map<String, dynamic>?;
       final timestampRaw = raw['timestamp'] as String?;
@@ -62,8 +62,8 @@ class CallIncomingHintHandler {
       if (payload == null || timestamp == null) {
         log('[INCOMING] invalid pending hint (call_uuid=$callUuid), clearing');
         await FcmStorage.clearPendingIncomingHint();
-        if (isDisposed()) return;
-        return;
+        if (isDisposed()) return false;
+        return false;
       }
 
       final now = DateTime.now();
@@ -72,13 +72,13 @@ class CallIncomingHintHandler {
           '[INCOMING] pending hint expired after ${now.difference(timestamp).inSeconds}s (call_uuid=$callUuid)',
         );
         await FcmStorage.clearPendingIncomingHint();
-        if (isDisposed()) return;
-        return;
+        if (isDisposed()) return false;
+        return false;
       }
 
       if (_lastHandledHintTimestamp != null &&
           _lastHandledHintTimestamp!.isAtSameMomentAs(timestamp)) {
-        return;
+        return false;
       }
 
       if (_lastHintAttemptAt != null &&
@@ -88,14 +88,14 @@ class CallIncomingHintHandler {
         log(
           '[INCOMING] hint retry suppressed for ${remaining.inSeconds}s (call_uuid=$callUuid)',
         );
-        return;
+        return false;
       }
 
       if (isBusy()) {
         log(
           '[INCOMING] busy when handling hint (call_uuid=$callUuid), will retry later',
         );
-        return;
+        return false;
       }
 
       _lastHintAttemptAt = now;
@@ -123,7 +123,7 @@ class CallIncomingHintHandler {
               '[INCOMING] ${incomingHintFailureMessage(failure)}, skipping hint (call_uuid=$callUuid)',
             );
           }
-          return;
+          return false;
         }
         snapshot = result.snapshot!;
         log(
@@ -131,12 +131,12 @@ class CallIncomingHintHandler {
         );
       } else {
         final storedSnapshot = await readStoredSnapshot();
-        if (isDisposed()) return;
+        if (isDisposed()) return false;
         if (storedSnapshot == null) {
           log(
             '[INCOMING] no stored SIP credentials to register (call_uuid=$callUuid)',
           );
-          return;
+          return false;
         }
         snapshot = storedSnapshot;
         log('[INCOMING] registering SIP from hint (call_uuid=$callUuid)');
@@ -145,16 +145,17 @@ class CallIncomingHintHandler {
       try {
         startHintForegroundGuard();
         registered = await registerWithSnapshot(snapshot);
-        if (isDisposed()) return;
+        if (isDisposed()) return false;
         if (registered) {
           _lastHandledHintTimestamp = timestamp;
           await FcmStorage.clearPendingIncomingHint();
-          if (isDisposed()) return;
+          if (isDisposed()) return true;
           log(
             '[INCOMING] pending hint handled and cleared (call_uuid=$callUuid)',
           );
+          return true;
         } else {
-          if (isDisposed()) return;
+          if (isDisposed()) return false;
           log(
             '[INCOMING] hint handling failed, retry allowed after ${_incomingHintRetryTtl.inSeconds}s (call_uuid=$callUuid)',
           );
@@ -165,5 +166,6 @@ class CallIncomingHintHandler {
     } finally {
       _isHandlingHint = false;
     }
+    return false;
   }
 }
