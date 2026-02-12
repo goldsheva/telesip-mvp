@@ -108,7 +108,12 @@ class CallState {
   }
 
   String? get effectiveCallId {
-    if (activeCallId != null) return activeCallId;
+    if (activeCallId != null) {
+      final activeCall = calls[activeCallId];
+      if (activeCall != null && activeCall.status != CallStatus.ended) {
+        return activeCallId;
+      }
+    }
     String? singleId;
     for (final call in calls.values) {
       if (call.status == CallStatus.ended) continue;
