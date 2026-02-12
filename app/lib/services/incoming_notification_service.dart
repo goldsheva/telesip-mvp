@@ -7,6 +7,9 @@ class IncomingNotificationService {
   static const MethodChannel _channel = MethodChannel(
     'app.calls/notifications',
   );
+  static const MethodChannel _debugChannel = MethodChannel(
+    'app.debug/incoming',
+  );
 
   static Future<void> showIncoming({
     required String callId,
@@ -31,6 +34,22 @@ class IncomingNotificationService {
       await _channel.invokeMethod('showIncoming', args);
     } catch (error) {
       debugPrint('[CALLS_NOTIF] showIncoming failed: $error');
+    }
+  }
+
+  static Future<void> refreshDebugIncomingNotification() async {
+    if (!kDebugMode) return;
+    try {
+      final refreshed = await _debugChannel.invokeMethod<bool>(
+        'debugRefreshIncomingNotification',
+      );
+      debugPrint(
+        '[CALLS_NOTIF] refreshDebugIncomingNotification result=${refreshed ?? false}',
+      );
+    } catch (error) {
+      debugPrint(
+        '[CALLS_NOTIF] refreshDebugIncomingNotification failed: $error',
+      );
     }
   }
 

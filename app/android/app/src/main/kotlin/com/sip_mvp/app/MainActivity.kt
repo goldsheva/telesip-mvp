@@ -205,6 +205,20 @@ class MainActivity : FlutterFragmentActivity() {
     if (BuildConfig.DEBUG) {
       debugIncomingChannel =
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.debug/incoming")
+      debugIncomingChannel?.setMethodCallHandler { call, result ->
+        when (call.method) {
+          "debugCheckPendingIncomingHint",
+          "debug_check_pending_hint" -> {
+            pendingDebugHintCheck = true
+            maybeDispatchDebugHintCheck()
+            result.success(null)
+          }
+          "debugRefreshIncomingNotification" -> {
+            handleDebugNotificationRefresh(result)
+          }
+          else -> result.notImplemented()
+        }
+      }
       maybeDispatchDebugHintCheck()
       handleDebugIncomingExtras(intent)
     }
@@ -234,6 +248,36 @@ class MainActivity : FlutterFragmentActivity() {
       channel.invokeMethod("debugCheckPendingIncomingHint", null)
     } catch (error: Exception) {
       Log.w("DebugIncomingHint", "Failed to invoke debug pending hint check: $error")
+    }
+  }
+
+  private fun handleDebugNotificationRefresh(result: MethodChannel.Result) {
+    try {
+      val pending = PendingIncomingHintWriter.read(applicationContext)
+      if (pending.isNullOrEmpty()) {
+        IncomingCallNotificationHelper.cancelDebugNotification(this)
+        Log.d("DebugIncomingHint", "debug refresh notification: no pending hint")
+        result.success(false)
+        return
+      }
+      val payload = try {
+        val json = org.json.JSONObject(pending)
+        json.optJSONObject("payload")
+      } catch (_: Exception) {
+        null
+      }
+      val callId = payload?.optString("call_id")?.takeIf { it.isNotBlank() }
+      val from = payload?.optString("from")?.takeIf { it.isNotBlank() }
+      IncomingCallNotificationHelper.showDebugNotification(
+        this,
+        callId = callId,
+        from = from,
+      )
+      Log.d("DebugIncomingHint", "debug refresh notification: posted callId=$callId")
+      result.success(true)
+    } catch (error: Exception) {
+      Log.w("DebugIncomingHint", "debug refresh notification failed: $error")
+      result.error("DEBUG_REFRESH_FAILED", error.message, null)
     }
   }
 
