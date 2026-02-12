@@ -23,6 +23,9 @@ class MainActivity : FlutterFragmentActivity() {
         when (call.method) {
           "startForegroundService" -> {
             intent.action = SipForegroundService.ACTION_START
+            val needsMicrophone =
+              call.argument<Boolean>("needsMicrophone") == true
+            intent.putExtra(SipForegroundService.EXTRA_NEEDS_MICROPHONE, needsMicrophone)
             ContextCompat.startForegroundService(this, intent)
             result.success(null)
           }

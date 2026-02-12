@@ -18,7 +18,12 @@ object AudioRouteHelper {
   fun getRouteInfo(context: Context): Map<String, Any?> {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-    val bluetoothConnected = isBluetoothHeadsetConnected(context)
+    val shouldCheckBluetooth = shouldCheckBluetooth(context)
+    val bluetoothConnected = if (shouldCheckBluetooth) {
+      isBluetoothHeadsetConnected(context)
+    } else {
+      false
+    }
     val wiredConnected = false // skip unreliable wired detection
     val speakerOn = audioManager.isSpeakerphoneOn
     val hasEarpiece = telephonyManager.phoneType != TelephonyManager.PHONE_TYPE_NONE
@@ -74,6 +79,17 @@ object AudioRouteHelper {
       context,
       Manifest.permission.BLUETOOTH_CONNECT
     ) == PackageManager.PERMISSION_GRANTED
+  }
+
+  private fun shouldCheckBluetooth(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBtConnectPermission(context)) {
+      Log.w(
+        TAG,
+        "TODO: request BLUETOOTH_CONNECT before checking bluetooth state",
+      )
+      return false
+    }
+    return true
   }
 
   private fun isBluetoothHeadsetConnected(context: Context): Boolean {

@@ -126,6 +126,8 @@ class CallNotifier extends Notifier<CallState> {
   int _startCallSeq = 0;
   bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
+  bool _foregroundNeedsMicrophone = false;
+  bool _microphonePermissionGranted = false;
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
   late final CallNotificationCleanup _notifCleanup;
@@ -260,6 +262,12 @@ class CallNotifier extends Notifier<CallState> {
       trimmed,
       outgoingUser,
     );
+    final micPermissionGranted = await _ensureMicrophonePermission(
+      setError: false,
+    );
+    if (!micPermissionGranted) {
+      debugPrint('[CALLS] startCall continuing without microphone permission');
+    }
     final callId = await _engine.startCall(prefixedDestination);
     _pendingCallId = callId;
     _pendingLocalCallId = callId;
@@ -888,7 +896,7 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint('[CALLS] $source aborted: registration not ready');
       return;
     }
-    final micOk = await PermissionsService.ensureMicrophonePermission();
+    final micOk = await _ensureMicrophonePermission();
     if (!micOk) {
       debugPrint('[CALLS] $source aborted: microphone denied');
       return;
@@ -921,6 +929,21 @@ class CallNotifier extends Notifier<CallState> {
     } catch (error) {
       debugPrint('[CALLS] $source failed: $error');
     }
+  }
+
+  Future<bool> _ensureMicrophonePermission({bool setError = true}) async {
+    final granted = await PermissionsService.ensureMicrophonePermission();
+    _microphonePermissionGranted = granted;
+    if (granted) {
+      _clearErrorSafe();
+    } else {
+      if (setError) {
+        _setError('Microphone permission is required to speak');
+      } else {
+        debugPrint('[CALLS] microphone permission denied, skipping error');
+      }
+    }
+    return granted;
   }
 
   Future<void> _declineIncomingCall(
@@ -2084,11 +2107,20 @@ class CallNotifier extends Notifier<CallState> {
     debugPrint(
       '[CALLS] sync foreground service (shouldRun=$shouldRun requested=$_foregroundRequested)',
     );
-    if (shouldRun && !_foregroundRequested) {
+    final needsMicrophone = hasActiveCall && _microphonePermissionGranted;
+    if (shouldRun &&
+        (!_foregroundRequested ||
+            needsMicrophone != _foregroundNeedsMicrophone)) {
       _foregroundRequested = true;
-      unawaited(ForegroundService.startForegroundService());
+      _foregroundNeedsMicrophone = needsMicrophone;
+      unawaited(
+        ForegroundService.startForegroundService(
+          needsMicrophone: needsMicrophone,
+        ),
+      );
     } else if (!shouldRun && _foregroundRequested) {
       _foregroundRequested = false;
+      _foregroundNeedsMicrophone = false;
       unawaited(ForegroundService.stopForegroundService());
     }
   }
@@ -2099,7 +2131,8 @@ class CallNotifier extends Notifier<CallState> {
     }
     debugPrint('[INCOMING] hint foreground guard start');
     _hintForegroundGuard = true;
-    unawaited(ForegroundService.startForegroundService());
+    _foregroundNeedsMicrophone = false;
+    unawaited(ForegroundService.startForegroundService(needsMicrophone: false));
   }
 
   void _releaseHintForegroundGuard({

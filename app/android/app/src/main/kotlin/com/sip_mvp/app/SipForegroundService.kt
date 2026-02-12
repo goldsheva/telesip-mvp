@@ -1,19 +1,24 @@
 package com.sip_mvp.app
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 class SipForegroundService : Service() {
   companion object {
     const val ACTION_START = "app.sip.FGS_START"
     const val ACTION_STOP = "app.sip.FGS_STOP"
+    const val EXTRA_NEEDS_MICROPHONE = "needsMicrophone"
     private const val CHANNEL_ID = "sip_foreground"
     private const val CHANNEL_NAME = "SIP service"
     private const val NOTIF_ID = 101
@@ -38,7 +43,8 @@ class SipForegroundService : Service() {
     }
     when (intent?.action) {
       ACTION_START -> {
-        debugLog("service start")
+        val needsMicrophone = intent.getBooleanExtra(EXTRA_NEEDS_MICROPHONE, false)
+        debugLog("service start needsMicrophone=$needsMicrophone")
         isStarting = true
         try {
           SipWakeLock.acquire(this)
@@ -49,14 +55,11 @@ class SipForegroundService : Service() {
         }
         try {
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            debugLog("startForeground: types (Q+)")
+            debugLog("startForeground: types (Q+) needsMicrophone=$needsMicrophone")
           } else {
             debugLog("startForeground: no types (<Q)")
           }
-          startForeground(
-            NOTIF_ID,
-            getNotification()
-          )
+          startForegroundCompat(getNotification(), needsMicrophone)
         } catch (t: Throwable) {
           debugLog("startForeground failed: $t")
           SipWakeLock.release()
@@ -145,6 +148,50 @@ class SipForegroundService : Service() {
     } catch (error: Throwable) {
       debugLog("stopForeground failed: $error")
     }
+  }
+
+  private fun startForegroundCompat(notification: Notification, needsMicrophone: Boolean) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      val types = buildForegroundServiceTypes(needsMicrophone)
+      startForegroundWithTypes(types, notification)
+    } else {
+      startForeground(NOTIF_ID, notification)
+    }
+  }
+
+  private fun buildForegroundServiceTypes(needsMicrophone: Boolean): Int {
+    var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+    if (needsMicrophone && hasMicrophonePermission()) {
+      types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+    }
+    return types
+  }
+
+  private fun startForegroundWithTypes(types: Int, notification: Notification) {
+    try {
+      startForeground(NOTIF_ID, notification, types)
+    } catch (security: SecurityException) {
+      debugLog("startForeground(types=$types) SecurityException: $security")
+      val fallback = types and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
+      if (fallback != types) {
+        try {
+          startForeground(NOTIF_ID, notification, fallback)
+        } catch (fallbackEx: SecurityException) {
+          debugLog("fallback startForeground(types=$fallback) failed: $fallbackEx")
+          startForeground(NOTIF_ID, notification)
+        }
+      } else {
+        startForeground(NOTIF_ID, notification)
+      }
+    }
+  }
+
+  private fun hasMicrophonePermission(): Boolean {
+    return ContextCompat.checkSelfPermission(
+      this,
+      Manifest.permission.RECORD_AUDIO,
+    ) == PackageManager.PERMISSION_GRANTED
   }
 
 }

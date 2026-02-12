@@ -4,9 +4,13 @@ import 'package:flutter/services.dart';
 class ForegroundService {
   static const _channel = MethodChannel('app.foreground_service');
 
-  static Future<void> startForegroundService() async {
+  static Future<void> startForegroundService({
+    bool needsMicrophone = false,
+  }) async {
     try {
-      await _channel.invokeMethod('startForegroundService');
+      await _channel.invokeMethod('startForegroundService', {
+        'needsMicrophone': needsMicrophone,
+      });
     } catch (error) {
       debugPrint('Foreground service start failed: $error');
     }
