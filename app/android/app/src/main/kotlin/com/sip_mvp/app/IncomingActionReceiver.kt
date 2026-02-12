@@ -20,6 +20,13 @@ class IncomingActionReceiver : BroadcastReceiver() {
     val timestamp = System.currentTimeMillis()
     val enqueued =
       PendingCallActionStore.enqueue(appContext, callId, actionType, timestamp)
+    IncomingActionDebugStore.persist(
+      appContext,
+      timestamp = timestamp,
+      actionType = actionType,
+      callId = callId,
+      source = "notification_action",
+    )
     if (enqueued) {
       try {
         PendingIncomingHintWriter.clear(appContext)
