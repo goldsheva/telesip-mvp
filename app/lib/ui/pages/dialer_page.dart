@@ -208,16 +208,14 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                     child: ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _numberController,
                       builder: (context, value, _) {
-                        final trimmedInput = value.text.trim();
-                        final busyByActiveId = state.activeCallId != null;
-                        final hasOngoingCalls = state.calls.values.any(
-                          (call) => call.status != CallStatus.ended,
+                        final rawInput = value.text;
+                        final notifier = ref.read(
+                          callControllerProvider.notifier,
                         );
-                        final canCall =
-                            trimmedInput.isNotEmpty &&
-                            !busyByActiveId &&
-                            !hasOngoingCalls &&
-                            state.isRegistered;
+                        final canCall = notifier.canStartOutgoingCallUi(
+                          state,
+                          rawInput,
+                        );
                         return SizedBox(
                           height: 56,
                           width: double.infinity,

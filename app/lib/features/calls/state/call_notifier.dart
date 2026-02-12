@@ -2234,6 +2234,18 @@ class CallNotifier extends Notifier<CallState> {
     return calls.any((call) => call.status != CallStatus.ended);
   }
 
+  bool canStartOutgoingCallUi(CallState s, String rawNumber) {
+    final trimmed = rawNumber.trim();
+    if (trimmed.isEmpty) return false;
+    if (!s.isRegistered) return false;
+    final sanitized = _sanitizeActiveCallId(s, 'canStartOutgoingCallUi');
+    final hasActive = sanitized.activeCallId != null;
+    final hasOngoing = sanitized.calls.values.any(
+      (call) => call.status != CallStatus.ended,
+    );
+    return !hasActive && !hasOngoing;
+  }
+
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
     final hasActiveCall = snapshot.activeCallId != null;
     final hasOngoingCalls = snapshot.calls.values.any(
