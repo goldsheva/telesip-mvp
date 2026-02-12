@@ -28,6 +28,7 @@ import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
 
 import 'call_models.dart';
+import 'call_sip_registration_handler.dart';
 import 'call_notification_cleanup.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity_listener.dart';
@@ -131,6 +132,7 @@ class CallNotifier extends Notifier<CallState> {
   late final CallReconnectScheduler _reconnectScheduler;
   late final CallHealthWatchdog _healthWatchdog;
   late final CallReconnectExecutor _reconnectExecutor;
+  late final CallSipRegistrationHandler _registrationHandler;
   final CallConnectivityDebugDumper _debugDumper =
       const CallConnectivityDebugDumper();
   final CallReconnectService _reconnectService = const CallReconnectService();
@@ -923,6 +925,29 @@ class CallNotifier extends Notifier<CallState> {
       isDisposed: () => _disposed,
       log: (message) => debugPrint(message),
     );
+    _registrationHandler = CallSipRegistrationHandler(
+      setLastNetworkActivityAt: (value) => _lastNetworkActivityAt = value,
+      setLastSipRegisteredAt: (value) => _lastSipRegisteredAt = value,
+      resetReconnectBackoff: () => _reconnectScheduler.resetBackoff(),
+      hasReconnectTimer: () => _reconnectScheduler.hasScheduledTimer,
+      isReconnectInFlight: () => _reconnectInFlight,
+      setReconnectInFlight: (value) => _reconnectInFlight = value,
+      cancelReconnect: () => _reconnectScheduler.cancel(),
+      stopHealthWatchdog: _stopHealthWatchdog,
+      setLastRegistrationState: (state) => _lastRegistrationState = state,
+      setIsRegistered: (value) => _isRegistered = value,
+      getIsRegistered: () => _isRegistered,
+      setRegisteredUserId: (value) => _registeredUserId = value,
+      getLastKnownUserId: () => _lastKnownUser?.pbxSipUserId,
+      cancelRegistrationErrorTimer: _cancelRegistrationErrorTimer,
+      setPendingRegistrationError: (value) => _pendingRegistrationError = value,
+      clearErrorSafe: _clearErrorSafe,
+      handleRegistrationFailure: _handleRegistrationFailure,
+      scheduleReconnect: _scheduleReconnect,
+      maybeStartHealthWatchdog: _maybeStartHealthWatchdog,
+      getState: () => state,
+      commitState: (next) => _commit(next),
+    );
     final initialStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     _lastAuthStatus ??= initialStatus;
@@ -1389,7 +1414,7 @@ class CallNotifier extends Notifier<CallState> {
   Future<void> _onEvent(SipEvent event) async {
     if (_disposed) return;
     final now = DateTime.now();
-    if (_handleRegistrationEvent(event, now)) return;
+    if (_registrationHandler.handle(event, now)) return;
 
     final sipCallId = event.callId;
     if (sipCallId == null) return;
@@ -1507,53 +1532,6 @@ class CallNotifier extends Notifier<CallState> {
       previous: previous,
       pendingCallId: pendingCallId,
     );
-  }
-
-  bool _handleRegistrationEvent(SipEvent event, DateTime now) {
-    if (event.type != SipEventType.registration) {
-      return false;
-    }
-    final registrationState = event.registrationState;
-    if (registrationState != null) {
-      _lastNetworkActivityAt = now;
-      if (registrationState == SipRegistrationState.registered) {
-        _lastSipRegisteredAt = now;
-        _reconnectScheduler.resetBackoff();
-        if (_reconnectScheduler.hasScheduledTimer || _reconnectInFlight) {
-          debugPrint(
-            '[CALLS_CONN] reconnect cleared due to registration success',
-          );
-          _reconnectScheduler.cancel();
-          _reconnectInFlight = false;
-        }
-        _stopHealthWatchdog();
-      }
-      _lastRegistrationState = registrationState;
-    }
-    if (registrationState == SipRegistrationState.registered) {
-      _isRegistered = true;
-      _registeredUserId = _lastKnownUser?.pbxSipUserId;
-      _cancelRegistrationErrorTimer();
-      _pendingRegistrationError = null;
-      _clearErrorSafe();
-    } else if (registrationState == SipRegistrationState.failed) {
-      _isRegistered = false;
-      _handleRegistrationFailure(event.message ?? 'SIP registration failed');
-      final stateName = registrationState?.name ?? 'unknown';
-      _scheduleReconnect('registration-$stateName');
-      _maybeStartHealthWatchdog();
-    } else if (registrationState == SipRegistrationState.unregistered ||
-        registrationState == SipRegistrationState.none) {
-      _isRegistered = false;
-      _registeredUserId = null;
-      if (registrationState == SipRegistrationState.unregistered) {
-        final stateName = registrationState?.name ?? 'unknown';
-        _scheduleReconnect('registration-$stateName');
-        _maybeStartHealthWatchdog();
-      }
-    }
-    _commit(state.copyWith(isRegistered: _isRegistered));
-    return true;
   }
 
   bool _handleRecentlyEndedOrDeadCall({
