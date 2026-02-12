@@ -522,6 +522,10 @@ class CallNotifier extends Notifier<CallState> {
     if (_pendingLocalCallId == localId) {
       _pendingLocalCallId = null;
     }
+    if (!_hasLiveCalls(updatedCalls.values)) {
+      _pendingCallId = null;
+      _pendingLocalCallId = null;
+    }
     _clearSipMappingsForLocalCall(localId);
     _callDongleMap.remove(localId);
 
@@ -531,6 +535,14 @@ class CallNotifier extends Notifier<CallState> {
         '[CALLS] clearing dangling activeCallId=$nextActiveCallId reason=$reason',
       );
       nextActiveCallId = null;
+    }
+    if (nextActiveCallId == null) {
+      for (final entry in updatedCalls.entries) {
+        if (entry.value.status != CallStatus.ended) {
+          nextActiveCallId = entry.key;
+          break;
+        }
+      }
     }
     final nextState = previousState.copyWith(
       calls: updatedCalls,
@@ -542,6 +554,9 @@ class CallNotifier extends Notifier<CallState> {
       if (!_alive) return;
       _resetDialLocksIfIdle(post, 'endCall-postcommit');
     });
+    debugPrint(
+      '[CALLS] endCall final active=${post.activeCallId} calls=${post.calls.length}',
+    );
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
@@ -2213,6 +2228,10 @@ class CallNotifier extends Notifier<CallState> {
 
   bool _isDialPhaseAllowed() {
     return _phase == _CallPhase.idle || _phase == _CallPhase.ending;
+  }
+
+  bool _hasLiveCalls(Iterable<CallInfo> calls) {
+    return calls.any((call) => call.status != CallStatus.ended);
   }
 
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
