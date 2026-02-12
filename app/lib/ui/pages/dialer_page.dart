@@ -80,9 +80,17 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   }
 
   Future<void> _call() async {
+    debugPrint(
+      '[CALLS_UI] _call() entered mounted=$mounted raw=${_numberController.text}',
+    );
     final raw = _numberController.text;
     final number = _normalizeNumber(raw);
-    if (number.isEmpty) return;
+    if (number.isEmpty) {
+      debugPrint(
+        '[CALLS_UI] dial skip reason=empty number=$number mounted=$mounted',
+      );
+      return;
+    }
     if (number != raw) {
       _numberController.text = number;
       _numberController.selection = TextSelection.fromPosition(
@@ -91,6 +99,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
     }
     final hasMic = await PermissionsService.ensureMicrophonePermission();
     if (!hasMic) {
+      debugPrint(
+        '[CALLS_UI] dial skip reason=mic-permission number=$number mounted=$mounted',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -99,7 +110,9 @@ class _DialerPageState extends ConsumerState<DialerPage> {
       );
       return;
     }
+    debugPrint('[CALLS_UI] dial pressed number=$number mounted=$mounted');
     await ref.read(callControllerProvider.notifier).startCall(number);
+    debugPrint('[CALLS_UI] dial dispatched number=$number');
   }
 
   static String _normalizeNumber(String value) {
@@ -203,7 +216,31 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                           height: 56,
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: canCall ? _call : null,
+                            onPressed: canCall
+                                ? () async {
+                                    debugPrint(
+                                      '[CALLS_UI] dial onPressed fired mounted=$mounted',
+                                    );
+                                    final callStateSnapshot = ref.read(
+                                      callControllerProvider,
+                                    );
+                                    final activeCallStatus =
+                                        callStateSnapshot.activeCall?.status;
+                                    debugPrint(
+                                      '[CALLS_UI] dial snapshot canCall=$canCall '
+                                      'mounted=$mounted activeCallId=${callStateSnapshot.activeCallId} '
+                                      'calls=${callStateSnapshot.calls.length} '
+                                      'status=$activeCallStatus',
+                                    );
+                                    try {
+                                      await _call();
+                                    } catch (e, st) {
+                                      debugPrint(
+                                        '[CALLS_UI] dial onPressed error=$e\n$st',
+                                      );
+                                    }
+                                  }
+                                : null,
                             icon: const Icon(Icons.call),
                             label: const Text('Call'),
                             style: ElevatedButton.styleFrom(

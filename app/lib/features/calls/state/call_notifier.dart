@@ -122,6 +122,7 @@ class CallNotifier extends Notifier<CallState> {
   String? _focusedCallId;
   bool _scoActive = false;
   _CallPhase _phase = _CallPhase.idle;
+  int _startCallSeq = 0;
   bool _pendingActionsDrained = false;
   bool _foregroundRequested = false;
   bool _bootstrapDone = false;
@@ -177,22 +178,44 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> startCall(String destination) async {
+    final trimmed = destination.trim();
+    final seq = ++_startCallSeq;
+    final logContext =
+        'phase=$_phase active=${state.activeCallId} calls=${state.calls.length} '
+        'pendingSip=$_pendingCallId pendingLocal=$_pendingLocalCallId '
+        'dialTimeoutId=${_dialTimeoutCallId ?? "<none>"} dialTimer=${_dialTimeoutTimer != null} '
+        'bootstrapDone=$_bootstrapDone scheduled=$_bootstrapScheduled';
+    debugPrint('[CALLS] startCall enter seq=$seq number=$trimmed $logContext');
+    _resetDialLocksIfIdle(state, 'startCall-precheck');
     final activeCall = state.activeCall;
     if (activeCall != null && activeCall.status != CallStatus.ended) {
       const message = 'Cannot start a new call while one is active';
       _setError(message);
-      debugPrint('[CALLS] startCall blocked: $message active=${activeCall.id}');
+      debugPrint(
+        '[CALLS] startCall skip reason=active-existing number=$trimmed '
+        '$logContext active=${activeCall.id} status=${activeCall.status}',
+      );
       return;
     }
-    final trimmed = destination.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty) {
+      debugPrint(
+        '[CALLS] startCall skip reason=empty-number number=$trimmed $logContext',
+      );
+      return;
+    }
     if (_phase != _CallPhase.idle && _phase != _CallPhase.ending) {
+      debugPrint(
+        '[CALLS] startCall skip reason=phase-not-idle number=$trimmed $logContext',
+      );
       return;
     }
     await _ensureStoredIncomingCredentialsLoaded();
     final outgoingUser = _outgoingUser ?? _incomingUser;
     if (outgoingUser == null) {
       _setError('SIP is not registered');
+      debugPrint(
+        '[CALLS] startCall skip reason=no-outgoing-user number=$trimmed $logContext',
+      );
       return;
     }
     try {
@@ -202,6 +225,10 @@ class CallNotifier extends Notifier<CallState> {
     }
     if (!_isRegistered) {
       _setError('SIP is not registered');
+      debugPrint(
+        '[CALLS] startCall skip reason=not-registered number=$trimmed '
+        '$logContext isRegistered=$_isRegistered',
+      );
       return;
     }
     if (outgoingUser.dongleId == null) {
@@ -502,14 +529,7 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId: nextActiveCallId,
     );
     _commitSafe(nextState);
-    if (nextState.activeCallId == null &&
-        !nextState.calls.values.any(
-          (call) => call.status != CallStatus.ended,
-        ) &&
-        _pendingCallId == null &&
-        _pendingLocalCallId == null) {
-      _phase = _CallPhase.idle;
-    }
+    _resetDialLocksIfIdle(nextState, 'endCall:$reason');
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
@@ -2144,6 +2164,31 @@ class CallNotifier extends Notifier<CallState> {
     _dialTimeoutTimer?.cancel();
     _dialTimeoutTimer = null;
     _dialTimeoutCallId = null;
+  }
+
+  void _resetDialLocksIfIdle(CallState snapshot, String reason) {
+    final hasActiveCall = snapshot.activeCallId != null;
+    final hasOngoingCalls = snapshot.calls.values.any(
+      (call) => call.status != CallStatus.ended,
+    );
+    if (hasActiveCall ||
+        hasOngoingCalls ||
+        _pendingCallId != null ||
+        _pendingLocalCallId != null) {
+      return;
+    }
+    var didReset = false;
+    if (_phase != _CallPhase.idle) {
+      _phase = _CallPhase.idle;
+      didReset = true;
+    }
+    if (_dialTimeoutTimer != null || _dialTimeoutCallId != null) {
+      _cancelDialTimeout();
+      didReset = true;
+    }
+    if (didReset) {
+      debugPrint('[CALLS] idle cleanup: reset dial locks reason=$reason');
+    }
   }
 
   Future<void> _refreshAudioRoute() async {
