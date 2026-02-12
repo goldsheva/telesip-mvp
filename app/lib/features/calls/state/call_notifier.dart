@@ -2295,10 +2295,12 @@ class CallNotifier extends Notifier<CallState> {
     final trimmed = rawNumber.trim();
     if (trimmed.isEmpty || !s.isRegistered) return false;
     final sanitized = _sanitizeActiveCallId(s, 'canStartOutgoingCallUi');
-    final hasOngoing = sanitized.calls.values.any(
+    if (!_isDialPhaseAllowed()) return false;
+    final hasActive = sanitized.activeCallId != null;
+    final hasLive = sanitized.calls.values.any(
       (call) => call.status != CallStatus.ended,
     );
-    return sanitized.activeCallId == null && !hasOngoing;
+    return !hasActive && !hasLive;
   }
 
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
