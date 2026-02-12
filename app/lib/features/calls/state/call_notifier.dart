@@ -1707,21 +1707,36 @@ class CallNotifier extends Notifier<CallState> {
     final isOutgoingEvent =
         event.type == SipEventType.dialing ||
         event.callState == SipCallState.dialing;
-    if (callIdUnknown &&
-        pendingId != null &&
-        _pendingLocalCallId != null &&
-        isOutgoingEvent &&
-        !_sipToLocalCallId.containsKey(sipCallId)) {
-      final localPendingId = _pendingLocalCallId!;
-      debugPrint(
-        '[CALLS] mapped sipCallId=$sipCallId -> localCallId=$localPendingId',
-      );
-      _sipToLocalCallId[sipCallId] = localPendingId;
-      _pendingCallId = localPendingId;
-      _pendingLocalCallId = null;
-      return true;
+    if (!callIdUnknown ||
+        pendingId == null ||
+        _pendingLocalCallId == null ||
+        !isOutgoingEvent ||
+        _sipToLocalCallId.containsKey(sipCallId)) {
+      return false;
     }
-    return false;
+    final localPendingId = _pendingLocalCallId!;
+    final engineCallExists = _engine.getCall(localPendingId) != null;
+    if (!engineCallExists) {
+      debugPrint(
+        '[CALLS] skipped mapping sipCallId=$sipCallId pendingLocal=$localPendingId '
+        'pendingId=$pendingId engine-call=missing',
+      );
+      return false;
+    }
+    debugPrint(
+      '[CALLS] mapped sipCallId=$sipCallId -> localCallId=$localPendingId '
+      'pendingId=$pendingId engine-call=present',
+    );
+    _sipToLocalCallId[sipCallId] = localPendingId;
+    if (!_callDongleMap.containsKey(localPendingId)) {
+      final pendingDongleId = _callDongleMap[pendingId];
+      if (pendingDongleId != null) {
+        _callDongleMap[localPendingId] = pendingDongleId;
+      }
+    }
+    _pendingCallId = localPendingId;
+    _pendingLocalCallId = null;
+    return true;
   }
 
   bool _handleIncomingAdoption({
