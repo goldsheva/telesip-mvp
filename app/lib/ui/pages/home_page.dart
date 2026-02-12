@@ -80,7 +80,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   void _requestNotificationPermission() {
     if (_requestedNotificationPermission) return;
     _requestedNotificationPermission = true;
-    unawaited(PermissionsService.ensureNotificationsPermission());
+    unawaited(
+      PermissionsService.ensureNotificationsPermission(requestIfNeeded: false),
+    );
   }
 
   void _handleCallStateChange(CallState? previous, CallState next) {

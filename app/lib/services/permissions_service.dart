@@ -8,17 +8,22 @@ class PermissionsService {
   PermissionsService._();
 
   static Future<AuthorizationStatus> ensureNotificationsPermission({
-    bool requestIfNeeded = true,
+    bool requestIfNeeded = false,
   }) async {
     final permission = Permission.notification;
     final status = await permission.status;
     if (status.isGranted) return status;
     if (!requestIfNeeded) {
+      log('[PERM] notifications status=$status (no auto-request)');
       return status;
     }
+    log('[PERM] notifications requesting explicitly (status=$status)');
     final result = await _requestPermission(permission);
     return result;
   }
+
+  static Future<AuthorizationStatus> requestNotificationsPermissionExplicit() =>
+      _requestPermission(Permission.notification);
 
   static Future<bool> ensureMicrophonePermission({
     bool requestIfNeeded = true,
