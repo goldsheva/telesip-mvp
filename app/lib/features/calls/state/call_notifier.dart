@@ -502,6 +502,14 @@ class CallNotifier extends Notifier<CallState> {
       activeCallId: nextActiveCallId,
     );
     _commitSafe(nextState);
+    if (nextState.activeCallId == null &&
+        !nextState.calls.values.any(
+          (call) => call.status != CallStatus.ended,
+        ) &&
+        _pendingCallId == null &&
+        _pendingLocalCallId == null) {
+      _phase = _CallPhase.idle;
+    }
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
