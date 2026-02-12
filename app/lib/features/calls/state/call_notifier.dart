@@ -198,8 +198,7 @@ class CallNotifier extends Notifier<CallState> {
     if (!identical(snap, state)) {
       _commitSafe(snap);
     }
-    _clearPendingIfIdle(snap);
-    _resetDialLocksIfIdle(snap, 'startCall-precheck');
+    _afterStateMutation(snap, 'startCall-precheck');
     if (!_isDialPhaseAllowed()) {
       debugPrint(
         '[CALLS] startCall skip reason=phase-not-idle seq=$seq $logContext',
@@ -588,10 +587,9 @@ class CallNotifier extends Notifier<CallState> {
     );
     final post = _sanitizeActiveCallId(nextState, 'endCall-postcommit');
     _commitSafe(post);
-    _clearPendingIfIdle(post);
     scheduleMicrotask(() {
       if (!_alive) return;
-      _resetDialLocksIfIdle(post, 'endCall-postcommit');
+      _afterStateMutation(post, 'endCall-postcommit');
     });
     debugPrint(
       '[CALLS] endCall final active=${post.activeCallId} calls=${post.calls.length}',
@@ -2313,6 +2311,11 @@ class CallNotifier extends Notifier<CallState> {
     _pendingLocalCallId = null;
   }
 
+  void _afterStateMutation(CallState snapshot, String reason) {
+    _clearPendingIfIdle(snapshot);
+    _resetDialLocksIfIdle(snapshot, reason);
+  }
+
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
     if (!_isIdleSnapshot(snapshot) ||
         _pendingCallId != null ||
@@ -2371,8 +2374,7 @@ class CallNotifier extends Notifier<CallState> {
       final nextState = state.copyWith(calls: updatedCalls);
       final sanitized = _sanitizeActiveCallId(nextState, 'ended-cleanup');
       _commitSafe(sanitized);
-      _clearPendingIfIdle(sanitized);
-      _resetDialLocksIfIdle(sanitized, 'ended-cleanup');
+      _afterStateMutation(sanitized, 'ended-cleanup');
       debugPrint(
         '[CALLS] ended cleanup fired primary=$primaryId secondary=${secondaryId ?? "<none>"} '
         'reason=$reason calls=${sanitized.calls.length}',
