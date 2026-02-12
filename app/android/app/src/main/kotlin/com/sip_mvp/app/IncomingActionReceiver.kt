@@ -18,11 +18,19 @@ class IncomingActionReceiver : BroadcastReceiver() {
     }
     val callId = intent.getStringExtra(EXTRA_CALL_ID) ?: "pending"
     val timestamp = System.currentTimeMillis()
-    PendingCallActionStore.enqueue(appContext, callId, actionType, timestamp)
+    val enqueued =
+      PendingCallActionStore.enqueue(appContext, callId, actionType, timestamp)
+    if (enqueued) {
+      try {
+        PendingIncomingHintWriter.clear(appContext)
+      } catch (error: Exception) {
+        CallLog.w(TAG, "Failed to clear pending hint after action: $error")
+      }
+    }
     IncomingCallNotificationHelper.cancelIncomingNotification(appContext)
     CallLog.d(
       TAG,
-      "Stored pending action type=$actionType callId=$callId ts=$timestamp",
+      "Stored pending action type=$actionType callId=$callId ts=$timestamp enqueued=$enqueued",
     )
     val startIntent = Intent(appContext, MainActivity::class.java).apply {
       putExtra(MainActivity.EXTRA_CHECK_PENDING_HINT, true)
