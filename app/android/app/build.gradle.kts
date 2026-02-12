@@ -85,6 +85,10 @@ android {
             // (optional) keep default debug behavior
         }
     }
+
+    buildFeatures {
+        buildConfig = true
+    }
 }
 
 dependencies {
