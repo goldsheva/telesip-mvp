@@ -92,6 +92,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     // ✅ MultiDex runtime support for pre-Lollipop / large method counts
     implementation("androidx.multidex:multidex:2.0.1")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }
 
 flutter {

@@ -20,7 +20,7 @@ class CallActionReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     CallLog.ensureInit(context)
     val callId = intent.getStringExtra("call_id") ?: return
-    val action = when (intent.action) {
+    val actionType = when (intent.action) {
       ACTION_ANSWER -> "answer"
       ACTION_DECLINE -> "decline"
       else -> return
@@ -38,7 +38,7 @@ class CallActionReceiver : BroadcastReceiver() {
     }
     CallLog.d(
       "CALLS_ACTION",
-      "resolved action=$action call_id=$callId call_uuid=${callUuid ?: "<none>"} importance=$importance"
+      "resolved action=$actionType call_id=$callId call_uuid=${callUuid ?: "<none>"} importance=$importance"
     )
     val validCallId = callId.takeIf { it.isNotBlank() && it != "<none>" }
     val validCallUuid = callUuid?.takeIf { it.isNotBlank() && it != "<none>" }
@@ -56,13 +56,13 @@ class CallActionReceiver : BroadcastReceiver() {
             NotificationHelper.cancel(context, notificationManager, id)
             cancelSucceeded += 1
           } catch (error: Throwable) {
-            CallLog.w("CALLS_ACTION", "notification cancel failed action=$action call=$id: $error")
+            CallLog.w("CALLS_ACTION", "notification cancel failed action=$actionType call=$id: $error")
           }
         }
       }
       NotificationHelper.markSuppressed(idsToCancel)
     }
-    if (action == ACTION_DECLINE) {
+    if (actionType == "decline") {
       val stopIntent = Intent(context, SipForegroundService::class.java).apply {
         action = SipForegroundService.ACTION_STOP
       }
@@ -87,18 +87,19 @@ class CallActionReceiver : BroadcastReceiver() {
     val now = System.currentTimeMillis()
     var duplicateSuppressed = false
     val entry = JSONObject().apply {
-      put("type", action)
+      put("type", actionType)
       put("callId", callId)
       put("ts", now)
       put("call_id", callId)
-      put("action", action)
+      put("action", actionType)
       put("timestamp", now)
     }
     val dedupWindow = 2000L
     for (existingEntry in existing) {
-      val existingAction = existingEntry.optString("type").ifEmpty { existingEntry.optString("action") }
+      val existingAction =
+        existingEntry.optString("type").ifEmpty { existingEntry.optString("action") }
       val existingCallId = existingEntry.optString("callId").ifEmpty { existingEntry.optString("call_id") }
-      if (existingAction == action && existingCallId == callId) {
+      if (existingAction == actionType && existingCallId == callId) {
         var previousTs = existingEntry.optLong("ts", 0L)
         if (previousTs == 0L) {
           previousTs = existingEntry.optLong("timestamp", 0L)
@@ -107,7 +108,7 @@ class CallActionReceiver : BroadcastReceiver() {
           duplicateSuppressed = true
           CallLog.d(
             "CALLS_ACTION",
-            "duplicate pending action suppressed action=$action call=$callId ts=$previousTs",
+            "duplicate pending action suppressed action=$actionType call=$callId ts=$previousTs",
           )
           break
         }
@@ -124,17 +125,17 @@ class CallActionReceiver : BroadcastReceiver() {
     }
     CallLog.d(
       "CALLS_ACTION",
-      "action=$action ids=$idsToCancel hasManager=${notificationManager != null} cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
+      "action=$actionType ids=$idsToCancel hasManager=${notificationManager != null} cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
     )
     val primaryId = validCallId ?: validCallUuid ?: "<none>"
-    CallActionStore.save(context, primaryId, action, System.currentTimeMillis())
+    CallActionStore.save(context, primaryId, actionType, System.currentTimeMillis())
     CallLog.d(
       "CALLS_ACTION",
-      "action_enqueued action=$action call_id=$callId call_uuid=$callUuid duplicateSuppressed=$duplicateSuppressed",
+      "action_enqueued action=$actionType call_id=$callId call_uuid=$callUuid duplicateSuppressed=$duplicateSuppressed",
     )
     val main = Intent(context, MainActivity::class.java).apply {
       putExtra("call_id", callId)
-      putExtra("action", action)
+      putExtra("action", actionType)
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
     context.startActivity(main)

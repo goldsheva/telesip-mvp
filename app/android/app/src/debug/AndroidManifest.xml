@@ -4,4 +4,14 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <application>
+        <receiver
+            android:name=".DebugIncomingCallReceiver"
+            android:exported="true"
+            android:process=":debug_incoming">
+            <intent-filter>
+                <action android:name="com.sip_mvp.app.DEBUG_PENDING_INCOMING_HINT"/>
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

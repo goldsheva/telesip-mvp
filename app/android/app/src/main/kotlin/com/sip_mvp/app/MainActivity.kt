@@ -140,5 +140,56 @@ class MainActivity : FlutterFragmentActivity() {
           result.notImplemented()
         }
       }
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.storage/native")
+      .setMethodCallHandler { call, result ->
+        when (call.method) {
+          "persistPendingIncomingHint" -> {
+            val recordJson = call.arguments as? String
+            if (recordJson.isNullOrEmpty()) {
+              result.error(
+                "INVALID_ARGUMENT",
+                "recordJson string is required",
+                null,
+              )
+              return@setMethodCallHandler
+            }
+            try {
+              PendingIncomingHintWriter.persist(applicationContext, recordJson)
+              result.success(null)
+            } catch (error: Exception) {
+              result.error(
+                "WRITE_FAILED",
+                "Failed to persist pending incoming hint",
+                error.message,
+              )
+            }
+          }
+          "readPendingIncomingHint" -> {
+            try {
+              val record = PendingIncomingHintWriter.read(applicationContext)
+              result.success(record)
+            } catch (error: Exception) {
+              result.error(
+                "READ_FAILED",
+                "Failed to read pending incoming hint",
+                error.message,
+              )
+            }
+          }
+          "clearPendingIncomingHint" -> {
+            try {
+              PendingIncomingHintWriter.clear(applicationContext)
+              result.success(null)
+            } catch (error: Exception) {
+              result.error(
+                "CLEAR_FAILED",
+                "Failed to clear pending incoming hint",
+                error.message,
+              )
+            }
+          }
+          else -> result.notImplemented()
+        }
+      }
   }
 }
