@@ -13,5 +13,13 @@
                 <action android:name="com.sip_mvp.app.DEBUG_PENDING_INCOMING_HINT"/>
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".DebugIncomingActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.sip_mvp.app.action.DEBUG_INCOMING_ANSWER"/>
+                <action android:name="com.sip_mvp.app.action.DEBUG_INCOMING_DECLINE"/>
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

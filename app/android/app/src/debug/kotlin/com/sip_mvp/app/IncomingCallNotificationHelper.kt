@@ -12,13 +12,17 @@ import androidx.core.app.NotificationManagerCompat
 object IncomingCallNotificationHelper {
   private const val CHANNEL_ID = "incoming_calls_debug"
   private const val CHANNEL_NAME = "Incoming Calls (Debug)"
-  private const val NOTIFICATION_ID = 424242
+  internal const val NOTIFICATION_ID = 424242
 
-  fun showDebugNotification(context: Context) {
+  fun showDebugNotification(
+    context: Context,
+    callId: String?,
+    from: String?,
+  ) {
     val applicationContext = context.applicationContext
     ensureChannel(applicationContext)
 
-    val intent = Intent(applicationContext, MainActivity::class.java).apply {
+    val tapIntent = Intent(applicationContext, MainActivity::class.java).apply {
       putExtra(MainActivity.EXTRA_DEBUG_CHECK_PENDING_HINT, true)
       putExtra("from_incoming_notification", true)
       addFlags(
@@ -27,24 +31,83 @@ object IncomingCallNotificationHelper {
           Intent.FLAG_ACTIVITY_CLEAR_TOP,
       )
     }
-    val pendingIntent = PendingIntent.getActivity(
+    val tapPendingIntent = PendingIntent.getActivity(
       applicationContext,
       0,
-      intent,
+      tapIntent,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+
+    val answerPendingIntent = buildActionPendingIntent(
+      applicationContext,
+      DebugIncomingActionReceiver.ACTION_DEBUG_INCOMING_ANSWER,
+      requestCode = 1,
+      callId = callId,
+    )
+    val declinePendingIntent = buildActionPendingIntent(
+      applicationContext,
+      DebugIncomingActionReceiver.ACTION_DEBUG_INCOMING_DECLINE,
+      requestCode = 2,
+      callId = callId,
+    )
+
+    val contentText = when {
+      callId != null && from != null -> "Call $callId from $from"
+      callId != null -> "Call $callId"
+      from != null -> "Call from $from"
+      else -> "Tap to open"
+    }
 
     val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
       .setSmallIcon(applicationContext.applicationInfo.icon)
       .setContentTitle("Incoming call (debug)")
-      .setContentText("Tap to open")
+      .setContentText(contentText)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setAutoCancel(true)
-      .setContentIntent(pendingIntent)
+      .setContentIntent(tapPendingIntent)
+      .addAction(
+        NotificationCompat.Action.Builder(
+          android.R.drawable.ic_menu_call,
+          "Answer",
+          answerPendingIntent,
+        ).build(),
+      )
+      .addAction(
+        NotificationCompat.Action.Builder(
+          android.R.drawable.ic_menu_close_clear_cancel,
+          "Decline",
+          declinePendingIntent,
+        ).build(),
+      )
 
     NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, builder.build())
     CallLog.d("DebugIncomingHint", "Debug incoming notification posted id=$NOTIFICATION_ID")
+  }
+
+  fun cancelDebugNotification(context: Context) {
+    NotificationManagerCompat.from(context.applicationContext).cancel(NOTIFICATION_ID)
+  }
+
+  private fun buildActionPendingIntent(
+    context: Context,
+    action: String,
+    requestCode: Int,
+    callId: String?,
+  ): PendingIntent {
+    val intent = Intent(context, DebugIncomingActionReceiver::class.java).apply {
+      this.action = action
+      putExtra("source", "incoming_notification")
+      if (callId != null) {
+        putExtra("call_id", callId)
+      }
+    }
+    return PendingIntent.getBroadcast(
+      context,
+      requestCode,
+      intent,
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
   }
 
   private fun ensureChannel(context: Context) {

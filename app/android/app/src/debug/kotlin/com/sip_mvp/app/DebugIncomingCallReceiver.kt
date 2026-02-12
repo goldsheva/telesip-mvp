@@ -51,16 +51,16 @@ class DebugIncomingCallReceiver : BroadcastReceiver() {
     val timestamp =
       intent.getStringExtra(EXTRA_TIMESTAMP)?.takeIf { it.isNotEmpty() } ?: isoTimestamp()
 
-    val recordJson = try {
-      val payload = JSONObject(payloadRaw)
-      JSONObject()
-        .put("timestamp", timestamp)
-        .put("payload", payload)
-        .toString()
+    val payload = try {
+      JSONObject(payloadRaw)
     } catch (error: Exception) {
       CallLog.e(TAG, "Invalid payload JSON: $payloadRaw", error)
       return
     }
+    val recordJson = JSONObject()
+      .put("timestamp", timestamp)
+      .put("payload", payload)
+      .toString()
 
     PendingIncomingHintWriter.persist(context.applicationContext, recordJson)
     CallLog.d(TAG, "Persisted pending hint via debug receiver timestamp=$timestamp")
@@ -72,7 +72,13 @@ class DebugIncomingCallReceiver : BroadcastReceiver() {
       "trigger_ui requested=$triggerUi raw=$triggerRaw rawType=$triggerRawType",
     )
     if (triggerUi) {
-      IncomingCallNotificationHelper.showDebugNotification(context)
+      val callId = payload.optString("call_id").takeIf { it.isNotBlank() }
+      val from = payload.optString("from").takeIf { it.isNotBlank() }
+      IncomingCallNotificationHelper.showDebugNotification(
+        context,
+        callId = callId,
+        from = from,
+      )
     }
   }
 

@@ -8,8 +8,6 @@ import android.content.Intent
 import android.os.Process
 import androidx.core.content.ContextCompat
 import com.sip_mvp.app.CallLog
-import org.json.JSONArray
-import org.json.JSONObject
 
 class CallActionReceiver : BroadcastReceiver() {
   companion object {
@@ -76,53 +74,8 @@ class CallActionReceiver : BroadcastReceiver() {
         }
       }
     }
-    val prefs = context.getSharedPreferences("pending_call_actions", Context.MODE_PRIVATE)
-    val raw = prefs.getString("pending_call_actions", "[]")
-    val existing = mutableListOf<JSONObject>()
-    JSONArray(raw ?: "[]").let { array ->
-      for (i in 0 until array.length()) {
-        array.optJSONObject(i)?.let { existing.add(it) }
-      }
-    }
     val now = System.currentTimeMillis()
-    var duplicateSuppressed = false
-    val entry = JSONObject().apply {
-      put("type", actionType)
-      put("callId", callId)
-      put("ts", now)
-      put("call_id", callId)
-      put("action", actionType)
-      put("timestamp", now)
-    }
-    val dedupWindow = 2000L
-    for (existingEntry in existing) {
-      val existingAction =
-        existingEntry.optString("type").ifEmpty { existingEntry.optString("action") }
-      val existingCallId = existingEntry.optString("callId").ifEmpty { existingEntry.optString("call_id") }
-      if (existingAction == actionType && existingCallId == callId) {
-        var previousTs = existingEntry.optLong("ts", 0L)
-        if (previousTs == 0L) {
-          previousTs = existingEntry.optLong("timestamp", 0L)
-        }
-        if (previousTs > 0 && now - previousTs <= dedupWindow) {
-          duplicateSuppressed = true
-          CallLog.d(
-            "CALLS_ACTION",
-            "duplicate pending action suppressed action=$actionType call=$callId ts=$previousTs",
-          )
-          break
-        }
-      }
-    }
-    if (!duplicateSuppressed) {
-      existing.add(entry)
-      while (existing.size > 10) {
-        existing.removeAt(0)
-      }
-      val updated = JSONArray()
-      existing.forEach { updated.put(it) }
-      prefs.edit().putString("pending_call_actions", updated.toString()).apply()
-    }
+    val duplicateSuppressed = !PendingCallActionStore.enqueue(context, callId, actionType, now)
     CallLog.d(
       "CALLS_ACTION",
       "action=$actionType ids=$idsToCancel hasManager=${notificationManager != null} cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
