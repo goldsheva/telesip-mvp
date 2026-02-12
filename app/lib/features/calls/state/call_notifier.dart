@@ -199,17 +199,18 @@ class CallNotifier extends Notifier<CallState> {
       _commitSafe(snap);
     }
     _afterStateMutation(snap, 'startCall-precheck');
-    if (!_isDialPhaseAllowed()) {
-      debugPrint(
-        '[CALLS] startCall skip reason=phase-not-idle seq=$seq $logContext',
-      );
-      return;
-    }
-    if (_isBusyForDial(snap)) {
+    final phaseAllowed = _isDialPhaseAllowed();
+    final busy = _isBusyForDial(snap);
+    if (!phaseAllowed || busy) {
+      _canStartOutgoingInternal(snap, trimmed, setError: true);
+      if (!phaseAllowed) {
+        debugPrint(
+          '[CALLS] startCall skip reason=phase-not-idle seq=$seq $logContext',
+        );
+        return;
+      }
       final activeCall = snap.activeCall;
       if (activeCall != null && activeCall.status != CallStatus.ended) {
-        const message = 'Cannot start a new call while one is active';
-        _setError(message);
         debugPrint(
           '[CALLS] startCall skip reason=active-existing number=$trimmed '
           '$logContext active=${activeCall.id} status=${activeCall.status}',
@@ -2296,13 +2297,30 @@ class CallNotifier extends Notifier<CallState> {
     return !_hasLiveCalls(s.calls.values);
   }
 
-  bool canStartOutgoingCallUi(CallState s, String rawNumber) {
+  bool _canStartOutgoingInternal(
+    CallState s,
+    String rawNumber, {
+    required bool setError,
+  }) {
     final trimmed = rawNumber.trim();
-    if (trimmed.isEmpty || !s.isRegistered) return false;
-    final sanitized = _sanitizeActiveCallId(s, 'canStartOutgoingCallUi');
+    if (trimmed.isEmpty) return false;
+    if (!s.isRegistered) return false;
+    final sanitized = _sanitizeActiveCallId(s, 'canStartOutgoing');
     if (!_isDialPhaseAllowed()) return false;
-    if (_isBusyForDial(sanitized)) return false;
+    if (_isBusyForDial(sanitized)) {
+      if (setError) {
+        final activeCall = sanitized.activeCall;
+        if (activeCall != null && activeCall.status != CallStatus.ended) {
+          _setError('Cannot start a new call while one is active');
+        }
+      }
+      return false;
+    }
     return true;
+  }
+
+  bool canStartOutgoingCallUi(CallState s, String rawNumber) {
+    return _canStartOutgoingInternal(s, rawNumber, setError: false);
   }
 
   void _clearPendingIfIdle(CallState snapshot) {
