@@ -1342,6 +1342,19 @@ class CallNotifier extends Notifier<CallState> {
         return;
       }
       await handleIncomingCallHintIfAny();
+      final activeCall = state.activeCall;
+      if (activeCall != null && activeCall.status != CallStatus.ended) {
+        if (kDebugMode) {
+          debugPrint(
+            '[CALLS] incomingPipeline syncForeground activeId=${state.activeCallId} status=${activeCall.status}',
+          );
+        }
+        _syncForegroundServiceState(state);
+      } else if (kDebugMode) {
+        debugPrint(
+          '[CALLS] incomingPipeline skip foreground sync: no active call',
+        );
+      }
       await _drainPendingCallActions();
     } catch (error, stackTrace) {
       debugPrint(
