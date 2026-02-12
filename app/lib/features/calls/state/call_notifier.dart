@@ -2303,11 +2303,8 @@ class CallNotifier extends Notifier<CallState> {
     if (trimmed.isEmpty || !s.isRegistered) return false;
     final sanitized = _sanitizeActiveCallId(s, 'canStartOutgoingCallUi');
     if (!_isDialPhaseAllowed()) return false;
-    final hasActive = sanitized.activeCallId != null;
-    final hasLive = sanitized.calls.values.any(
-      (call) => call.status != CallStatus.ended,
-    );
-    return !hasActive && !hasLive;
+    if (_isBusyForDial(sanitized)) return false;
+    return true;
   }
 
   void _clearPendingIfIdle(CallState snapshot) {
