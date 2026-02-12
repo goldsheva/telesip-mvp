@@ -35,7 +35,6 @@ import 'call_reconnect_helpers.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_reconnect_service.dart';
 import 'call_health_watchdog.dart';
-import 'call_connectivity_snapshot.dart';
 import 'call_bootstrap_service.dart';
 import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
@@ -1154,26 +1153,22 @@ class CallNotifier extends Notifier<CallState> {
     if (!kDebugMode) return;
     final AuthStatus authStatus =
         ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
-    final lastActivity = _lastNetworkActivityAt;
-    final lastNetAge = lastActivity == null
-        ? '<none>'
-        : '${DateTime.now().difference(lastActivity).inSeconds}s';
     final activeStatus = state.activeCall?.status;
-    final activeStatusString = (activeStatus ?? '<none>').toString();
-    debugPrint(
-      CallConnectivitySnapshot.formatShort(
-        tag: tag,
-        authStatus: authStatus.name,
-        online: _lastKnownOnline,
-        bootstrapScheduled: _bootstrapScheduled,
-        bootstrapDone: _bootstrapDone,
-        bootstrapInFlight: _bootstrapInFlight,
-        lastNetAge: lastNetAge,
-        backoffIndex: _reconnectScheduler.backoffIndex,
-        activeCallId: state.activeCallId ?? '<none>',
-        activeCallStatus: activeStatusString,
-        registeredAt: _lastSipRegisteredAt != null,
-      ),
+    _debugDumper.dumpShort(
+      disposed: _disposed,
+      kDebugModeEnabled: kDebugMode,
+      tag: tag,
+      authStatusName: authStatus.name,
+      online: _lastKnownOnline,
+      bootstrapScheduled: _bootstrapScheduled,
+      bootstrapDone: _bootstrapDone,
+      bootstrapInFlight: _bootstrapInFlight,
+      lastNetworkActivityAt: _lastNetworkActivityAt,
+      backoffIndex: _reconnectScheduler.backoffIndex,
+      activeCallId: state.activeCallId,
+      activeCallStatus: activeStatus,
+      lastSipRegisteredAt: _lastSipRegisteredAt,
+      log: debugPrint,
     );
   }
 
