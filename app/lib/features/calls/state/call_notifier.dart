@@ -115,6 +115,7 @@ class CallNotifier extends Notifier<CallState> {
   Timer? _registrationErrorTimer;
   String? _pendingRegistrationError;
   final Map<String, int?> _callDongleMap = {};
+  final Map<String, Timer> _endedCleanupTimers = {};
   bool _userInitiatedRetry = false;
   Timer? _retrySuppressionTimer;
   bool _watchdogErrorActive = false;
@@ -157,6 +158,7 @@ class CallNotifier extends Notifier<CallState> {
     _maxBackoff,
   ];
   static const Duration _dialTimeout = Duration(seconds: 25);
+  static const Duration _endedCleanupDelay = Duration(milliseconds: 800);
   final Map<String, DateTime> _busyRejected = {};
   static const Duration _busyRejectTtl = Duration(seconds: 90);
   final Map<String, DateTime> _recentlyEnded = {};
@@ -490,19 +492,48 @@ class CallNotifier extends Notifier<CallState> {
       callInfo = previousState.calls[callInfoKey];
     }
     final updatedCalls = Map<String, CallInfo>.from(previousState.calls);
-    final endedInState =
-        callInfo != null && callInfo.status != CallStatus.ended;
+    final callStatus = callInfo?.status;
+    final wasLive = callStatus != null && callStatus != CallStatus.ended;
     final removedKeys = <String>[];
-    if (updatedCalls.containsKey(callInfoKey)) {
-      updatedCalls.remove(callInfoKey);
-      removedKeys.add(callInfoKey);
-    }
     final secondaryKey = callIdIsSip ? localId : pairedSipId;
-    if (secondaryKey != null && secondaryKey != callInfoKey) {
-      if (updatedCalls.containsKey(secondaryKey)) {
-        updatedCalls.remove(secondaryKey);
-        removedKeys.add(secondaryKey);
+    final shouldDelayCleanup =
+        wasLive &&
+        _wasEarlyPhase(callStatus) &&
+        _shouldGraceDelayForReason(reason);
+    if (updatedCalls.containsKey(callInfoKey)) {
+      if (shouldDelayCleanup) {
+        final endedCall = callInfo!;
+        final endedCallUpdated = endedCall.copyWith(
+          status: CallStatus.ended,
+          endedAt: now,
+        );
+        updatedCalls[callInfoKey] = endedCallUpdated;
+        if (secondaryKey != null && secondaryKey != callInfoKey) {
+          final secondaryCall = updatedCalls[secondaryKey];
+          if (secondaryCall != null) {
+            updatedCalls[secondaryKey] = secondaryCall.copyWith(
+              status: CallStatus.ended,
+              endedAt: now,
+            );
+          }
+        }
+        _scheduleEndedCleanup(
+          primaryId: callInfoKey,
+          secondaryId: secondaryKey,
+          endedAt: now,
+          reason: reason,
+        );
+      } else {
+        updatedCalls.remove(callInfoKey);
+        removedKeys.add(callInfoKey);
       }
+    }
+    if (secondaryKey != null &&
+        secondaryKey != callInfoKey &&
+        updatedCalls.containsKey(secondaryKey) &&
+        !shouldDelayCleanup) {
+      updatedCalls.remove(secondaryKey);
+      removedKeys.add(secondaryKey);
     }
 
     final activeWas = previousState.activeCallId;
@@ -564,7 +595,7 @@ class CallNotifier extends Notifier<CallState> {
     }
     debugPrint(
       '[CALLS] endCall reason=$reason callId=$callId localId=$localId '
-      'activeWas=$activeWas endedKey=$callInfoKey endedInState=$endedInState '
+      'activeWas=$activeWas endedKey=$callInfoKey endedInState=$wasLive '
       'clearedActive=$clearedActive clearedHint=$clearedHint clearedAction=$clearedAction '
       'relevant=true',
     );
@@ -1111,6 +1142,10 @@ class CallNotifier extends Notifier<CallState> {
       _cancelRetrySuppressionTimer();
       _disposeWatchdog();
       unawaited(_releaseAudioFocus());
+      for (final timer in _endedCleanupTimers.values) {
+        timer.cancel();
+      }
+      _endedCleanupTimers.clear();
       _unregisterGlobalCallNotifierInstance(this);
     });
     if (!_bootstrapScheduled) {
@@ -2230,6 +2265,22 @@ class CallNotifier extends Notifier<CallState> {
     return _phase == _CallPhase.idle || _phase == _CallPhase.ending;
   }
 
+  static const Set<String> _graceDelayReasons = {
+    'sip-error',
+    'dial-timeout',
+    'startCall-failed',
+  };
+
+  bool _shouldGraceDelayForReason(String reason) {
+    return _graceDelayReasons.contains(reason);
+  }
+
+  bool _wasEarlyPhase(CallStatus? status) {
+    return status != null &&
+        status != CallStatus.connected &&
+        status != CallStatus.ended;
+  }
+
   bool _hasLiveCalls(Iterable<CallInfo> calls) {
     return calls.any((call) => call.status != CallStatus.ended);
   }
@@ -2269,6 +2320,57 @@ class CallNotifier extends Notifier<CallState> {
     if (didReset) {
       debugPrint('[CALLS] idle cleanup: reset dial locks reason=$reason');
     }
+  }
+
+  void _scheduleEndedCleanup({
+    required String primaryId,
+    String? secondaryId,
+    required DateTime endedAt,
+    required String reason,
+  }) {
+    _endedCleanupTimers.remove(primaryId)?.cancel();
+    if (!_alive) return;
+
+    final timer = Timer(_endedCleanupDelay, () {
+      _endedCleanupTimers.remove(primaryId);
+      if (!_alive) return;
+      final updatedCalls = Map<String, CallInfo>.from(state.calls);
+      var removed = false;
+
+      bool removeIfMatched(String id) {
+        final call = updatedCalls[id];
+        if (call != null &&
+            call.status == CallStatus.ended &&
+            call.endedAt == endedAt) {
+          updatedCalls.remove(id);
+          return true;
+        }
+        return false;
+      }
+
+      if (removeIfMatched(primaryId)) {
+        removed = true;
+      }
+      if (secondaryId != null && secondaryId != primaryId) {
+        if (removeIfMatched(secondaryId)) {
+          removed = true;
+        }
+      }
+      if (!removed) return;
+      final nextState = state.copyWith(calls: updatedCalls);
+      final sanitized = _sanitizeActiveCallId(nextState, 'ended-cleanup');
+      _commitSafe(sanitized);
+      _resetDialLocksIfIdle(sanitized, 'ended-cleanup');
+      debugPrint(
+        '[CALLS] ended cleanup fired primary=$primaryId secondary=${secondaryId ?? "<none>"} '
+        'reason=$reason calls=${sanitized.calls.length}',
+      );
+    });
+    _endedCleanupTimers[primaryId] = timer;
+    debugPrint(
+      '[CALLS] scheduled ended cleanup primary=$primaryId secondary=${secondaryId ?? "<none>"} '
+      'delay=${_endedCleanupDelay.inMilliseconds}ms reason=$reason',
+    );
   }
 
   Future<void> _refreshAudioRoute() async {
