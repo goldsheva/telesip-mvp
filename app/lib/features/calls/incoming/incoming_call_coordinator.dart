@@ -9,7 +9,7 @@ class IncomingCallCoordinator {
   IncomingCallCoordinator(WidgetRef ref) : _ref = ref;
 
   final WidgetRef _ref;
-  bool _processing = false;
+  bool _isProcessing = false;
   DateTime? _lastIncomingActivityAt;
 
   DateTime? get lastIncomingActivityAt => _lastIncomingActivityAt;
@@ -19,8 +19,8 @@ class IncomingCallCoordinator {
   }
 
   Future<void> processIncomingActivity() async {
-    if (_processing) return;
-    _processing = true;
+    if (_isProcessing) return;
+    _isProcessing = true;
     try {
       final handled = await _ref
           .read(incomingWakeCoordinatorProvider)
@@ -30,7 +30,7 @@ class IncomingCallCoordinator {
       }
       await _handlePendingCallAction();
     } finally {
-      _processing = false;
+      _isProcessing = false;
     }
   }
 

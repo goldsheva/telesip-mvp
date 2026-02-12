@@ -49,12 +49,12 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   String? _pendingBootstrapReason;
   bool _batteryPromptInFlight = false;
   bool _batteryPromptScheduled = false;
-  late final IncomingCallCoordinator _incomingCoordinator;
+  late final IncomingCallCoordinator _incomingActivityCoordinator;
 
   @override
   void initState() {
     super.initState();
-    _incomingCoordinator = IncomingCallCoordinator(ref);
+    _incomingActivityCoordinator = IncomingCallCoordinator(ref);
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _isResumed =
         lifecycleState == AppLifecycleState.resumed ||
@@ -62,7 +62,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == AppLifecycleState.inactive;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_incomingCoordinator.processIncomingActivity());
+      unawaited(_incomingActivityCoordinator.processIncomingActivity());
       final status =
           ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
       _logAuthGateState('init post-frame');
@@ -145,12 +145,12 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       }
       _batteryPromptScheduled = false;
       _batteryPromptInFlight = false;
-      unawaited(_incomingCoordinator.processIncomingActivity());
+      unawaited(_incomingActivityCoordinator.processIncomingActivity());
       _ensureCallsBootstrapped('app-resume');
       unawaited(_maybeAskBatteryOptimizations());
     } else {
       _batteryPromptScheduled = false;
-      _incomingCoordinator.clearLastIncomingActivity();
+      _incomingActivityCoordinator.clearLastIncomingActivity();
     }
   }
 
@@ -172,7 +172,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       return;
     }
     final now = DateTime.now();
-    final lastIncomingAt = _incomingCoordinator.lastIncomingActivityAt;
+    final lastIncomingAt = _incomingActivityCoordinator.lastIncomingActivityAt;
     if (lastIncomingAt != null &&
         now.difference(lastIncomingAt) < const Duration(seconds: 10)) {
       debugPrint('[CALLS] battery prompt suppressed: recent incoming activity');
