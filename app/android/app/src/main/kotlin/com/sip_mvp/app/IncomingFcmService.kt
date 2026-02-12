@@ -76,16 +76,13 @@ class IncomingFcmService : FirebaseMessagingService() {
         .put("payload", payload)
         .toString()
       PendingIncomingHintWriter.persist(applicationContext, record)
-      val callId = payload.optString("call_id").takeIf { it.isNotBlank() }
-      val from = payload.optString("from").takeIf { it.isNotBlank() }
-      IncomingCallNotificationHelper.showIncomingNotification(
-        applicationContext,
-        callId = callId,
-        from = from,
-      )
+      val posted =
+        IncomingCallNotificationHelper.showIncomingNotificationFromPendingHint(
+          applicationContext,
+        )
       Log.d(
         "IncomingHint",
-        "pending hint persisted callId=${callId ?: "<none>"} notification posted",
+        "pending hint persisted notificationPosted=$posted callId=${payload.optString("call_id", "<none>")}",
       )
     } catch (error: Exception) {
       Log.w("IncomingHint", "failed to persist pending hint: $error")

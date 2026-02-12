@@ -174,6 +174,29 @@ object IncomingCallNotificationHelper {
       .cancel(RELEASE_NOTIFICATION_ID)
   }
 
+  fun showIncomingNotificationFromPendingHint(context: Context): Boolean {
+    return try {
+      val record = PendingIncomingHintWriter.read(context)
+      if (record.isNullOrEmpty()) {
+        cancelIncomingNotification(context)
+        CallLog.d("IncomingHint", "No pending hint to show release notification")
+        false
+      } else {
+        val payload = org.json.JSONObject(record).optJSONObject("payload")
+        val callId = payload?.optString("call_id")?.takeIf { it.isNotBlank() }
+        val from = payload?.optString("from")?.takeIf { it.isNotBlank() }
+        showIncomingNotification(context, callId, from)
+        true
+      }
+    } catch (error: Exception) {
+      CallLog.w(
+        "IncomingHint",
+        "Failed to show release notification from pending hint: $error",
+      )
+      false
+    }
+  }
+
   private fun composeContentText(callId: String?, from: String?): String {
     return when {
       callId != null && from != null -> "Call $callId from $from"

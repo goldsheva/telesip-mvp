@@ -324,20 +324,14 @@ class MainActivity : FlutterFragmentActivity() {
 
   private fun handleReleaseNotificationRefresh(result: MethodChannel.Result) {
     try {
-      val parsed = parsePendingHint(PendingIncomingHintWriter.read(applicationContext))
-      if (parsed == null) {
-        IncomingCallNotificationHelper.cancelIncomingNotification(this)
+      val posted =
+        IncomingCallNotificationHelper.showIncomingNotificationFromPendingHint(
+          this,
+        )
+      if (!posted) {
         Log.d("IncomingHint", "release refresh notification: no pending hint")
-        result.success(false)
-        return
       }
-      IncomingCallNotificationHelper.showIncomingNotification(
-        this,
-        callId = parsed.first,
-        from = parsed.second,
-      )
-      Log.d("IncomingHint", "release refresh notification: posted callId=${parsed.first}")
-      result.success(true)
+      result.success(posted)
     } catch (error: Exception) {
       Log.w("IncomingHint", "release refresh notification failed: $error")
       result.error("RELEASE_REFRESH_FAILED", error.message, null)
