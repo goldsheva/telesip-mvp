@@ -475,8 +475,8 @@ class _SipUserListTileState extends State<_SipUserListTile> {
             ],
             const SizedBox(height: 6),
             _InfoLine(label: 'SIP Username', value: widget.sipUser.sipLogin),
-            const SizedBox(height: 6),
-            _InfoLine(label: 'SIP Password', value: widget.sipUser.sipPassword),
+            // const SizedBox(height: 6),
+            // _InfoLine(label: 'SIP Password', value: widget.sipUser.sipPassword),
             const SizedBox(height: 6),
             if (primaryConnection != null) ...[
               _InfoLine(
@@ -690,8 +690,8 @@ class _GeneralSettingsDialog extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             _InfoLine(label: 'SIP Username', value: sipClient.sipLogin),
-            const SizedBox(height: 6),
-            _InfoLine(label: 'SIP Password', value: sipClient.sipPassword),
+            // const SizedBox(height: 6),
+            // _InfoLine(label: 'SIP Password', value: sipClient.sipPassword),
             for (
               var i = 0;
               i < sipClient.sipConnections.length && i < 2;
