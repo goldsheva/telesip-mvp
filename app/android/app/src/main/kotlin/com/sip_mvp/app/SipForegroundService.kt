@@ -196,8 +196,7 @@ class SipForegroundService : Service() {
   }
 
   private fun buildForegroundServiceTypes(needsMicrophone: Boolean): Int {
-    var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or
-        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+    var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
     if (needsMicrophone && hasMicrophonePermission()) {
       types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
     }
