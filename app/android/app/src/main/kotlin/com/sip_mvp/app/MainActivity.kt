@@ -21,16 +21,13 @@ class MainActivity : FlutterFragmentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     CallLog.ensureInit(applicationContext)
-    pendingDebugHintCheck = pendingDebugHintCheck || shouldTriggerDebugHintCheck(intent)
+    handleDebugIncomingExtras(intent)
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
-    if (shouldTriggerDebugHintCheck(intent)) {
-      pendingDebugHintCheck = true
-      maybeDispatchDebugHintCheck()
-    }
+    handleDebugIncomingExtras(intent)
   }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -209,11 +206,22 @@ class MainActivity : FlutterFragmentActivity() {
       debugIncomingChannel =
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.debug/incoming")
       maybeDispatchDebugHintCheck()
+      handleDebugIncomingExtras(intent)
     }
   }
 
-  private fun shouldTriggerDebugHintCheck(intent: Intent?): Boolean {
-    return intent?.getBooleanExtra(EXTRA_DEBUG_CHECK_PENDING_HINT, false) == true
+  private fun handleDebugIncomingExtras(intent: Intent?) {
+    if (intent == null) return
+    val shouldTrigger = intent.getBooleanExtra(EXTRA_DEBUG_CHECK_PENDING_HINT, false)
+    if (!shouldTrigger) return
+    val fromNotification = intent.getBooleanExtra("from_incoming_notification", false)
+    Log.d(
+      "DebugIncomingHint",
+      "handleDebugIncomingExtras trigger received fromNotification=$fromNotification",
+    )
+    pendingDebugHintCheck = true
+    intent.removeExtra(EXTRA_DEBUG_CHECK_PENDING_HINT)
+    maybeDispatchDebugHintCheck()
   }
 
   private fun maybeDispatchDebugHintCheck() {
