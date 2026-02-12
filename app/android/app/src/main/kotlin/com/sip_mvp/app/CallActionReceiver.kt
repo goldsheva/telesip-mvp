@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Process
+import androidx.core.content.ContextCompat
 import com.sip_mvp.app.CallLog
 import org.json.JSONArray
 import org.json.JSONObject
@@ -60,6 +61,20 @@ class CallActionReceiver : BroadcastReceiver() {
         }
       }
       NotificationHelper.markSuppressed(idsToCancel)
+    }
+    if (action == ACTION_DECLINE) {
+      val stopIntent = Intent(context, SipForegroundService::class.java).apply {
+        action = SipForegroundService.ACTION_STOP
+      }
+      try {
+        ContextCompat.startForegroundService(context, stopIntent)
+      } catch (_: Throwable) {
+        try {
+          context.startService(stopIntent)
+        } catch (_: Throwable) {
+          // best effort
+        }
+      }
     }
     val prefs = context.getSharedPreferences("pending_call_actions", Context.MODE_PRIVATE)
     val raw = prefs.getString("pending_call_actions", "[]")

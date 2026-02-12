@@ -113,7 +113,7 @@ class CallBootstrapService {
       (_, timestamp) => now.difference(timestamp) > pendingCallActionDedupTtl,
     );
     var dedupSkipped = 0;
-    var unknownCleared = 0;
+    var deferredCount = 0;
     var processed = 0;
     for (final item in raw) {
       if (item is! Map) continue;
@@ -134,28 +134,28 @@ class CallBootstrapService {
       if (type == 'answer') {
         processed++;
         if (!isCallAlive(callId)) {
-          log('[CALLS] pending answer for unknown call $callId, clearing');
+          log('[CALLS] pending answer deferred: no call yet callId=$callId');
           await notifCleanup.clearCallNotificationState(
             callId,
             cancelNotification: true,
-            clearPendingAction: true,
             clearPendingHint: true,
           );
-          unknownCleared++;
+          processedPendingCallActions.remove(dedupKey);
+          deferredCount++;
           continue;
         }
         await answerFromNotification(callId);
       } else if (type == 'decline') {
         processed++;
         if (!isCallAlive(callId)) {
-          log('[CALLS] pending decline for unknown call $callId, clearing');
+          log('[CALLS] pending decline deferred: no call yet callId=$callId');
           await notifCleanup.clearCallNotificationState(
             callId,
             cancelNotification: true,
-            clearPendingAction: true,
             clearPendingHint: true,
           );
-          unknownCleared++;
+          processedPendingCallActions.remove(dedupKey);
+          deferredCount++;
           continue;
         }
         await declineFromNotification(callId);
@@ -166,7 +166,7 @@ class CallBootstrapService {
       log(
         '[CALLS] drainPendingCallActions summary total=$totalConsidered '
         'processed=$processed dedupSkipped=$dedupSkipped '
-        'unknownCleared=$unknownCleared',
+        'deferredCount=$deferredCount',
       );
     }
   }

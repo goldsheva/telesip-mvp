@@ -59,8 +59,7 @@ class IncomingCallCoordinator {
     final callState = _ref.read(callControllerProvider);
     final callInfo = callState.calls[callId];
     if (callInfo == null) {
-      debugPrint('[CALLS] pending action ignored: no call for callId=$callId');
-      await IncomingNotificationService.clearCallAction();
+      debugPrint('[CALLS] pending action deferred: no call yet callId=$callId');
       return;
     }
     if (callInfo.status == CallStatus.ended) {
