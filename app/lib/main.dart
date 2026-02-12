@@ -8,7 +8,7 @@ import 'package:app/services/firebase_messaging_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  EnvConfig.init(Environment.prod);
+  EnvConfig.init(Environment.preprod);
 
   final container = ProviderContainer();
   await FirebaseMessagingService.initialize(

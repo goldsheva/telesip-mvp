@@ -13,7 +13,7 @@ import 'package:app/config/env_config.dart';
 
 void main() {
   setUpAll(() {
-    EnvConfig.init(Environment.dev);
+    EnvConfig.init(Environment.stage);
   });
 
   testWidgets('App builds', (WidgetTester tester) async {

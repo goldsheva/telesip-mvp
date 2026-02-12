@@ -1,4 +1,4 @@
-enum Environment { dev, preprod, prod }
+enum Environment { stage, preprod, prod }
 
 class EnvConfig {
   static Environment env = Environment.prod;
@@ -9,7 +9,7 @@ class EnvConfig {
 
   static String get baseApiUrl {
     switch (env) {
-      case Environment.dev:
+      case Environment.stage:
         return 'https://teleleo.k8s-stage.bringo.tel/react_api';
       case Environment.preprod:
         return 'https://teleleo-pp.k8s-stage.bringo.tel/react_api';
@@ -20,7 +20,7 @@ class EnvConfig {
 
   static int get siteDomainId {
     switch (env) {
-      case Environment.dev:
+      case Environment.stage:
         return 1;
       case Environment.preprod:
         return 1;
@@ -31,7 +31,7 @@ class EnvConfig {
 
   static String? get sipWebSocketUrl {
     switch (env) {
-      case Environment.dev:
+      case Environment.stage:
         return 'wss://pbx.teleleo.com:7443/';
       case Environment.preprod:
         return 'wss://pbx-pp.teleleo.com:7443/';

@@ -135,7 +135,7 @@ class ApiClient {
   void dispose() => _client.close();
 
   bool _shouldLog() {
-    return EnvConfig.env == Environment.dev;
+    return EnvConfig.env == Environment.stage;
   }
 
   void _logRequest(
