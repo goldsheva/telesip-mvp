@@ -186,31 +186,35 @@ class CallNotifier extends Notifier<CallState> {
         'dialTimeoutId=${_dialTimeoutCallId ?? "<none>"} dialTimer=${_dialTimeoutTimer != null} '
         'bootstrapDone=$_bootstrapDone scheduled=$_bootstrapScheduled';
     debugPrint('[CALLS] startCall enter seq=$seq number=$trimmed $logContext');
-    _resetDialLocksIfIdle(state, 'startCall-precheck');
-    final current = _sanitizeActiveCallId(state, 'startCall-precheck');
-    if (!identical(current, state)) {
-      _commitSafe(current);
-    }
-    final activeCall = current.activeCall;
-    if (activeCall != null && activeCall.status != CallStatus.ended) {
-      const message = 'Cannot start a new call while one is active';
-      _setError(message);
-      debugPrint(
-        '[CALLS] startCall skip reason=active-existing number=$trimmed '
-        '$logContext active=${activeCall.id} status=${activeCall.status}',
-      );
-      return;
-    }
     if (trimmed.isEmpty) {
       debugPrint(
         '[CALLS] startCall skip reason=empty-number number=$trimmed $logContext',
       );
       return;
     }
-    if (_phase != _CallPhase.idle && _phase != _CallPhase.ending) {
+    _resetDialLocksIfIdle(state, 'startCall-precheck');
+    final snap = _sanitizeActiveCallId(state, 'startCall-precheck');
+    if (!identical(snap, state)) {
+      _commitSafe(snap);
+    }
+    if (!_isDialPhaseAllowed()) {
       debugPrint(
-        '[CALLS] startCall skip reason=phase-not-idle number=$trimmed $logContext',
+        '[CALLS] startCall skip reason=phase-not-idle seq=$seq $logContext',
       );
+      return;
+    }
+    if (_isBusyForDial(snap)) {
+      final activeCall = snap.activeCall;
+      if (activeCall != null && activeCall.status != CallStatus.ended) {
+        const message = 'Cannot start a new call while one is active';
+        _setError(message);
+        debugPrint(
+          '[CALLS] startCall skip reason=active-existing number=$trimmed '
+          '$logContext active=${activeCall.id} status=${activeCall.status}',
+        );
+      } else {
+        debugPrint('[CALLS] startCall skip reason=busy seq=$seq $logContext');
+      }
       return;
     }
     await _ensureStoredIncomingCredentialsLoaded();
@@ -532,9 +536,12 @@ class CallNotifier extends Notifier<CallState> {
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
     );
-    final sanitized = _sanitizeActiveCallId(nextState, 'endCall:$reason');
-    _commitSafe(sanitized);
-    _resetDialLocksIfIdle(sanitized, 'endCall:$reason');
+    final post = _sanitizeActiveCallId(nextState, 'endCall-postcommit');
+    _commitSafe(post);
+    scheduleMicrotask(() {
+      if (!_alive) return;
+      _resetDialLocksIfIdle(post, 'endCall-postcommit');
+    });
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
@@ -1449,7 +1456,8 @@ class CallNotifier extends Notifier<CallState> {
 
   void _commitSafe(CallState next, {bool syncFgs = true}) {
     if (!_alive) return;
-    _commit(next, syncFgs: syncFgs);
+    final sanitized = _sanitizeActiveCallId(next, 'commitSafe');
+    _commit(sanitized, syncFgs: syncFgs);
   }
 
   Future<void> _onEvent(SipEvent event) async {
@@ -2190,6 +2198,21 @@ class CallNotifier extends Notifier<CallState> {
       return snapshot.copyWith(activeCallId: null);
     }
     return snapshot;
+  }
+
+  bool _isBusyForDial(CallState s) {
+    final hasActiveId = s.activeCallId != null;
+    final hasOngoingCalls = s.calls.values.any(
+      (call) => call.status != CallStatus.ended,
+    );
+    return hasActiveId ||
+        hasOngoingCalls ||
+        _pendingCallId != null ||
+        _pendingLocalCallId != null;
+  }
+
+  bool _isDialPhaseAllowed() {
+    return _phase == _CallPhase.idle || _phase == _CallPhase.ending;
   }
 
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
