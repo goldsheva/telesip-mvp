@@ -329,7 +329,7 @@ object NotificationHelper {
     )
   }
 
-  private data class IncomingNotificationMeta(
+  data class IncomingNotificationMeta(
     val builder: NotificationCompat.Builder,
     val baseId: Int,
     val effectiveCallUuid: String,
