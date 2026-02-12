@@ -107,6 +107,8 @@ class CallBootstrapService {
     }
     final raw = await fetchPendingCallActions();
     if (isDisposed()) return;
+    final totalPending = raw?.length ?? 0;
+    log('[CALLS] drainPendingCallActions fetched count=$totalPending');
     if (raw == null || raw.isEmpty) return;
     final now = DateTime.now();
     processedPendingCallActions.removeWhere(
@@ -144,6 +146,7 @@ class CallBootstrapService {
           deferredCount++;
           continue;
         }
+        log('[CALLS] drainPendingCallActions applying answer callId=$callId');
         await answerFromNotification(callId);
       } else if (type == 'decline') {
         processed++;
@@ -158,6 +161,7 @@ class CallBootstrapService {
           deferredCount++;
           continue;
         }
+        log('[CALLS] drainPendingCallActions applying decline callId=$callId');
         await declineFromNotification(callId);
       }
     }

@@ -29,6 +29,7 @@ object PendingCallActionStore {
       put("timestamp", timestamp)
     }
 
+    var dedupSuppressed = false
     for (existingEntry in existing) {
       val existingAction =
         existingEntry.optString("type").ifEmpty { existingEntry.optString("action") }
@@ -40,9 +41,17 @@ object PendingCallActionStore {
           previousTs = existingEntry.optLong("timestamp", 0L)
         }
         if (previousTs > 0 && timestamp - previousTs <= DEDUP_WINDOW_MS) {
-          return false
+          dedupSuppressed = true
+          break
         }
       }
+    }
+    if (dedupSuppressed) {
+      CallLog.d(
+        "IncomingHint",
+        "pending action deduped type=$actionType callId=$callId",
+      )
+      return false
     }
 
     existing.add(entry)
@@ -53,6 +62,10 @@ object PendingCallActionStore {
     val updated = JSONArray()
     existing.forEach { updated.put(it) }
     prefs.edit().putString(KEY_PENDING_ACTIONS, updated.toString()).apply()
+    CallLog.d(
+      "IncomingHint",
+      "pending action enqueued type=$actionType callId=$callId ts=$timestamp",
+    )
     return true
   }
 }
