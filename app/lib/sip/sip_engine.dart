@@ -5,6 +5,7 @@ import 'package:sip_ua/sip_ua.dart';
 
 import 'sip_models.dart';
 export 'sip_models.dart';
+import 'sip_ua_helper.dart';
 
 abstract class SipEngine {
   Future<void> init();
@@ -26,7 +27,7 @@ abstract class SipEngine {
 class SipUaEngine implements SipEngine, SipUaHelperListener {
   final StreamController<SipEvent> _eventController =
       StreamController<SipEvent>.broadcast();
-  final SIPUAHelper _helper = SIPUAHelper();
+  final AppSipUaHelper _helper = AppSipUaHelper();
   final Map<String, Call> _callReferences = <String, Call>{};
   final Map<String, String> _callIdAliases = <String, String>{};
 
