@@ -170,6 +170,7 @@ class CallNotifier extends Notifier<CallState> {
   static const Duration _busyGrace = Duration(seconds: 2);
   final Map<String, DateTime> _processedPendingCallActions = {};
   static const Duration _pendingCallActionDedupTtl = Duration(seconds: 120);
+  final Map<String, String> _sipErrorGraceMessages = {};
 
   bool get isBusy {
     final baseBusy =
@@ -506,6 +507,18 @@ class CallNotifier extends Notifier<CallState> {
         (wasLive &&
             _wasEarlyPhase(callStatus) &&
             _shouldGraceDelayForReason(reason));
+    if (keepActiveDuringGrace &&
+        shouldDelayCleanup &&
+        appliedFailureMessage != null &&
+        appliedFailureMessage.isNotEmpty) {
+      _sipErrorGraceMessages[callInfoKey] = appliedFailureMessage;
+      if (_alive && state.errorMessage != appliedFailureMessage) {
+        state = state.copyWith(errorMessage: appliedFailureMessage);
+      }
+      debugPrint(
+        '[CALLS_UI] stored sip-error grace message callId=$callInfoKey message=$appliedFailureMessage',
+      );
+    }
     if (updatedCalls.containsKey(callInfoKey)) {
       if (shouldDelayCleanup) {
         final endedCall = callInfo!;
@@ -1865,9 +1878,16 @@ class CallNotifier extends Notifier<CallState> {
     String callId,
     CallState previousState,
   ) async {
-    final failureMessage = event.type == SipEventType.error
-        ? _buildSipFailureMessage(event)
+    final statusCode =
+        event.statusCode ?? _extractStatusCodeFromMessage(event.message);
+    final failureMessage = statusCode != null
+        ? _buildSipFailureMessage(statusCode, event.reasonPhrase)
         : null;
+    if (failureMessage != null) {
+      debugPrint(
+        '[CALLS_UI] set callError callId=$callId code=$statusCode text=$failureMessage',
+      );
+    }
     await _endCallAndCleanup(
       callId,
       reason: _endReasonForEvent(event.type),
@@ -1888,19 +1908,16 @@ class CallNotifier extends Notifier<CallState> {
 
   static final RegExp _sipStatusCodeRegex = RegExp(r'SIP/2\.0\s+(\d{3})');
 
-  String? _buildSipFailureMessage(SipEvent event) {
-    final statusCode =
-        event.statusCode ?? _extractStatusCodeFromMessage(event.message);
-    if (statusCode == null) return null;
+  String? _buildSipFailureMessage(int statusCode, String? reason) {
     if (statusCode == 480) {
       return 'The user is temporarily unavailable. (480)';
     }
-    final reason = event.reasonPhrase?.trim();
-    if (reason != null && reason.isNotEmpty) {
-      final sanitizedReason = reason.endsWith('.')
-          ? reason.substring(0, reason.length - 1)
-          : reason;
-      return '$sanitizedReason. ($statusCode)';
+    final sanitizedReason = reason?.trim();
+    if (sanitizedReason != null && sanitizedReason.isNotEmpty) {
+      final truncated = sanitizedReason.endsWith('.')
+          ? sanitizedReason.substring(0, sanitizedReason.length - 1)
+          : sanitizedReason;
+      return '$truncated. ($statusCode)';
     }
     return 'Call failed. ($statusCode)';
   }
@@ -2226,9 +2243,13 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _clearError() {
-    if (state.errorMessage != null) {
-      state = state.copyWith(errorMessage: null);
+    final currentError = state.errorMessage;
+    if (currentError == null) return;
+    if (_sipErrorGraceMessages.containsValue(currentError)) {
+      debugPrint('[CALLS_UI] skip clear error due to sip-error grace');
+      return;
     }
+    state = state.copyWith(errorMessage: null);
   }
 
   void _handleRegistrationFailure(String message) {
@@ -2443,6 +2464,12 @@ class CallNotifier extends Notifier<CallState> {
         }
       }
       if (!removed) return;
+      if (reason == 'sip-error') {
+        _sipErrorGraceMessages.remove(primaryId);
+        if (secondaryId != null) {
+          _sipErrorGraceMessages.remove(secondaryId);
+        }
+      }
       var nextActiveId = state.activeCallId;
       if (nextActiveId != null &&
           (nextActiveId == primaryId ||
@@ -2455,6 +2482,17 @@ class CallNotifier extends Notifier<CallState> {
       );
       final sanitized = _sanitizeActiveCallId(nextState, 'ended-cleanup');
       _commitSafe(sanitized);
+      if (reason == 'sip-error') {
+        final currentError = state.errorMessage;
+        if (currentError != null &&
+            !_sipErrorGraceMessages.containsValue(currentError)) {
+          debugPrint(
+            '[CALLS_UI] clear callError callId=$primaryId reason=ended-cleanup',
+          );
+          final clearedState = state.copyWith(errorMessage: null);
+          _commitSafe(clearedState);
+        }
+      }
       debugPrint(
         '[CALLS] ended cleanup fired primary=$primaryId secondary=${secondaryId ?? "<none>"} '
         'reason=$reason calls=${sanitized.calls.length}',
