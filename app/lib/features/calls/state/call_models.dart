@@ -106,4 +106,24 @@ class CallState {
       availableAudioRoutes: availableAudioRoutes ?? this.availableAudioRoutes,
     );
   }
+
+  String? get effectiveCallId {
+    if (activeCallId != null) return activeCallId;
+    String? singleId;
+    for (final call in calls.values) {
+      if (call.status == CallStatus.ended) continue;
+      if (singleId != null) {
+        return null;
+      }
+      singleId = call.id;
+    }
+    return singleId;
+  }
+
+  CallInfo? get effectiveCall {
+    final id = effectiveCallId;
+    return id != null ? calls[id] : null;
+  }
+
+  bool get hasActiveCall => effectiveCallId != null;
 }
