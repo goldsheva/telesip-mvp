@@ -500,10 +500,12 @@ class CallNotifier extends Notifier<CallState> {
     final wasLive = callStatus != null && callStatus != CallStatus.ended;
     final removedKeys = <String>[];
     final secondaryKey = callIdIsSip ? localId : pairedSipId;
+    final keepActiveDuringGrace = reason == 'sip-error';
     final shouldDelayCleanup =
-        wasLive &&
-        _wasEarlyPhase(callStatus) &&
-        _shouldGraceDelayForReason(reason);
+        keepActiveDuringGrace ||
+        (wasLive &&
+            _wasEarlyPhase(callStatus) &&
+            _shouldGraceDelayForReason(reason));
     if (updatedCalls.containsKey(callInfoKey)) {
       if (shouldDelayCleanup) {
         final endedCall = callInfo!;
@@ -546,7 +548,8 @@ class CallNotifier extends Notifier<CallState> {
     var nextActiveCallId = activeWas;
     var clearedActive = false;
     if (nextActiveCallId != null &&
-        (nextActiveCallId == callId || nextActiveCallId == localId)) {
+        (nextActiveCallId == callId || nextActiveCallId == localId) &&
+        !keepActiveDuringGrace) {
       nextActiveCallId = null;
       _busyUntil = now.add(_busyGrace);
       clearedActive = true;
@@ -591,11 +594,19 @@ class CallNotifier extends Notifier<CallState> {
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
     );
-    final post = _sanitizeActiveCallId(nextState, 'endCall-postcommit');
-    _commitSafe(post);
+    final committedState = keepActiveDuringGrace
+        ? nextState
+        : _sanitizeActiveCallId(nextState, 'endCall-postcommit');
+    if (keepActiveDuringGrace) {
+      _commit(committedState);
+      _afterStateMutation(committedState, 'endCall-postcommit');
+    } else {
+      _commitSafe(committedState);
+    }
     debugPrint(
-      '[CALLS] endCall final active=${post.activeCallId} calls=${post.calls.length}',
+      '[CALLS] endCall final active=${committedState.activeCallId} calls=${committedState.calls.length}',
     );
+
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
@@ -2295,7 +2306,9 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   bool _isBusyForDial(CallState s) {
-    final hasActiveId = s.activeCallId != null;
+    final activeCall = s.activeCall;
+    final hasActiveId =
+        activeCall != null && activeCall.status != CallStatus.ended;
     final hasOngoingCalls = s.calls.values.any(
       (call) => call.status != CallStatus.ended,
     );
@@ -2330,7 +2343,8 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   bool _isIdleSnapshot(CallState s) {
-    if (s.activeCallId != null) return false;
+    final active = s.activeCall;
+    if (active != null && active.status != CallStatus.ended) return false;
     return !_hasLiveCalls(s.calls.values);
   }
 
@@ -2429,7 +2443,16 @@ class CallNotifier extends Notifier<CallState> {
         }
       }
       if (!removed) return;
-      final nextState = state.copyWith(calls: updatedCalls);
+      var nextActiveId = state.activeCallId;
+      if (nextActiveId != null &&
+          (nextActiveId == primaryId ||
+              (secondaryId != null && nextActiveId == secondaryId))) {
+        nextActiveId = null;
+      }
+      final nextState = state.copyWith(
+        calls: updatedCalls,
+        activeCallId: nextActiveId,
+      );
       final sanitized = _sanitizeActiveCallId(nextState, 'ended-cleanup');
       _commitSafe(sanitized);
       debugPrint(
