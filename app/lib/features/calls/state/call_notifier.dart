@@ -128,6 +128,7 @@ class CallNotifier extends Notifier<CallState> {
   bool _foregroundRequested = false;
   bool _foregroundNeedsMicrophone = false;
   bool _microphonePermissionGranted = false;
+  int _fgsSeq = 0;
   bool _bootstrapDone = false;
   bool _bootstrapScheduled = false;
   late final CallNotificationCleanup _notifCleanup;
@@ -2111,6 +2112,10 @@ class CallNotifier extends Notifier<CallState> {
     if (shouldRun &&
         (!_foregroundRequested ||
             needsMicrophone != _foregroundNeedsMicrophone)) {
+      final seq = ++_fgsSeq;
+      debugPrint(
+        '[CALLS] fgs start seq=$seq needsMic=$needsMicrophone reason=sync',
+      );
       _foregroundRequested = true;
       _foregroundNeedsMicrophone = needsMicrophone;
       unawaited(
@@ -2119,6 +2124,8 @@ class CallNotifier extends Notifier<CallState> {
         ),
       );
     } else if (!shouldRun && _foregroundRequested) {
+      final seq = ++_fgsSeq;
+      debugPrint('[CALLS] fgs stop seq=$seq reason=sync');
       _foregroundRequested = false;
       _foregroundNeedsMicrophone = false;
       unawaited(ForegroundService.stopForegroundService());
@@ -2132,6 +2139,8 @@ class CallNotifier extends Notifier<CallState> {
     debugPrint('[INCOMING] hint foreground guard start');
     _hintForegroundGuard = true;
     _foregroundNeedsMicrophone = false;
+    final seq = ++_fgsSeq;
+    debugPrint('[CALLS] fgs start seq=$seq needsMic=false reason=hint');
     unawaited(ForegroundService.startForegroundService(needsMicrophone: false));
   }
 
