@@ -58,7 +58,14 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     );
   }
 
-  void _emitCall(SipEventType type, {String? callId, String? message}) {
+  void _emitCall(
+    SipEventType type, {
+    String? callId,
+    String? message,
+    int? statusCode,
+    String? reasonPhrase,
+    String? sipCause,
+  }) {
     final activeCallId = callId ?? _currentCallId;
     if (activeCallId == null) return;
     _callState = _callStateFromEvent(type);
@@ -68,11 +75,20 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
         callId: activeCallId,
         callState: _callState,
         message: message,
+        statusCode: statusCode,
+        reasonPhrase: reasonPhrase,
+        sipCause: sipCause,
       ),
     );
   }
 
-  void _emitError(String message, {String? callId}) {
+  void _emitError(
+    String message, {
+    String? callId,
+    int? statusCode,
+    String? reasonPhrase,
+    String? sipCause,
+  }) {
     _callState = SipCallState.failed;
     _emit(
       SipEvent(
@@ -80,6 +96,9 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
         callId: callId,
         callState: _callState,
         message: message,
+        statusCode: statusCode,
+        reasonPhrase: reasonPhrase,
+        sipCause: sipCause,
       ),
     );
   }
@@ -390,11 +409,24 @@ class SipUaEngine implements SipEngine, SipUaHelperListener {
     final message =
         state.cause?.cause ?? state.cause?.reason_phrase ?? nextState.name;
     if (eventType == SipEventType.error) {
-      _emitError(message, callId: realId);
+      _emitError(
+        message,
+        callId: realId,
+        statusCode: state.cause?.status_code,
+        reasonPhrase: state.cause?.reason_phrase,
+        sipCause: state.cause?.cause,
+      );
       _cleanupCall(pendingId, realId);
       return;
     }
-    _emitCall(eventType, callId: realId, message: message);
+    _emitCall(
+      eventType,
+      callId: realId,
+      message: message,
+      statusCode: state.cause?.status_code,
+      reasonPhrase: state.cause?.reason_phrase,
+      sipCause: state.cause?.cause,
+    );
     if (eventType == SipEventType.ended) {
       _cleanupCall(pendingId, realId);
     }

@@ -13,6 +13,7 @@ class CallInfo {
     this.endedAt,
     this.timeline = const [],
     this.errorMessage,
+    this.failureMessage,
     this.dongleId,
   });
 
@@ -24,6 +25,7 @@ class CallInfo {
   final DateTime? endedAt;
   final List<String> timeline;
   final String? errorMessage;
+  final String? failureMessage;
   final int? dongleId;
 
   CallInfo copyWith({
@@ -33,6 +35,7 @@ class CallInfo {
     DateTime? endedAt,
     List<String>? timeline,
     String? errorMessage,
+    String? failureMessage,
     int? dongleId,
   }) {
     return CallInfo(
@@ -44,6 +47,7 @@ class CallInfo {
       endedAt: endedAt ?? this.endedAt,
       timeline: timeline ?? this.timeline,
       errorMessage: errorMessage ?? this.errorMessage,
+      failureMessage: failureMessage ?? this.failureMessage,
       dongleId: dongleId ?? this.dongleId,
     );
   }

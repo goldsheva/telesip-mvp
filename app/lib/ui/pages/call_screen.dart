@@ -92,6 +92,16 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 ).textTheme.bodySmall?.copyWith(color: Colors.white54),
                 textAlign: TextAlign.center,
               ),
+              if (call.failureMessage != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  call.failureMessage!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const Spacer(),
               if (isRinging) ...[
                 Row(

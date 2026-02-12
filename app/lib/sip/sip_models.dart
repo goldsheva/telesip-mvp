@@ -27,6 +27,9 @@ class SipEvent {
   final String? digit;
   final SipRegistrationState? registrationState;
   final SipCallState? callState;
+  final int? statusCode;
+  final String? reasonPhrase;
+  final String? sipCause;
 
   SipEvent({
     required this.type,
@@ -36,6 +39,9 @@ class SipEvent {
     this.digit,
     this.registrationState,
     this.callState,
+    this.statusCode,
+    this.reasonPhrase,
+    this.sipCause,
   }) : timestamp = timestamp ?? DateTime.now();
 
   SipEvent copyWith({
@@ -46,6 +52,9 @@ class SipEvent {
     String? digit,
     SipRegistrationState? registrationState,
     SipCallState? callState,
+    int? statusCode,
+    String? reasonPhrase,
+    String? sipCause,
   }) {
     return SipEvent(
       type: type ?? this.type,
@@ -55,6 +64,9 @@ class SipEvent {
       digit: digit ?? this.digit,
       registrationState: registrationState ?? this.registrationState,
       callState: callState ?? this.callState,
+      statusCode: statusCode ?? this.statusCode,
+      reasonPhrase: reasonPhrase ?? this.reasonPhrase,
+      sipCause: sipCause ?? this.sipCause,
     );
   }
 }

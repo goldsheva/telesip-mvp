@@ -159,6 +159,7 @@ class CallNotifier extends Notifier<CallState> {
   ];
   static const Duration _dialTimeout = Duration(seconds: 25);
   static const Duration _endedCleanupDelay = Duration(milliseconds: 800);
+  static const Duration _sipErrorCleanupDelay = Duration(milliseconds: 1400);
   final Map<String, DateTime> _busyRejected = {};
   static const Duration _busyRejectTtl = Duration(seconds: 90);
   final Map<String, DateTime> _recentlyEnded = {};
@@ -408,6 +409,7 @@ class CallNotifier extends Notifier<CallState> {
     bool clearPendingHint = false,
     bool clearPendingAction = false,
     bool markRecentlyEndedForSipPair = true,
+    String? failureMessage,
   }) async {
     if (_disposed) return;
     final now = DateTime.now();
@@ -492,6 +494,7 @@ class CallNotifier extends Notifier<CallState> {
       callInfoKey = localId;
       callInfo = previousState.calls[callInfoKey];
     }
+    final appliedFailureMessage = failureMessage ?? callInfo?.failureMessage;
     final updatedCalls = Map<String, CallInfo>.from(previousState.calls);
     final callStatus = callInfo?.status;
     final wasLive = callStatus != null && callStatus != CallStatus.ended;
@@ -507,6 +510,7 @@ class CallNotifier extends Notifier<CallState> {
         final endedCallUpdated = endedCall.copyWith(
           status: CallStatus.ended,
           endedAt: now,
+          failureMessage: appliedFailureMessage,
         );
         updatedCalls[callInfoKey] = endedCallUpdated;
         if (secondaryKey != null && secondaryKey != callInfoKey) {
@@ -515,6 +519,7 @@ class CallNotifier extends Notifier<CallState> {
             updatedCalls[secondaryKey] = secondaryCall.copyWith(
               status: CallStatus.ended,
               endedAt: now,
+              failureMessage: appliedFailureMessage,
             );
           }
         }
@@ -1849,7 +1854,14 @@ class CallNotifier extends Notifier<CallState> {
     String callId,
     CallState previousState,
   ) async {
-    await _endCallAndCleanup(callId, reason: _endReasonForEvent(event.type));
+    final failureMessage = event.type == SipEventType.error
+        ? _buildSipFailureMessage(event)
+        : null;
+    await _endCallAndCleanup(
+      callId,
+      reason: _endReasonForEvent(event.type),
+      failureMessage: failureMessage,
+    );
     final postCleanupState = state;
     final callCleared = postCleanupState.activeCallId == null;
     final endedPreviousActive = callId == previousState.activeCallId;
@@ -1861,6 +1873,32 @@ class CallNotifier extends Notifier<CallState> {
     Future.microtask(() {
       unawaited(handleIncomingCallHintIfAny());
     });
+  }
+
+  static final RegExp _sipStatusCodeRegex = RegExp(r'SIP/2\.0\s+(\d{3})');
+
+  String? _buildSipFailureMessage(SipEvent event) {
+    final statusCode =
+        event.statusCode ?? _extractStatusCodeFromMessage(event.message);
+    if (statusCode == null) return null;
+    if (statusCode == 480) {
+      return 'The user is temporarily unavailable. (480)';
+    }
+    final reason = event.reasonPhrase?.trim();
+    if (reason != null && reason.isNotEmpty) {
+      final sanitizedReason = reason.endsWith('.')
+          ? reason.substring(0, reason.length - 1)
+          : reason;
+      return '$sanitizedReason. ($statusCode)';
+    }
+    return 'Call failed. ($statusCode)';
+  }
+
+  int? _extractStatusCodeFromMessage(String? message) {
+    if (message == null) return null;
+    final match = _sipStatusCodeRegex.firstMatch(message);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
   }
 
   Future<void> _handleCallStateChange({
@@ -2362,7 +2400,10 @@ class CallNotifier extends Notifier<CallState> {
     _endedCleanupTimers.remove(primaryId)?.cancel();
     if (!_alive) return;
 
-    final timer = Timer(_endedCleanupDelay, () {
+    final delay = reason == 'sip-error'
+        ? _sipErrorCleanupDelay
+        : _endedCleanupDelay;
+    final timer = Timer(delay, () {
       _endedCleanupTimers.remove(primaryId);
       if (!_alive) return;
       final updatedCalls = Map<String, CallInfo>.from(state.calls);
@@ -2399,7 +2440,7 @@ class CallNotifier extends Notifier<CallState> {
     _endedCleanupTimers[primaryId] = timer;
     debugPrint(
       '[CALLS] scheduled ended cleanup primary=$primaryId secondary=${secondaryId ?? "<none>"} '
-      'delay=${_endedCleanupDelay.inMilliseconds}ms reason=$reason',
+      'delay=${delay.inMilliseconds}ms reason=$reason',
     );
   }
 
