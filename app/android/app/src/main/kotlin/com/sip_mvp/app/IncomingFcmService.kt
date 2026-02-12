@@ -2,8 +2,14 @@ package com.sip_mvp.app
 
 import android.app.NotificationManager
 import android.content.Context
+import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 
 class IncomingFcmService : FirebaseMessagingService() {
@@ -27,7 +33,8 @@ class IncomingFcmService : FirebaseMessagingService() {
       return
     }
     val callId = message.data["call_id"] ?: return
-    val from = message.data["from"] ?: return
+    val from = message.data["from"]
+    persistPendingHint(message)
     val displayName = message.data["display_name"]
     NotificationHelper.showIncoming(
       applicationContext,
@@ -44,6 +51,8 @@ class IncomingFcmService : FirebaseMessagingService() {
     CallActionStore.clear(applicationContext)
     val callId = message.data["call_id"] ?: return
     NotificationHelper.cancel(applicationContext, notificationManager, callId)
+    PendingIncomingHintWriter.clear(applicationContext)
+    IncomingCallNotificationHelper.cancelIncomingNotification(applicationContext)
   }
 
   private fun isExpired(message: RemoteMessage): Boolean {
@@ -54,5 +63,38 @@ class IncomingFcmService : FirebaseMessagingService() {
     }
     val now = System.currentTimeMillis() / 1000
     return now > ts + ttl + 5
+  }
+
+  private fun persistPendingHint(message: RemoteMessage) {
+    try {
+      val payload = JSONObject()
+      message.data.forEach { (key, value) ->
+        payload.put(key, value)
+      }
+      val record = JSONObject()
+        .put("timestamp", isoTimestamp())
+        .put("payload", payload)
+        .toString()
+      PendingIncomingHintWriter.persist(applicationContext, record)
+      val callId = payload.optString("call_id").takeIf { it.isNotBlank() }
+      val from = payload.optString("from").takeIf { it.isNotBlank() }
+      IncomingCallNotificationHelper.showIncomingNotification(
+        applicationContext,
+        callId = callId,
+        from = from,
+      )
+      Log.d(
+        "IncomingHint",
+        "pending hint persisted callId=${callId ?: "<none>"} notification posted",
+      )
+    } catch (error: Exception) {
+      Log.w("IncomingHint", "failed to persist pending hint: $error")
+    }
+  }
+
+  private fun isoTimestamp(): String {
+    val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+    formatter.timeZone = TimeZone.getTimeZone("UTC")
+    return formatter.format(Date())
   }
 }
