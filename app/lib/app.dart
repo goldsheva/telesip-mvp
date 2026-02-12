@@ -17,6 +17,7 @@ import 'package:app/services/firebase_messaging_service.dart';
 import 'package:app/ui/pages/call_screen.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
+import 'package:app/core/storage/secure_storage.dart';
 
 class App extends ConsumerWidget {
   const App({super.key});
@@ -54,6 +55,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   @override
   void initState() {
     super.initState();
+    unawaited(SecureStorage.warmUp());
     _incomingActivityCoordinator = IncomingCallCoordinator(ref);
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _isResumed =

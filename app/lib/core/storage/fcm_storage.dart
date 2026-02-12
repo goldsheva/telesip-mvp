@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:app/core/storage/secure_storage.dart';
+
 class FcmStorage {
   static const _tokenKey = 'fcm_token';
   static const _pendingIncomingKey = 'pending_incoming_hint';
 
-  static final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  static final FlutterSecureStorage _storage = SecureStorage.instance;
 
   static Future<void> saveToken(String token) {
     return _storage.write(key: _tokenKey, value: token);
