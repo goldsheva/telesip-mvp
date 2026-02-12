@@ -10,9 +10,9 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.sip_mvp.app.CallLog
 
 class SipForegroundService : Service() {
   companion object {
@@ -35,8 +35,7 @@ class SipForegroundService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent == null) {
-      debugLog("onStartCommand: null intent (sticky restart) state(starting=$isStarting wake=${
-          SipWakeLock.isHeld()})")
+      CallLog.w("CALLS_FGS", "onStartCommand: null intent (sticky restart) state(starting=$isStarting wake=${SipWakeLock.isHeld()})")
       isStarting = false
       if (SipWakeLock.isHeld()) {
         SipWakeLock.release()
@@ -46,19 +45,22 @@ class SipForegroundService : Service() {
     when (intent?.action) {
       ACTION_START -> {
         val needsMicrophone = intent.getBooleanExtra(EXTRA_NEEDS_MICROPHONE, false)
-        Log.d(
+        CallLog.d(
           "CALLS_FGS",
           "onStartCommand action=START sdk=${Build.VERSION.SDK_INT} startId=$startId needsMic=$needsMicrophone"
         )
         isStarting = true
         pendingStop = false
         val started = startForegroundCompat(getNotification(), needsMicrophone)
-        Log.d(
+        CallLog.d(
           "CALLS_FGS",
           "onStartCommand action=START needsMic=$needsMicrophone started=$started"
         )
         if (!started) {
-          debugLog("ACTION_START -> startForeground failed, aborting")
+          CallLog.e(
+            "CALLS_FGS",
+            "ACTION_START -> startForeground failed sdk=${Build.VERSION.SDK_INT} startId=$startId needsMic=$needsMicrophone"
+          )
           if (SipWakeLock.isHeld()) {
             SipWakeLock.release()
           }
@@ -71,7 +73,7 @@ class SipForegroundService : Service() {
         try {
           SipWakeLock.acquire(this)
         } catch (error: Throwable) {
-          debugLog("wake lock acquire failed: $error")
+          CallLog.e("CALLS_FGS", "wake lock acquire failed: $error", error)
           isStarting = false
           pendingStop = false
           stopForegroundSafely()
@@ -81,11 +83,11 @@ class SipForegroundService : Service() {
         }
         isStarting = false
         if (pendingStop) {
-          debugLog("ACTION_STOP issued during startup, stopping now")
+          CallLog.d("CALLS_FGS", "ACTION_STOP issued during startup, stopping now")
           pendingStop = false
           stopForegroundSafely()
           if (SipWakeLock.isHeld()) {
-            debugLog("wake lock release (pending stop)")
+            CallLog.d("CALLS_FGS", "wake lock release (pending stop)")
           }
           SipWakeLock.release()
           stopSelf()
@@ -95,18 +97,18 @@ class SipForegroundService : Service() {
         return START_STICKY
       }
       ACTION_STOP -> {
-        debugLog("service stop")
+        CallLog.d("CALLS_FGS", "service stop")
         if (isStarting) {
-          debugLog("service stop while starting")
+          CallLog.d("CALLS_FGS", "service stop while starting")
           pendingStop = true
-          debugLog("defer STOP until started")
+          CallLog.d("CALLS_FGS", "defer STOP until started")
           return START_NOT_STICKY
         }
         stopForegroundSafely()
         isStarting = false
         pendingStop = false
         if (SipWakeLock.isHeld()) {
-          debugLog("wake lock release (stop)")
+        CallLog.d("CALLS_FGS", "wake lock release (stop)")
         }
         SipWakeLock.release()
         stopSelf()
@@ -114,7 +116,7 @@ class SipForegroundService : Service() {
         return START_NOT_STICKY
       }
       else -> {
-        debugLog("onStartCommand: unknown action ${intent.action}; ignoring")
+        CallLog.w("CALLS_FGS", "onStartCommand: unknown action ${intent.action}; ignoring")
         return START_STICKY
       }
     }
@@ -126,10 +128,10 @@ class SipForegroundService : Service() {
     pendingStop = false
     hasStartedForeground = false
     if (SipWakeLock.isHeld()) {
-      debugLog("wake lock release (destroy)")
+      CallLog.d("CALLS_FGS", "wake lock release (destroy)")
     }
     SipWakeLock.release()
-    debugLog("service destroy")
+    CallLog.d("CALLS_FGS", "service destroy")
     super.onDestroy()
   }
 
@@ -166,7 +168,7 @@ class SipForegroundService : Service() {
   private fun startForegroundCompat(notification: Notification, needsMicrophone: Boolean): Boolean {
     val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       val types = buildForegroundServiceTypes(needsMicrophone)
-      Log.d("CALLS_FGS", "startForeground types=0x${types.toString(16)} needsMic=$needsMicrophone")
+      CallLog.d("CALLS_FGS", "startForeground types=0x${types.toString(16)} needsMic=$needsMicrophone")
       startForegroundWithTypes(types, notification)
     } else {
       startForegroundSafe(notification)
@@ -175,21 +177,17 @@ class SipForegroundService : Service() {
     return started
   }
 
-  private fun debugLog(message: String) {
-    android.util.Log.d("SipForegroundService", message)
-  }
-
   private fun stopForegroundSafely() {
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        debugLog("stopForeground(STOP_FOREGROUND_REMOVE)")
+      CallLog.d("CALLS_FGS", "stopForeground(STOP_FOREGROUND_REMOVE)")
         stopForeground(Service.STOP_FOREGROUND_REMOVE)
       } else {
-        debugLog("stopForeground(true)")
+        CallLog.d("CALLS_FGS", "stopForeground(true)")
         stopForeground(true)
       }
     } catch (error: Throwable) {
-      debugLog("stopForeground failed: $error")
+      CallLog.e("CALLS_FGS", "stopForeground failed: $error", error)
     }
   }
 
@@ -198,7 +196,7 @@ class SipForegroundService : Service() {
       startForeground(NOTIF_ID, notification)
       true
     } catch (error: Throwable) {
-      debugLog("startForeground(safe) failed: $error")
+      CallLog.e("CALLS_FGS", "startForeground(safe) failed: $error", error)
       false
     }
   }
@@ -216,9 +214,10 @@ class SipForegroundService : Service() {
       startForeground(NOTIF_ID, notification, types)
       true
     } catch (error: Throwable) {
-      Log.d(
+      CallLog.e(
         "CALLS_FGS",
-        "startForeground types failure ${error::class.java.simpleName}: ${error.message}"
+        "startForeground types failure ${error::class.java.simpleName}: ${error.message}",
+        error
       )
       val fallback = types and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
       if (fallback != types) {
@@ -226,7 +225,7 @@ class SipForegroundService : Service() {
           startForeground(NOTIF_ID, notification, fallback)
           return true
         } catch (fallbackEx: Throwable) {
-          debugLog("fallback startForeground(types=$fallback) failed: $fallbackEx")
+          CallLog.e("CALLS_FGS", "fallback startForeground(types=$fallback) failed: $fallbackEx", fallbackEx)
         }
       }
       return startForegroundSafe(notification)

@@ -10,11 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.app.Person
+import com.sip_mvp.app.CallLog
 
 object NotificationHelper {
   private const val CHANNEL_ID = "calls"
@@ -49,7 +49,7 @@ object NotificationHelper {
   ) {
     ensureChannel(context, notificationManager)
     if (isSuppressed(callId, callUuid)) {
-      Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
+      debugLog("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
       return
     }
     if (isRinging) {
@@ -88,17 +88,18 @@ object NotificationHelper {
         null
       }
       val isMainThread = android.os.Looper.getMainLooper().thread == Thread.currentThread()
-      Log.d(
+      debugLog(
         "CALLS_NOTIF",
         "fgs start request api=${Build.VERSION.SDK_INT} mainThread=$isMainThread isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=$notificationsEnabled channelImportance=$channelImportance appImportance=$runningImportance"
       )
       try {
         ContextCompat.startForegroundService(context, serviceIntent)
-        Log.d("CALLS_NOTIF", "fgs start requested success")
+        debugLog("CALLS_NOTIF", "fgs start requested success")
       } catch (error: Throwable) {
-        Log.d(
+        CallLog.e(
           "CALLS_NOTIF",
-          "FGS start failed ${error::class.java.simpleName}: ${error.message}"
+          "FGS start failed ${error::class.java.simpleName}: ${error.message}",
+          error
         )
       }
     }
@@ -112,17 +113,17 @@ object NotificationHelper {
       useCallStyle = true
     )
     val notification = buildNotification(meta, isRinging)
-    Log.d(
+    debugLog(
       "NotificationHelper",
       "notify baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${meta.usedCallStyle}",
     )
     try {
       notificationManager.notify(meta.baseId, notification)
-      Log.d("NotificationHelper", "CallStyle notification posted seq=${meta.baseId}")
+      debugLog("NotificationHelper", "CallStyle notification posted seq=${meta.baseId}")
     } catch (error: Exception) {
-      Log.d(
-        "NotificationHelper",
-        "CallStyle notification failed ${error::class.java.simpleName}: ${error.message}, falling back"
+      CallLog.w(
+        "CALLS_NOTIF",
+        "CallStyle notification failed sdk=${Build.VERSION.SDK_INT} keyguard=${meta.keyguardLocked} isRinging=$isRinging usedCallStyle=${meta.usedCallStyle} error=${error::class.java.simpleName}: ${error.message}"
       )
       val fallbackMeta = prepareIncomingNotification(
         context,
@@ -136,9 +137,10 @@ object NotificationHelper {
       try {
         notificationManager.notify(fallbackMeta.baseId, buildNotification(fallbackMeta, isRinging))
       } catch (fallbackError: Exception) {
-        Log.d(
-          "NotificationHelper",
-          "Fallback notification failed ${fallbackError::class.java.simpleName}: ${fallbackError.message}"
+        CallLog.e(
+          "CALLS_NOTIF",
+          "Fallback notification failed ${fallbackError::class.java.simpleName}: ${fallbackError.message}",
+          fallbackError
         )
       }
     }
@@ -164,7 +166,7 @@ object NotificationHelper {
       useCallStyle = false,
     )
     val notification = buildNotification(meta, isRinging)
-    Log.d(
+    debugLog(
       "NotificationHelper",
       "update baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging api=${Build.VERSION.SDK_INT}",
     )
@@ -219,7 +221,8 @@ object NotificationHelper {
     val answerIntent = PendingIntent.getBroadcast(
       context,
       reqCode(baseId, 2),
-      Intent(CallActionReceiver.ACTION_ANSWER).apply {
+      Intent(context, CallActionReceiver::class.java).apply {
+        action = CallActionReceiver.ACTION_ANSWER
         putExtra("call_id", callId)
         putExtra("call_uuid", effectiveCallUuid)
       },
@@ -228,7 +231,8 @@ object NotificationHelper {
     val declineIntent = PendingIntent.getBroadcast(
       context,
       reqCode(baseId, 3),
-      Intent(CallActionReceiver.ACTION_DECLINE).apply {
+      Intent(context, CallActionReceiver::class.java).apply {
+        action = CallActionReceiver.ACTION_DECLINE
         putExtra("call_id", callId)
         putExtra("call_uuid", effectiveCallUuid)
       },
@@ -356,7 +360,7 @@ object NotificationHelper {
       }
     }
     if (addedKeys.isNotEmpty()) {
-      Log.d(
+      debugLog(
         "NotificationHelper",
         "markSuppressed keys=$addedKeys deltaMs=${expiry - now}",
       )
@@ -391,5 +395,9 @@ object NotificationHelper {
 
   private fun reqCode(baseId: Int, offset: Int): Int {
     return (baseId + offset) and 0x7fffffff
+  }
+
+  private fun debugLog(tag: String, message: String) {
+    CallLog.d(tag, message)
   }
 }

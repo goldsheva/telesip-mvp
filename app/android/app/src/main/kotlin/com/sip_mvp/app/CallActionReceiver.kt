@@ -1,10 +1,12 @@
 package com.sip_mvp.app
 
+import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import android.os.Process
+import com.sip_mvp.app.CallLog
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -24,6 +26,18 @@ class CallActionReceiver : BroadcastReceiver() {
     val notificationManager =
       context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
     val callUuid = intent.getStringExtra("call_uuid")
+    val importance = try {
+      (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
+        ?.runningAppProcesses
+        ?.firstOrNull { it.pid == Process.myPid() }
+        ?.importance
+    } catch (_: Exception) {
+      null
+    }
+    CallLog.d(
+      "CALLS_ACTION",
+      "resolved action=$action call_id=$callId call_uuid=${callUuid ?: "<none>"} importance=$importance"
+    )
     val validCallId = callId.takeIf { it.isNotBlank() && it != "<none>" }
     val validCallUuid = callUuid?.takeIf { it.isNotBlank() && it != "<none>" }
     val idsToCancel = buildSet<String> {
@@ -40,7 +54,7 @@ class CallActionReceiver : BroadcastReceiver() {
             NotificationHelper.cancel(notificationManager, id)
             cancelSucceeded += 1
           } catch (error: Throwable) {
-            Log.d("CallActionReceiver", "notification cancel failed action=$action call=$id: $error")
+            CallLog.w("CALLS_ACTION", "notification cancel failed action=$action call=$id: $error")
           }
         }
       }
@@ -75,8 +89,8 @@ class CallActionReceiver : BroadcastReceiver() {
         }
         if (previousTs > 0 && now - previousTs <= dedupWindow) {
           duplicateSuppressed = true
-          Log.d(
-            "CallActionReceiver",
+          CallLog.d(
+            "CALLS_ACTION",
             "duplicate pending action suppressed action=$action call=$callId ts=$previousTs",
           )
           break
@@ -92,15 +106,14 @@ class CallActionReceiver : BroadcastReceiver() {
       existing.forEach { updated.put(it) }
       prefs.edit().putString("pending_call_actions", updated.toString()).apply()
     }
-    Log.d(
-      "CallActionReceiver",
-      "action=$action ids=$idsToCancel hasManager=${notificationManager != null} "
-        + "cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
+    CallLog.d(
+      "CALLS_ACTION",
+      "action=$action ids=$idsToCancel hasManager=${notificationManager != null} cancelAttempted=$cancelAttempted cancelSucceeded=$cancelSucceeded duplicateSuppressed=$duplicateSuppressed",
     )
     val primaryId = validCallId ?: validCallUuid ?: "<none>"
     CallActionStore.save(context, primaryId, action, System.currentTimeMillis())
-    Log.d(
-      "CallActionReceiver",
+    CallLog.d(
+      "CALLS_ACTION",
       "action_enqueued action=$action call_id=$callId call_uuid=$callUuid duplicateSuppressed=$duplicateSuppressed",
     )
     val main = Intent(context, MainActivity::class.java).apply {

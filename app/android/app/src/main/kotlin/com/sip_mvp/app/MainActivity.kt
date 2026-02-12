@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -13,6 +14,11 @@ import io.flutter.plugin.common.MethodChannel
 import android.os.PowerManager
 
 class MainActivity : FlutterFragmentActivity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    CallLog.init(applicationContext)
+  }
+
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
     CallsNotificationBridge.register(flutterEngine.dartExecutor.binaryMessenger, this)
