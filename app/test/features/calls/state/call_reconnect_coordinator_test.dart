@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:app/features/calls/state/call_reconnect.dart';
 import 'package:app/features/calls/state/call_reconnect_coordinator.dart';
-import 'package:app/features/calls/state/call_reconnect_decision.dart';
-import 'package:app/features/calls/state/call_reconnect_log.dart';
 
 void main() {
   group('CallReconnectCoordinator.decideSchedule', () {

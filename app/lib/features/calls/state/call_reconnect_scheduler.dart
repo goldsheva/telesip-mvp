@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'call_reconnect_scheduler_api.dart';
+import 'call_reconnect.dart';
 
 class CallReconnectScheduler implements CallReconnectSchedulerApi {
   CallReconnectScheduler({

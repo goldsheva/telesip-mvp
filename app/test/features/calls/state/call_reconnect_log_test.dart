@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/features/calls/state/call_reconnect_log.dart';
+import 'package:app/features/calls/state/call_reconnect.dart';
 
 void main() {
   group('CallReconnectLog', () {

@@ -36,7 +36,7 @@ import 'call_sip_registration_handler.dart';
 import 'call_notifications.dart';
 import 'call_incoming_hint_handler.dart';
 import 'call_connectivity.dart';
-import 'call_reconnect_helpers.dart';
+import 'call_reconnect.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_reconnect_service.dart';
 import 'call_health_watchdog.dart';
@@ -1431,7 +1431,8 @@ class CallNotifier extends Notifier<CallState> {
 
   void _scheduleReconnect(String reason) {
     if (_disposed) return;
-    final authStatus = currentAuthStatus(ref);
+    final authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     final callIdForLogs = activeCallIdForLogs(state.activeCallId);
     _reconnectService.scheduleReconnect(
       reason: reason,
@@ -1453,7 +1454,8 @@ class CallNotifier extends Notifier<CallState> {
 
   Future<void> _performReconnect(String reason) async {
     if (_disposed) return;
-    final authStatus = currentAuthStatus(ref);
+    final authStatus =
+        ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
     final callIdForLogs = activeCallIdForLogs(state.activeCallId);
     await _reconnectService.performReconnect(
       reason: reason,

@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/features/auth/state/auth_state.dart';
-import 'package:app/features/calls/state/call_reconnect_log.dart';
-import 'package:app/features/calls/state/call_reconnect_scheduler_api.dart';
+import 'package:app/features/calls/state/call_reconnect.dart';
 import 'package:app/features/calls/state/call_reconnect_service.dart';
 
 final now = DateTime(2024, 1, 1, 0, 0, 30);
