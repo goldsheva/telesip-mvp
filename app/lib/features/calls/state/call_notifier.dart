@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +21,7 @@ import 'package:app/services/audio_route_service.dart';
 import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
 import 'package:app/services/audio_route_types.dart';
+import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/services/network_connectivity_service.dart';
 import 'package:app/sip/sip_engine.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
@@ -153,7 +153,6 @@ class CallNotifier extends Notifier<CallState> {
     Duration(seconds: 16),
     _maxBackoff,
   ];
-  static const _notificationsChannel = MethodChannel('app.calls/notifications');
   static const Duration _dialTimeout = Duration(seconds: 25);
   final Map<String, DateTime> _busyRejected = {};
   static const Duration _busyRejectTtl = Duration(seconds: 90);
@@ -1810,8 +1809,8 @@ class CallNotifier extends Notifier<CallState> {
       debugMode: kDebugMode,
       handleIncomingCallHint: handleIncomingCallHintIfAny,
       incomingRegistrationReady: () => _incomingRegistrationReady,
-      fetchPendingCallActions: () => _notificationsChannel
-          .invokeMethod<List<dynamic>>('drainPendingCallActions'),
+      fetchPendingCallActions: () =>
+          IncomingNotificationService.drainPendingCallActions(),
       log: debugPrint,
       processedPendingCallActions: _processedPendingCallActions,
       pendingCallActionDedupTtl: _pendingCallActionDedupTtl,

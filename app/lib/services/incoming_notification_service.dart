@@ -133,6 +133,17 @@ class IncomingNotificationService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>?> drainPendingCallActions() async {
+    try {
+      return await _channel.invokeListMethod<Map<String, dynamic>>(
+        'drainPendingCallActions',
+      );
+    } catch (error) {
+      debugPrint('[CALLS_NOTIF] drainPendingCallActions failed: $error');
+      return null;
+    }
+  }
+
   static const Duration _androidStateLogMinGap = Duration(seconds: 1);
   static DateTime? _lastAndroidStateLogAt;
 
