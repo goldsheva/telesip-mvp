@@ -79,7 +79,7 @@ class CallBootstrapService {
     }
   }
 
-  Future<void> drainPendingCallActions({
+  Future<bool> drainPendingCallActions({
     required bool Function() isDisposed,
     required bool debugMode,
     required Future<void> Function() handleIncomingCallHint,
@@ -93,23 +93,23 @@ class CallBootstrapService {
     required Future<void> Function(String callId) answerFromNotification,
     required Future<void> Function(String callId) declineFromNotification,
   }) async {
-    if (isDisposed()) return;
+    if (isDisposed()) return false;
     final ready = await ensureIncomingReady(
       isDisposed: isDisposed,
       handleIncomingCallHint: handleIncomingCallHint,
       incomingRegistrationReady: incomingRegistrationReady,
       log: log,
     );
-    if (isDisposed()) return;
+    if (isDisposed()) return false;
     if (!ready) {
       log('[CALLS] drainPendingCallActions aborted: registration not ready');
-      return;
+      return false;
     }
     final raw = await fetchPendingCallActions();
-    if (isDisposed()) return;
+    if (isDisposed()) return false;
     final totalPending = raw?.length ?? 0;
     log('[CALLS] drainPendingCallActions fetched count=$totalPending');
-    if (raw == null || raw.isEmpty) return;
+    if (raw == null || raw.isEmpty) return false;
     final now = DateTime.now();
     const ttl = Duration(seconds: 60);
     processedPendingCallActions.removeWhere(
@@ -182,5 +182,6 @@ class CallBootstrapService {
         'deferredCount=$deferredCount expiredDropped=$expiredDropped',
       );
     }
+    return processed > 0;
   }
 }

@@ -1356,8 +1356,13 @@ class CallNotifier extends Notifier<CallState> {
           '[CALLS] incomingPipeline skip foreground sync: no active call',
         );
       }
-      await _drainPendingCallActions();
-      if (hintHandled) {
+      final actionsApplied = await _drainPendingCallActions();
+      if (hintHandled || actionsApplied) {
+        if (kDebugMode) {
+          debugPrint(
+            '[CALLS] incomingPipeline clearing pending hint/notification',
+          );
+        }
         await IncomingNotificationService.clearPendingIncomingHintNotification();
       }
     } catch (error, stackTrace) {
@@ -2292,7 +2297,7 @@ class CallNotifier extends Notifier<CallState> {
             state.activeCall!.status != CallStatus.ended);
   }
 
-  Future<void> _drainPendingCallActions() {
+  Future<bool> _drainPendingCallActions() {
     return _bootstrapService.drainPendingCallActions(
       isDisposed: () => _disposed,
       debugMode: kDebugMode,
@@ -2607,7 +2612,7 @@ class CallNotifier extends Notifier<CallState> {
     _lastCallIds = currentCallIds;
     _lastActiveCallId = snapshot.activeCallId;
     if (callsChanged || activeBecameNonNull) {
-      unawaited(_drainPendingCallActions());
+      unawaited(_drainPendingCallActions().then((_) {}));
     }
   }
 
