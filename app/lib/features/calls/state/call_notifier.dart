@@ -187,7 +187,11 @@ class CallNotifier extends Notifier<CallState> {
         'bootstrapDone=$_bootstrapDone scheduled=$_bootstrapScheduled';
     debugPrint('[CALLS] startCall enter seq=$seq number=$trimmed $logContext');
     _resetDialLocksIfIdle(state, 'startCall-precheck');
-    final activeCall = state.activeCall;
+    final current = _sanitizeActiveCallId(state, 'startCall-precheck');
+    if (!identical(current, state)) {
+      _commitSafe(current);
+    }
+    final activeCall = current.activeCall;
     if (activeCall != null && activeCall.status != CallStatus.ended) {
       const message = 'Cannot start a new call while one is active';
       _setError(message);
@@ -528,8 +532,9 @@ class CallNotifier extends Notifier<CallState> {
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
     );
-    _commitSafe(nextState);
-    _resetDialLocksIfIdle(nextState, 'endCall:$reason');
+    final sanitized = _sanitizeActiveCallId(nextState, 'endCall:$reason');
+    _commitSafe(sanitized);
+    _resetDialLocksIfIdle(sanitized, 'endCall:$reason');
     if (removedKeys.isNotEmpty) {
       debugPrint(
         '[CALLS] removed ended call(s) from state calls: keys=$removedKeys',
@@ -2164,6 +2169,27 @@ class CallNotifier extends Notifier<CallState> {
     _dialTimeoutTimer?.cancel();
     _dialTimeoutTimer = null;
     _dialTimeoutCallId = null;
+  }
+
+  CallState _sanitizeActiveCallId(CallState snapshot, String reason) {
+    final activeId = snapshot.activeCallId;
+    if (activeId == null) return snapshot;
+    final call = snapshot.calls[activeId];
+    if (call == null) {
+      debugPrint(
+        '[CALLS] sanitize activeCallId: missing in calls -> clearing activeCallId '
+        'id=$activeId reason=$reason calls=${snapshot.calls.length}',
+      );
+      return snapshot.copyWith(activeCallId: null);
+    }
+    if (call.status == CallStatus.ended) {
+      debugPrint(
+        '[CALLS] sanitize activeCallId: ended -> clearing activeCallId '
+        'id=$activeId reason=$reason status=${call.status}',
+      );
+      return snapshot.copyWith(activeCallId: null);
+    }
+    return snapshot;
   }
 
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
