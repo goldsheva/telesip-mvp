@@ -28,16 +28,18 @@ class IncomingSmokeHarness {
       callId: callId ?? base.callId,
       callUuid: callUuid ?? base.callUuid,
     );
+    final targetFrom = from ?? _sampleFrom;
+    final targetDisplay = displayName ?? _sampleDisplayName;
     if (kDebugMode) {
       debugPrint(
         '[SMOKE ${DateTime.now().toIso8601String()}] showRinging start callId=${ids.callId} '
-        'callUuid=${ids.callUuid} from=${from ?? _sampleFrom} display=${displayName ?? _sampleDisplayName}',
+        'callUuid=${ids.callUuid} from=$targetFrom display=$targetDisplay',
       );
     }
     await IncomingNotificationService.showIncoming(
       callId: ids.callId,
-      from: from ?? _sampleFrom,
-      displayName: displayName ?? _sampleDisplayName,
+      from: targetFrom,
+      displayName: targetDisplay,
       callUuid: ids.callUuid,
       isRinging: true,
     );
@@ -59,16 +61,18 @@ class IncomingSmokeHarness {
       callId: callId ?? base.callId,
       callUuid: callUuid ?? base.callUuid,
     );
+    final targetFrom = from ?? _sampleFrom;
+    final targetDisplay = displayName ?? _sampleDisplayName;
     if (kDebugMode) {
       debugPrint(
         '[SMOKE ${DateTime.now().toIso8601String()}] updateNotRinging start callId=${ids.callId} '
-        'callUuid=${ids.callUuid} from=${from ?? _sampleFrom} display=${displayName ?? _sampleDisplayName}',
+        'callUuid=${ids.callUuid} from=$targetFrom display=$targetDisplay',
       );
     }
     await IncomingNotificationService.updateIncomingState(
       callId: ids.callId,
-      from: from ?? _sampleFrom,
-      displayName: displayName ?? _sampleDisplayName,
+      from: targetFrom,
+      displayName: targetDisplay,
       callUuid: ids.callUuid,
       isRinging: false,
     );
@@ -87,7 +91,8 @@ class IncomingSmokeHarness {
     );
     if (kDebugMode) {
       debugPrint(
-        '[SMOKE ${DateTime.now().toIso8601String()}] cancel start callId=${ids.callId} callUuid=${ids.callUuid}',
+        '[SMOKE ${DateTime.now().toIso8601String()}] cancel start callId=${ids.callId} '
+        'callUuid=${ids.callUuid}',
       );
     }
     await IncomingNotificationService.cancelIncoming(
