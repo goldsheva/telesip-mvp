@@ -111,16 +111,25 @@ class CallBootstrapService {
     log('[CALLS] drainPendingCallActions fetched count=$totalPending');
     if (raw == null || raw.isEmpty) return;
     final now = DateTime.now();
+    const ttl = Duration(seconds: 60);
     processedPendingCallActions.removeWhere(
       (_, timestamp) => now.difference(timestamp) > pendingCallActionDedupTtl,
     );
     var dedupSkipped = 0;
+    var expiredDropped = 0;
     var deferredCount = 0;
     var processed = 0;
     for (final item in raw) {
       if (item is! Map) continue;
       final type = item['type']?.toString();
       final callId = item['callId']?.toString();
+      final tsMillis = item['ts'] is num ? (item['ts'] as num).toInt() : null;
+      if (tsMillis != null &&
+          now.difference(DateTime.fromMillisecondsSinceEpoch(tsMillis)) >=
+              ttl) {
+        expiredDropped++;
+        continue;
+      }
       if (type == null || callId == null) continue;
       final tsKey = item['ts']?.toString() ?? '';
       final dedupKey = '$type|$callId|$tsKey';
@@ -170,7 +179,7 @@ class CallBootstrapService {
       log(
         '[CALLS] drainPendingCallActions summary total=$totalConsidered '
         'processed=$processed dedupSkipped=$dedupSkipped '
-        'deferredCount=$deferredCount',
+        'deferredCount=$deferredCount expiredDropped=$expiredDropped',
       );
     }
   }
