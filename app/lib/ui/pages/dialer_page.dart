@@ -208,39 +208,21 @@ class _DialerPageState extends ConsumerState<DialerPage> {
                     child: ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _numberController,
                       builder: (context, value, _) {
+                        final trimmedInput = value.text.trim();
+                        final busyByActiveId = state.activeCallId != null;
+                        final hasOngoingCalls = state.calls.values.any(
+                          (call) => call.status != CallStatus.ended,
+                        );
                         final canCall =
-                            value.text.trim().isNotEmpty &&
-                            !hasActiveCall &&
+                            trimmedInput.isNotEmpty &&
+                            !busyByActiveId &&
+                            !hasOngoingCalls &&
                             state.isRegistered;
                         return SizedBox(
                           height: 56,
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: canCall
-                                ? () async {
-                                    debugPrint(
-                                      '[CALLS_UI] dial onPressed fired mounted=$mounted',
-                                    );
-                                    final callStateSnapshot = ref.read(
-                                      callControllerProvider,
-                                    );
-                                    final activeCallStatus =
-                                        callStateSnapshot.activeCall?.status;
-                                    debugPrint(
-                                      '[CALLS_UI] dial snapshot canCall=$canCall '
-                                      'mounted=$mounted activeCallId=${callStateSnapshot.activeCallId} '
-                                      'calls=${callStateSnapshot.calls.length} '
-                                      'status=$activeCallStatus',
-                                    );
-                                    try {
-                                      await _call();
-                                    } catch (e, st) {
-                                      debugPrint(
-                                        '[CALLS_UI] dial onPressed error=$e\n$st',
-                                      );
-                                    }
-                                  }
-                                : null,
+                            onPressed: canCall ? _call : null,
                             icon: const Icon(Icons.call),
                             label: const Text('Call'),
                             style: ElevatedButton.styleFrom(
