@@ -2293,6 +2293,11 @@ class CallNotifier extends Notifier<CallState> {
     return calls.any((call) => call.status != CallStatus.ended);
   }
 
+  bool _isIdleSnapshot(CallState s) {
+    if (s.activeCallId != null) return false;
+    return !_hasLiveCalls(s.calls.values);
+  }
+
   bool canStartOutgoingCallUi(CallState s, String rawNumber) {
     final trimmed = rawNumber.trim();
     if (trimmed.isEmpty || !s.isRegistered) return false;
@@ -2306,19 +2311,13 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   void _clearPendingIfIdle(CallState snapshot) {
-    if (snapshot.activeCallId != null) return;
-    if (_hasLiveCalls(snapshot.calls.values)) return;
+    if (!_isIdleSnapshot(snapshot)) return;
     _pendingCallId = null;
     _pendingLocalCallId = null;
   }
 
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
-    final hasActiveCall = snapshot.activeCallId != null;
-    final hasOngoingCalls = snapshot.calls.values.any(
-      (call) => call.status != CallStatus.ended,
-    );
-    if (hasActiveCall ||
-        hasOngoingCalls ||
+    if (!_isIdleSnapshot(snapshot) ||
         _pendingCallId != null ||
         _pendingLocalCallId != null) {
       return;
