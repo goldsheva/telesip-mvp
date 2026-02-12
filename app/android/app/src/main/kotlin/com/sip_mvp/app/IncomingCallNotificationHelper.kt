@@ -10,9 +10,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 object IncomingCallNotificationHelper {
-  private const val CHANNEL_ID = "incoming_calls_debug"
-  private const val CHANNEL_NAME = "Incoming Calls (Debug)"
+  private const val DEBUG_CHANNEL_ID = "incoming_calls_debug"
+  private const val DEBUG_CHANNEL_NAME = "Incoming Calls (Debug)"
   internal const val NOTIFICATION_ID = 424242
+  private const val RELEASE_CHANNEL_ID = "incoming_calls"
+  private const val RELEASE_CHANNEL_NAME = "Incoming Calls"
+  private const val RELEASE_NOTIFICATION_ID = 424241
   private const val DEBUG_ACTION_RECEIVER =
     "com.sip_mvp.app.DebugIncomingActionReceiver"
 
@@ -22,7 +25,7 @@ object IncomingCallNotificationHelper {
     from: String?,
   ) {
     val applicationContext = context.applicationContext
-    ensureChannel(applicationContext)
+    ensureDebugChannel(applicationContext)
 
     val tapIntent = Intent(applicationContext, MainActivity::class.java).apply {
       putExtra(MainActivity.EXTRA_DEBUG_CHECK_PENDING_HINT, true)
@@ -90,6 +93,48 @@ object IncomingCallNotificationHelper {
     NotificationManagerCompat.from(context.applicationContext).cancel(NOTIFICATION_ID)
   }
 
+  fun showIncomingNotification(
+    context: Context,
+    callId: String?,
+    from: String?,
+  ) {
+    val applicationContext = context.applicationContext
+    ensureReleaseChannel(applicationContext)
+
+    val tapIntent = Intent(applicationContext, MainActivity::class.java).apply {
+      putExtra(MainActivity.EXTRA_CHECK_PENDING_HINT, true)
+      addFlags(
+        Intent.FLAG_ACTIVITY_NEW_TASK or
+          Intent.FLAG_ACTIVITY_SINGLE_TOP or
+          Intent.FLAG_ACTIVITY_CLEAR_TOP,
+      )
+    }
+    val tapPendingIntent = PendingIntent.getActivity(
+      applicationContext,
+      0,
+      tapIntent,
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    val builder = NotificationCompat.Builder(applicationContext, RELEASE_CHANNEL_ID)
+      .setSmallIcon(applicationContext.applicationInfo.icon)
+      .setContentTitle("Incoming call")
+      .setContentText(composeContentText(callId, from))
+      .setCategory(NotificationCompat.CATEGORY_CALL)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setAutoCancel(true)
+      .setContentIntent(tapPendingIntent)
+
+    NotificationManagerCompat.from(applicationContext)
+      .notify(RELEASE_NOTIFICATION_ID, builder.build())
+    CallLog.d("IncomingHint", "Release incoming notification posted id=$RELEASE_NOTIFICATION_ID")
+  }
+
+  fun cancelIncomingNotification(context: Context) {
+    NotificationManagerCompat.from(context.applicationContext)
+      .cancel(RELEASE_NOTIFICATION_ID)
+  }
+
   private fun composeContentText(callId: String?, from: String?): String {
     return when {
       callId != null && from != null -> "Call $callId from $from"
@@ -122,17 +167,32 @@ object IncomingCallNotificationHelper {
     )
   }
 
-  private fun ensureChannel(context: Context) {
+  private fun ensureDebugChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = context.getSystemService(NotificationManager::class.java) ?: return
-    val existing = manager.getNotificationChannel(CHANNEL_ID)
+    val existing = manager.getNotificationChannel(DEBUG_CHANNEL_ID)
     if (existing != null) return
     val channel = NotificationChannel(
-      CHANNEL_ID,
-      CHANNEL_NAME,
+      DEBUG_CHANNEL_ID,
+      DEBUG_CHANNEL_NAME,
       NotificationManager.IMPORTANCE_HIGH,
     ).apply {
       description = "Debug incoming call notifications"
+    }
+    manager.createNotificationChannel(channel)
+  }
+
+  private fun ensureReleaseChannel(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    val existing = manager.getNotificationChannel(RELEASE_CHANNEL_ID)
+    if (existing != null) return
+    val channel = NotificationChannel(
+      RELEASE_CHANNEL_ID,
+      RELEASE_CHANNEL_NAME,
+      NotificationManager.IMPORTANCE_HIGH,
+    ).apply {
+      description = "Incoming call notifications"
     }
     manager.createNotificationChannel(channel)
   }

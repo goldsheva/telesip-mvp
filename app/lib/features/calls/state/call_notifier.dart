@@ -1339,12 +1339,7 @@ class CallNotifier extends Notifier<CallState> {
         debugPrint(
           '[CALLS] incomingPipeline abort: bootstrap not ready reason=${skipReason ?? "<unknown>"}',
         );
-        if (kDebugMode) {
-          debugPrint(
-            '[CALLS] incomingPipeline requesting notification refresh',
-          );
-          IncomingNotificationService.refreshDebugIncomingNotification();
-        }
+        await IncomingNotificationService.refreshPendingIncomingNotification();
         return;
       }
       await handleIncomingCallHintIfAny();

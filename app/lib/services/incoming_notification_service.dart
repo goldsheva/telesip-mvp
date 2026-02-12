@@ -7,8 +7,8 @@ class IncomingNotificationService {
   static const MethodChannel _channel = MethodChannel(
     'app.calls/notifications',
   );
-  static const MethodChannel _debugChannel = MethodChannel(
-    'app.debug/incoming',
+  static const MethodChannel _incomingChannel = MethodChannel(
+    'app.calls/incoming',
   );
 
   static Future<void> showIncoming({
@@ -37,18 +37,17 @@ class IncomingNotificationService {
     }
   }
 
-  static Future<void> refreshDebugIncomingNotification() async {
-    if (!kDebugMode) return;
+  static Future<void> refreshPendingIncomingNotification() async {
     try {
-      final refreshed = await _debugChannel.invokeMethod<bool>(
-        'debugRefreshIncomingNotification',
+      final refreshed = await _incomingChannel.invokeMethod<bool>(
+        'refreshIncomingNotification',
       );
       debugPrint(
-        '[CALLS_NOTIF] refreshDebugIncomingNotification result=${refreshed ?? false}',
+        '[CALLS_NOTIF] refreshPendingIncomingNotification result=${refreshed ?? false}',
       );
     } catch (error) {
       debugPrint(
-        '[CALLS_NOTIF] refreshDebugIncomingNotification failed: $error',
+        '[CALLS_NOTIF] refreshPendingIncomingNotification failed: $error',
       );
     }
   }

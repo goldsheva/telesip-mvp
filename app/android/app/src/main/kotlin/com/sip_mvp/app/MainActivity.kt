@@ -10,24 +10,27 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import android.os.PowerManager
 import com.sip_mvp.app.BuildConfig
+import org.json.JSONObject
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
   private var debugIncomingChannel: MethodChannel? = null
+  private var releaseIncomingChannel: MethodChannel? = null
   private var pendingDebugHintCheck = false
+  private var pendingReleaseHintCheck = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     CallLog.ensureInit(applicationContext)
-    handleDebugIncomingExtras(intent)
+    handleIncomingHintExtras(intent)
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
-    handleDebugIncomingExtras(intent)
+    handleIncomingHintExtras(intent)
   }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -166,6 +169,7 @@ class MainActivity : FlutterFragmentActivity() {
             }
             try {
               PendingIncomingHintWriter.persist(applicationContext, recordJson)
+              showReleaseNotificationFromRecord(recordJson)
               result.success(null)
             } catch (error: Exception) {
               result.error(
@@ -190,6 +194,7 @@ class MainActivity : FlutterFragmentActivity() {
           "clearPendingIncomingHint" -> {
             try {
               PendingIncomingHintWriter.clear(applicationContext)
+              IncomingCallNotificationHelper.cancelIncomingNotification(this)
               result.success(null)
             } catch (error: Exception) {
               result.error(
@@ -202,17 +207,19 @@ class MainActivity : FlutterFragmentActivity() {
           else -> result.notImplemented()
         }
       }
+    releaseIncomingChannel =
+      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.calls/incoming")
+    releaseIncomingChannel?.setMethodCallHandler { call, result ->
+      when (call.method) {
+        "refreshIncomingNotification" -> handleReleaseNotificationRefresh(result)
+        else -> result.notImplemented()
+      }
+    }
     if (BuildConfig.DEBUG) {
       debugIncomingChannel =
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.debug/incoming")
       debugIncomingChannel?.setMethodCallHandler { call, result ->
         when (call.method) {
-          "debugCheckPendingIncomingHint",
-          "debug_check_pending_hint" -> {
-            pendingDebugHintCheck = true
-            maybeDispatchDebugHintCheck()
-            result.success(null)
-          }
           "debugRefreshIncomingNotification" -> {
             handleDebugNotificationRefresh(result)
           }
@@ -220,22 +227,31 @@ class MainActivity : FlutterFragmentActivity() {
         }
       }
       maybeDispatchDebugHintCheck()
-      handleDebugIncomingExtras(intent)
     }
+    maybeDispatchReleaseHintCheck()
+    handleIncomingHintExtras(intent)
   }
 
-  private fun handleDebugIncomingExtras(intent: Intent?) {
+  private fun handleIncomingHintExtras(intent: Intent?) {
     if (intent == null) return
-    val shouldTrigger = intent.getBooleanExtra(EXTRA_DEBUG_CHECK_PENDING_HINT, false)
-    if (!shouldTrigger) return
-    val fromNotification = intent.getBooleanExtra("from_incoming_notification", false)
-    Log.d(
-      "DebugIncomingHint",
-      "handleDebugIncomingExtras trigger received fromNotification=$fromNotification",
-    )
-    pendingDebugHintCheck = true
-    intent.removeExtra(EXTRA_DEBUG_CHECK_PENDING_HINT)
-    maybeDispatchDebugHintCheck()
+    val debugTrigger = intent.getBooleanExtra(EXTRA_DEBUG_CHECK_PENDING_HINT, false)
+    if (debugTrigger) {
+      val fromNotification = intent.getBooleanExtra("from_incoming_notification", false)
+      Log.d(
+        "DebugIncomingHint",
+        "handleIncomingHintExtras debug trigger fromNotification=$fromNotification",
+      )
+      pendingDebugHintCheck = true
+      intent.removeExtra(EXTRA_DEBUG_CHECK_PENDING_HINT)
+      maybeDispatchDebugHintCheck()
+    }
+    val releaseTrigger = intent.getBooleanExtra(EXTRA_CHECK_PENDING_HINT, false)
+    if (releaseTrigger) {
+      Log.d("IncomingHint", "handleIncomingHintExtras release trigger")
+      pendingReleaseHintCheck = true
+      intent.removeExtra(EXTRA_CHECK_PENDING_HINT)
+      maybeDispatchReleaseHintCheck()
+    }
   }
 
   private fun maybeDispatchDebugHintCheck() {
@@ -244,36 +260,48 @@ class MainActivity : FlutterFragmentActivity() {
     }
     val channel = debugIncomingChannel ?: return
     pendingDebugHintCheck = false
-    try {
-      channel.invokeMethod("debugCheckPendingIncomingHint", null)
-    } catch (error: Exception) {
-      Log.w("DebugIncomingHint", "Failed to invoke debug pending hint check: $error")
+    val methodNames = listOf(
+      "debugCheckPendingIncomingHint",
+      "debug_check_pending_hint",
+    )
+    for (method in methodNames) {
+      try {
+        channel.invokeMethod(method, null)
+        return
+      } catch (error: Exception) {
+        Log.w("DebugIncomingHint", "Failed to invoke $method: $error")
+      }
     }
   }
 
+  private fun maybeDispatchReleaseHintCheck() {
+    if (!pendingReleaseHintCheck) {
+      return
+    }
+    val channel = releaseIncomingChannel ?: return
+    pendingReleaseHintCheck = false
+    try {
+      channel.invokeMethod("checkPendingIncomingHint", null)
+    } catch (error: Exception) {
+      Log.w("IncomingHint", "Failed to invoke release pending hint check: $error")
+    }
+  }
   private fun handleDebugNotificationRefresh(result: MethodChannel.Result) {
     try {
-      val pending = PendingIncomingHintWriter.read(applicationContext)
-      if (pending.isNullOrEmpty()) {
+      val parsed = parsePendingHint(PendingIncomingHintWriter.read(applicationContext))
+      if (parsed == null) {
         IncomingCallNotificationHelper.cancelDebugNotification(this)
+        IncomingCallNotificationHelper.cancelIncomingNotification(this)
         Log.d("DebugIncomingHint", "debug refresh notification: no pending hint")
         result.success(false)
         return
       }
-      val payload = try {
-        val json = org.json.JSONObject(pending)
-        json.optJSONObject("payload")
-      } catch (_: Exception) {
-        null
-      }
-      val callId = payload?.optString("call_id")?.takeIf { it.isNotBlank() }
-      val from = payload?.optString("from")?.takeIf { it.isNotBlank() }
       IncomingCallNotificationHelper.showDebugNotification(
         this,
-        callId = callId,
-        from = from,
+        callId = parsed.first,
+        from = parsed.second,
       )
-      Log.d("DebugIncomingHint", "debug refresh notification: posted callId=$callId")
+      Log.d("DebugIncomingHint", "debug refresh notification: posted callId=${parsed.first}")
       result.success(true)
     } catch (error: Exception) {
       Log.w("DebugIncomingHint", "debug refresh notification failed: $error")
@@ -281,7 +309,51 @@ class MainActivity : FlutterFragmentActivity() {
     }
   }
 
+  private fun handleReleaseNotificationRefresh(result: MethodChannel.Result) {
+    try {
+      val parsed = parsePendingHint(PendingIncomingHintWriter.read(applicationContext))
+      if (parsed == null) {
+        IncomingCallNotificationHelper.cancelIncomingNotification(this)
+        Log.d("IncomingHint", "release refresh notification: no pending hint")
+        result.success(false)
+        return
+      }
+      IncomingCallNotificationHelper.showIncomingNotification(
+        this,
+        callId = parsed.first,
+        from = parsed.second,
+      )
+      Log.d("IncomingHint", "release refresh notification: posted callId=${parsed.first}")
+      result.success(true)
+    } catch (error: Exception) {
+      Log.w("IncomingHint", "release refresh notification failed: $error")
+      result.error("RELEASE_REFRESH_FAILED", error.message, null)
+    }
+  }
+
+  private fun parsePendingHint(recordJson: String?): Pair<String?, String?>? {
+    if (recordJson.isNullOrEmpty()) return null
+    return try {
+      val payload = JSONObject(recordJson).optJSONObject("payload")
+      val callId = payload?.optString("call_id")?.takeIf { it.isNotBlank() }
+      val from = payload?.optString("from")?.takeIf { it.isNotBlank() }
+      Pair(callId, from)
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  private fun showReleaseNotificationFromRecord(recordJson: String) {
+    val parsed = parsePendingHint(recordJson) ?: return
+    IncomingCallNotificationHelper.showIncomingNotification(
+      this,
+      callId = parsed.first,
+      from = parsed.second,
+    )
+  }
+
   companion object {
     const val EXTRA_DEBUG_CHECK_PENDING_HINT = "debug_check_pending_hint"
+    const val EXTRA_CHECK_PENDING_HINT = "check_pending_incoming_hint"
   }
 }

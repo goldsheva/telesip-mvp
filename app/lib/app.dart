@@ -53,6 +53,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   bool _batteryPromptScheduled = false;
   late final IncomingCallCoordinator _incomingActivityCoordinator;
   MethodChannel? _debugIncomingChannel;
+  bool _nativePendingHintCheckInFlight = false;
   bool _debugPendingHintCheckInFlight = false;
 
   @override
@@ -66,6 +67,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == null ||
         lifecycleState == AppLifecycleState.inactive;
     WidgetsBinding.instance.addObserver(this);
+    _registerNativeIncomingChannel();
     if (kDebugMode) {
       _registerDebugIncomingChannel();
     }
@@ -332,6 +334,36 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       );
     }
     ref.read(callControllerProvider.notifier).ensureBootstrapped(reason);
+  }
+
+  void _registerNativeIncomingChannel() {
+    const channel = MethodChannel('app.calls/incoming');
+    channel.setMethodCallHandler((call) async {
+      if (call.method != 'checkPendingIncomingHint') {
+        throw MissingPluginException(
+          'Method ${call.method} not implemented on incoming channel',
+        );
+      }
+      if (_nativePendingHintCheckInFlight) {
+        debugPrint(
+          '[INCOMING][NATIVE] checkPendingIncomingHint skipped: in-flight',
+        );
+        return;
+      }
+      _nativePendingHintCheckInFlight = true;
+      try {
+        debugPrint('[INCOMING][NATIVE] checkPendingIncomingHint requested');
+        await ref
+            .read(callControllerProvider.notifier)
+            .runIncomingPipeline('native-check-pending-hint');
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[INCOMING][NATIVE] checkPendingIncomingHint failed: $error\n$stackTrace',
+        );
+      } finally {
+        _nativePendingHintCheckInFlight = false;
+      }
+    });
   }
 
   void _registerDebugIncomingChannel() {
