@@ -174,6 +174,8 @@ class CallNotifier extends Notifier<CallState> {
   final Map<String, DateTime> _processedPendingCallActions = {};
   static const Duration _pendingCallActionDedupTtl = Duration(seconds: 120);
   final Map<String, String> _sipErrorGraceMessages = {};
+  Set<String> _lastCallIds = {};
+  String? _lastActiveCallId;
 
   bool get isBusy {
     final baseBusy =
@@ -883,13 +885,13 @@ class CallNotifier extends Notifier<CallState> {
     String callId, {
     required String source,
   }) async {
-    await _notifCleanup.clearCallNotificationState(
-      callId,
-      cancelNotification: true,
-      clearPendingAction: true,
-    );
     final callInfo = state.calls[callId];
     if (callInfo != null && callInfo.status == CallStatus.ended) {
+      await _notifCleanup.clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingAction: true,
+      );
       return;
     }
     final ready = await _ensureIncomingReady();
@@ -908,6 +910,14 @@ class CallNotifier extends Notifier<CallState> {
         '[CALLS] $source unknown call $callId active=${state.activeCallId} '
         'pending=$_pendingCallId',
       );
+      await _notifCleanup.clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingHint: true,
+      );
+      debugPrint(
+        '[CALLS] pending action deferred: no call yet callId=$callId source=$source action=answer',
+      );
       return;
     }
     if (engineCallId != callId) {
@@ -920,6 +930,14 @@ class CallNotifier extends Notifier<CallState> {
       debugPrint(
         '[CALLS] $source resolved call $engineCallId but engine call missing',
       );
+      await _notifCleanup.clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingHint: true,
+      );
+      debugPrint(
+        '[CALLS] pending action deferred: no call yet callId=$callId source=$source action=answer',
+      );
       return;
     }
     _busyUntil = DateTime.now().add(_busyGrace);
@@ -927,6 +945,12 @@ class CallNotifier extends Notifier<CallState> {
       call.answer(<String, dynamic>{
         'mediaConstraints': <String, dynamic>{'audio': true, 'video': false},
       });
+      await _notifCleanup.clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingHint: true,
+        clearPendingAction: true,
+      );
     } catch (error) {
       debugPrint('[CALLS] $source failed: $error');
     }
@@ -977,7 +1001,9 @@ class CallNotifier extends Notifier<CallState> {
         callId,
         cancelNotification: true,
         clearPendingHint: true,
-        clearPendingAction: true,
+      );
+      debugPrint(
+        '[CALLS] pending action deferred: no call yet callId=$callId source=$source action=decline',
       );
       return;
     }
@@ -987,6 +1013,21 @@ class CallNotifier extends Notifier<CallState> {
       );
     }
     targetCallId = engineCallId;
+    final resolvedCall = _engine.getCall(engineCallId);
+    if (resolvedCall == null) {
+      debugPrint(
+        '[CALLS] $source resolved call $engineCallId but engine call missing',
+      );
+      await _notifCleanup.clearCallNotificationState(
+        callId,
+        cancelNotification: true,
+        clearPendingHint: true,
+      );
+      debugPrint(
+        '[CALLS] pending action deferred: no call yet callId=$callId source=$source action=decline',
+      );
+      return;
+    }
     try {
       await _engine.hangup(targetCallId);
       await _endCallAndCleanup(
@@ -2463,6 +2504,17 @@ class CallNotifier extends Notifier<CallState> {
   void _afterStateMutation(CallState snapshot, String reason) {
     _clearPendingIfIdle(snapshot);
     _resetDialLocksIfIdle(snapshot, reason);
+    final previousCallIds = _lastCallIds;
+    final currentCallIds = snapshot.calls.keys.toSet();
+    final callsChanged = !setEquals(previousCallIds, currentCallIds);
+    final previousActive = _lastActiveCallId;
+    final activeBecameNonNull =
+        previousActive == null && snapshot.activeCallId != null;
+    _lastCallIds = currentCallIds;
+    _lastActiveCallId = snapshot.activeCallId;
+    if (callsChanged || activeBecameNonNull) {
+      unawaited(_drainPendingCallActions());
+    }
   }
 
   void _resetDialLocksIfIdle(CallState snapshot, String reason) {
