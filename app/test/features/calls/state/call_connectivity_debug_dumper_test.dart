@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/features/calls/state/call_connectivity_debug_dumper.dart';
-import 'package:app/features/calls/state/call_connectivity_snapshot.dart';
+import 'package:app/features/calls/state/call_connectivity.dart';
 
 void main() {
   const dumper = CallConnectivityDebugDumper();
@@ -39,7 +38,7 @@ void main() {
         backoffIndex: 1,
         activeCallId: '<none>',
         activeCallStatus: '<none>',
-        registeredAt: false,
+        hasSipRegisteredAt: false,
       );
 
       expect(log, expected);

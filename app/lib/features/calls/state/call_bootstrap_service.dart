@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'call_models.dart';
-import 'call_notification_cleanup.dart';
+import 'call_notifications.dart';
 
 class CallBootstrapService {
   const CallBootstrapService();

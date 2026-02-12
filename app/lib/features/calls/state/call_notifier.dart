@@ -29,9 +29,9 @@ import 'package:app/features/auth/state/auth_state.dart';
 
 import 'call_models.dart';
 import 'call_sip_registration_handler.dart';
-import 'call_notification_cleanup.dart';
+import 'call_notifications.dart';
 import 'call_incoming_hint_handler.dart';
-import 'call_connectivity_listener.dart';
+import 'call_connectivity.dart';
 import 'call_reconnect_helpers.dart';
 import 'call_reconnect_scheduler.dart';
 import 'call_reconnect_service.dart';
@@ -41,7 +41,6 @@ import 'call_auth_listener.dart';
 import 'call_sip_health_policy.dart';
 import 'call_reconnect_executor.dart';
 import 'call_sip_snapshot_builder.dart';
-import 'call_connectivity_debug_dumper.dart';
 
 export 'call_models.dart';
 export 'call_incoming_hint_handler.dart';

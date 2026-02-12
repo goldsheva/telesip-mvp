@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/features/calls/state/call_notification_payload.dart';
+import 'package:app/features/calls/state/call_notifications.dart';
 
 void main() {
   group('PendingCallAction.tryParse', () {

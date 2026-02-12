@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/features/calls/state/call_connectivity_snapshot.dart';
+import 'package:app/features/calls/state/call_connectivity.dart';
 
 void main() {
   group('CallConnectivitySnapshot.format', () {
@@ -59,7 +59,7 @@ void main() {
         backoffIndex: 0,
         activeCallId: '<none>',
         activeCallStatus: '<none>',
-        registeredAt: false,
+        hasSipRegisteredAt: false,
       );
 
       expect(
