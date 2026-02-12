@@ -226,7 +226,15 @@ class CallNotifier extends Notifier<CallState> {
     _callDongleMap[callId] = outgoingUser.dongleId;
     _startDialTimeout(callId);
     _clearError();
-    _commit(state.copyWith(activeCallId: callId));
+    final updatedCalls = Map<String, CallInfo>.from(state.calls)
+      ..[callId] = CallInfo(
+        id: callId,
+        destination: prefixedDestination,
+        status: CallStatus.dialing,
+        createdAt: DateTime.now(),
+        dongleId: outgoingUser.dongleId,
+      );
+    _commit(state.copyWith(calls: updatedCalls, activeCallId: callId));
     _phase = _CallPhase.connecting;
   }
 
@@ -252,13 +260,13 @@ class CallNotifier extends Notifier<CallState> {
   }
 
   Future<void> setIncomingSipUser(PbxSipUser user) async {
-    // Remember the preferred incoming account while warming up registration.
-    if (_incomingUser?.pbxSipUserId == user.pbxSipUserId) return;
     _incomingUser = user;
-    try {
-      await ensureRegistered(user);
-    } catch (_) {
-      // Errors surface through notifier state; swallow here.
+    if (!_isRegistered || _registeredUserId != user.pbxSipUserId) {
+      try {
+        await ensureRegistered(user);
+      } catch (_) {
+        // Errors surface through notifier state; swallow here.
+      }
     }
   }
 
