@@ -57,11 +57,30 @@ object NotificationHelper {
         action = SipForegroundService.ACTION_START
         putExtra(SipForegroundService.EXTRA_NEEDS_MICROPHONE, false)
       }
+      val havePostNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(
+          context,
+          android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+      } else {
+        true
+      }
+      val channelImportance =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          notificationManager.getNotificationChannel(CHANNEL_ID)?.importance
+        } else {
+          null
+        }
+      Log.d(
+        "CALLS_NOTIF",
+        "fgs start request api=${Build.VERSION.SDK_INT} isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=${NotificationManagerCompat.from(context).areNotificationsEnabled()} channelImportance=$channelImportance"
+      )
       try {
         ContextCompat.startForegroundService(context, serviceIntent)
+        Log.d("CALLS_NOTIF", "fgs start requested success")
       } catch (error: Throwable) {
         Log.d(
-          "NotificationHelper",
+          "CALLS_NOTIF",
           "FGS start failed ${error::class.java.simpleName}: ${error.message}"
         )
       }

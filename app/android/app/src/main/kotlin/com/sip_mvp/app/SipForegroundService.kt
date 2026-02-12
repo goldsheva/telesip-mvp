@@ -50,6 +50,7 @@ class SipForegroundService : Service() {
         isStarting = true
         pendingStop = false
         val started = startForegroundCompat(getNotification(), needsMicrophone)
+        Log.d("CALLS_FGS", "onStartCommand action=START needsMic=$needsMicrophone started=$started")
         if (!started) {
           debugLog("ACTION_START -> startForeground failed, aborting")
           if (SipWakeLock.isHeld()) {
@@ -159,6 +160,7 @@ class SipForegroundService : Service() {
   private fun startForegroundCompat(notification: Notification, needsMicrophone: Boolean): Boolean {
     val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       val types = buildForegroundServiceTypes(needsMicrophone)
+      Log.d("CALLS_FGS", "startForeground types=0x${types.toString(16)} needsMic=$needsMicrophone")
       startForegroundWithTypes(types, notification)
     } else {
       startForegroundSafe(notification)
