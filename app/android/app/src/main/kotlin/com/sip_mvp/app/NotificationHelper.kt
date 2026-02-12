@@ -71,9 +71,26 @@ object NotificationHelper {
         } else {
           null
         }
+      val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+      val diagnosticsNeeded = !havePostNotifications ||
+        !notificationsEnabled ||
+        (channelImportance != null && channelImportance < NotificationManager.IMPORTANCE_HIGH)
+      val runningImportance = if (diagnosticsNeeded) {
+        try {
+          val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+          activityManager?.runningAppProcesses
+            ?.firstOrNull { it.processName == context.packageName }
+            ?.importance
+        } catch (_: Exception) {
+          null
+        }
+      } else {
+        null
+      }
+      val isMainThread = android.os.Looper.getMainLooper().thread == Thread.currentThread()
       Log.d(
         "CALLS_NOTIF",
-        "fgs start request api=${Build.VERSION.SDK_INT} isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=${NotificationManagerCompat.from(context).areNotificationsEnabled()} channelImportance=$channelImportance"
+        "fgs start request api=${Build.VERSION.SDK_INT} mainThread=$isMainThread isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=$notificationsEnabled channelImportance=$channelImportance appImportance=$runningImportance"
       )
       try {
         ContextCompat.startForegroundService(context, serviceIntent)
@@ -119,7 +136,10 @@ object NotificationHelper {
       try {
         notificationManager.notify(fallbackMeta.baseId, buildNotification(fallbackMeta, isRinging))
       } catch (fallbackError: Exception) {
-        Log.d("NotificationHelper", "Fallback notification failed ${fallbackError.message}")
+        Log.d(
+          "NotificationHelper",
+          "Fallback notification failed ${fallbackError::class.java.simpleName}: ${fallbackError.message}"
+        )
       }
     }
   }

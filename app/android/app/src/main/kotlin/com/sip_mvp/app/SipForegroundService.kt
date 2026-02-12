@@ -46,11 +46,17 @@ class SipForegroundService : Service() {
     when (intent?.action) {
       ACTION_START -> {
         val needsMicrophone = intent.getBooleanExtra(EXTRA_NEEDS_MICROPHONE, false)
-        debugLog("service start needsMicrophone=$needsMicrophone")
+        Log.d(
+          "CALLS_FGS",
+          "onStartCommand action=START sdk=${Build.VERSION.SDK_INT} startId=$startId needsMic=$needsMicrophone"
+        )
         isStarting = true
         pendingStop = false
         val started = startForegroundCompat(getNotification(), needsMicrophone)
-        Log.d("CALLS_FGS", "onStartCommand action=START needsMic=$needsMicrophone started=$started")
+        Log.d(
+          "CALLS_FGS",
+          "onStartCommand action=START needsMic=$needsMicrophone started=$started"
+        )
         if (!started) {
           debugLog("ACTION_START -> startForeground failed, aborting")
           if (SipWakeLock.isHeld()) {
@@ -210,7 +216,10 @@ class SipForegroundService : Service() {
       startForeground(NOTIF_ID, notification, types)
       true
     } catch (error: Throwable) {
-      debugLog("startForeground(types=$types) failed: $error")
+      Log.d(
+        "CALLS_FGS",
+        "startForeground types failure ${error::class.java.simpleName}: ${error.message}"
+      )
       val fallback = types and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
       if (fallback != types) {
         try {
