@@ -92,6 +92,12 @@ class FcmStorage {
       final raw = await _nativeStorageChannel.invokeMethod<String>(
         'readPendingIncomingHint',
       );
+      if (kDebugMode) {
+        debugPrint(
+          '[FcmStorage] native pending hint read: '
+          '${raw == null || raw.isEmpty ? 'null' : 'len=${raw.length}'}',
+        );
+      }
       return raw;
     } catch (error, stackTrace) {
       debugPrint(
@@ -106,6 +112,9 @@ class FcmStorage {
       await _nativeStorageChannel.invokeMethod<void>(
         'clearPendingIncomingHint',
       );
+      if (kDebugMode) {
+        debugPrint('[FcmStorage] native pending hint cleared');
+      }
     } catch (error, stackTrace) {
       debugPrint(
         '[FcmStorage] native pending hint clear failed: $error\n$stackTrace',
@@ -113,14 +122,20 @@ class FcmStorage {
     }
   }
 
-  static Future<String?> _readPendingIncomingHintLegacy() {
-    if (_isAndroidPlatform) {
-      return _storage.read(
-        key: _pendingIncomingKey,
-        aOptions: _androidPendingHintOptions,
+  static Future<String?> _readPendingIncomingHintLegacy() async {
+    final raw = _isAndroidPlatform
+        ? await _storage.read(
+            key: _pendingIncomingKey,
+            aOptions: _androidPendingHintOptions,
+          )
+        : await _storage.read(key: _pendingIncomingKey);
+    if (kDebugMode) {
+      debugPrint(
+        '[FcmStorage] legacy pending hint read: '
+        '${raw == null || raw.isEmpty ? 'null' : 'len=${raw.length}'}',
       );
     }
-    return _storage.read(key: _pendingIncomingKey);
+    return raw;
   }
 
   static Future<void> _writePendingIncomingHintLegacy(String record) {
@@ -134,14 +149,24 @@ class FcmStorage {
     return _storage.write(key: _pendingIncomingKey, value: record);
   }
 
-  static Future<void> _clearPendingIncomingHintLegacy() {
-    if (_isAndroidPlatform) {
-      return _storage.delete(
-        key: _pendingIncomingKey,
-        aOptions: _androidPendingHintOptions,
+  static Future<void> _clearPendingIncomingHintLegacy() async {
+    try {
+      if (_isAndroidPlatform) {
+        await _storage.delete(
+          key: _pendingIncomingKey,
+          aOptions: _androidPendingHintOptions,
+        );
+      } else {
+        await _storage.delete(key: _pendingIncomingKey);
+      }
+      if (kDebugMode) {
+        debugPrint('[FcmStorage] legacy pending hint cleared');
+      }
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[FcmStorage] legacy pending hint clear failed: $error\n$stackTrace',
       );
     }
-    return _storage.delete(key: _pendingIncomingKey);
   }
 
   static Map<String, dynamic>? _decodePendingIncomingHint(

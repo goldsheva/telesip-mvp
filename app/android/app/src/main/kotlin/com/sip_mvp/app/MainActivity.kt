@@ -8,15 +8,29 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
+import android.os.PowerManager
+import com.sip_mvp.app.BuildConfig
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import android.os.PowerManager
 
 class MainActivity : FlutterFragmentActivity() {
+  private var debugIncomingChannel: MethodChannel? = null
+  private var pendingDebugHintCheck = false
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     CallLog.ensureInit(applicationContext)
+    pendingDebugHintCheck = pendingDebugHintCheck || shouldTriggerDebugHintCheck(intent)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    if (shouldTriggerDebugHintCheck(intent)) {
+      pendingDebugHintCheck = true
+      maybeDispatchDebugHintCheck()
+    }
   }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -191,5 +205,31 @@ class MainActivity : FlutterFragmentActivity() {
           else -> result.notImplemented()
         }
       }
+    if (BuildConfig.DEBUG) {
+      debugIncomingChannel =
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.debug/incoming")
+      maybeDispatchDebugHintCheck()
+    }
+  }
+
+  private fun shouldTriggerDebugHintCheck(intent: Intent?): Boolean {
+    return intent?.getBooleanExtra(EXTRA_DEBUG_CHECK_PENDING_HINT, false) == true
+  }
+
+  private fun maybeDispatchDebugHintCheck() {
+    if (!pendingDebugHintCheck) {
+      return
+    }
+    val channel = debugIncomingChannel ?: return
+    pendingDebugHintCheck = false
+    try {
+      channel.invokeMethod("debugCheckPendingIncomingHint", null)
+    } catch (error: Exception) {
+      Log.w("DebugIncomingHint", "Failed to invoke debug pending hint check: $error")
+    }
+  }
+
+  companion object {
+    const val EXTRA_DEBUG_CHECK_PENDING_HINT = "debug_check_pending_hint"
   }
 }

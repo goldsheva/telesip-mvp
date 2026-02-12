@@ -14,7 +14,8 @@ import java.util.TimeZone
  *
  * Example:
  * adb shell am broadcast -a com.sip_mvp.app.DEBUG_PENDING_INCOMING_HINT \
- *   --es payload '{"type":"incoming_call","call_id":"123","from":"Test","display_name":"Demo"}'
+ *   --es payload '{"type":"incoming_call","call_id":"123","from":"Test","display_name":"Demo"}' \
+ *   --ez trigger_ui true
  */
 class DebugIncomingCallReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
@@ -46,6 +47,16 @@ class DebugIncomingCallReceiver : BroadcastReceiver() {
 
     PendingIncomingHintWriter.persist(context.applicationContext, recordJson)
     CallLog.d(TAG, "Persisted pending hint via debug receiver timestamp=$timestamp")
+    val triggerUi = intent.getBooleanExtra(EXTRA_TRIGGER_UI, false)
+    CallLog.d(TAG, "trigger_ui requested=$triggerUi")
+    if (triggerUi && BuildConfig.DEBUG) {
+      val triggerIntent = Intent(context, MainActivity::class.java).apply {
+        putExtra(MainActivity.EXTRA_DEBUG_CHECK_PENDING_HINT, true)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      }
+      context.startActivity(triggerIntent)
+      CallLog.d(TAG, "Triggered debug pending hint check via MainActivity")
+    }
   }
 
   private fun isoTimestamp(): String {
@@ -59,5 +70,6 @@ class DebugIncomingCallReceiver : BroadcastReceiver() {
     const val ACTION_PERSIST_PENDING_HINT = "com.sip_mvp.app.DEBUG_PENDING_INCOMING_HINT"
     private const val EXTRA_PAYLOAD = "payload"
     private const val EXTRA_TIMESTAMP = "timestamp"
+    const val EXTRA_TRIGGER_UI = "trigger_ui"
   }
 }

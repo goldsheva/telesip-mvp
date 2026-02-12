@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/config/app_theme.dart';
@@ -51,6 +52,8 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   bool _batteryPromptInFlight = false;
   bool _batteryPromptScheduled = false;
   late final IncomingCallCoordinator _incomingActivityCoordinator;
+  MethodChannel? _debugIncomingChannel;
+  bool _debugPendingHintCheckInFlight = false;
 
   @override
   void initState() {
@@ -63,6 +66,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == null ||
         lifecycleState == AppLifecycleState.inactive;
     WidgetsBinding.instance.addObserver(this);
+    if (kDebugMode) {
+      _registerDebugIncomingChannel();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_incomingActivityCoordinator.processIncomingActivity());
       final status =
@@ -123,6 +129,8 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.close();
     _callStateSubscription?.close();
+    _debugIncomingChannel?.setMethodCallHandler(null);
+    _debugIncomingChannel = null;
     super.dispose();
   }
 
@@ -319,6 +327,38 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       );
     }
     ref.read(callControllerProvider.notifier).ensureBootstrapped(reason);
+  }
+
+  void _registerDebugIncomingChannel() {
+    const channel = MethodChannel('app.debug/incoming');
+    channel.setMethodCallHandler((call) async {
+      if (call.method != 'debugCheckPendingIncomingHint') {
+        throw MissingPluginException(
+          'Method ${call.method} not implemented on debug incoming channel',
+        );
+      }
+      if (_debugPendingHintCheckInFlight) {
+        debugPrint(
+          '[INCOMING][DEBUG] debugCheckPendingIncomingHint skipped: in-flight',
+        );
+        return;
+      }
+      _debugPendingHintCheckInFlight = true;
+      try {
+        debugPrint('[INCOMING][DEBUG] debugCheckPendingIncomingHint requested');
+        final controller = ref.read(callControllerProvider.notifier);
+        controller.ensureBootstrapped('debug-check-pending-hint');
+        await controller.handleIncomingCallHintIfAny();
+        debugPrint('[INCOMING][DEBUG] debugCheckPendingIncomingHint handled');
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[INCOMING][DEBUG] debugCheckPendingIncomingHint failed: $error\n$stackTrace',
+        );
+      } finally {
+        _debugPendingHintCheckInFlight = false;
+      }
+    });
+    _debugIncomingChannel = channel;
   }
 
   void _handleCallStateChange(CallState? previous, CallState next) {
