@@ -43,7 +43,7 @@ class IncomingFcmService : FirebaseMessagingService() {
   private fun cancelCall(message: RemoteMessage) {
     CallActionStore.clear(applicationContext)
     val callId = message.data["call_id"] ?: return
-    NotificationHelper.cancel(notificationManager, callId)
+    NotificationHelper.cancel(applicationContext, notificationManager, callId)
   }
 
   private fun isExpired(message: RemoteMessage): Boolean {

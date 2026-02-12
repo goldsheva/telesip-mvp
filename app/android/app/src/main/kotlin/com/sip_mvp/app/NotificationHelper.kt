@@ -47,6 +47,7 @@ object NotificationHelper {
     callUuid: String? = null,
     isRinging: Boolean
   ) {
+    CallLog.ensureInit(context)
     ensureChannel(context, notificationManager)
     if (isSuppressed(callId, callUuid)) {
       debugLog("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
@@ -56,6 +57,11 @@ object NotificationHelper {
       val serviceIntent = Intent(context, SipForegroundService::class.java).apply {
         action = SipForegroundService.ACTION_START
         putExtra(SipForegroundService.EXTRA_NEEDS_MICROPHONE, false)
+        putExtra(SipForegroundService.EXTRA_CALL_ID, callId)
+        putExtra(SipForegroundService.EXTRA_CALL_FROM, from)
+        putExtra(SipForegroundService.EXTRA_DISPLAY_NAME, displayName)
+        putExtra(SipForegroundService.EXTRA_CALL_UUID, callUuid)
+        putExtra(SipForegroundService.EXTRA_IS_RINGING, isRinging)
       }
       val havePostNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         ContextCompat.checkSelfPermission(
@@ -102,40 +108,44 @@ object NotificationHelper {
           error
         )
       }
+      return
     }
-    val meta = prepareIncomingNotification(
+    val incomingNotification = buildIncomingNotification(
       context,
       callId,
       from,
       displayName,
       callUuid,
+      isRinging,
       attachFullScreen = true,
-      useCallStyle = true
+      useCallStyle = true,
     )
-    val notification = buildNotification(meta, isRinging)
+    val notification = incomingNotification.notification
     debugLog(
       "NotificationHelper",
-      "notify baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${meta.usedCallStyle}",
+      "notify baseId=${incomingNotification.meta.baseId} call_id=$callId call_uuid=${incomingNotification.meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${incomingNotification.meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${incomingNotification.meta.usedCallStyle}",
     )
     try {
-      notificationManager.notify(meta.baseId, notification)
-      debugLog("NotificationHelper", "CallStyle notification posted seq=${meta.baseId}")
+      notificationManager.notify(incomingNotification.meta.baseId, notification)
+      debugLog("NotificationHelper", "CallStyle notification posted seq=${incomingNotification.meta.baseId}")
     } catch (error: Exception) {
       CallLog.w(
         "CALLS_NOTIF",
-        "CallStyle notification failed sdk=${Build.VERSION.SDK_INT} keyguard=${meta.keyguardLocked} isRinging=$isRinging usedCallStyle=${meta.usedCallStyle} error=${error::class.java.simpleName}: ${error.message}"
+        "callstyle-post rejected sdk=${Build.VERSION.SDK_INT} keyguard=${incomingNotification.meta.keyguardLocked} isRinging=$isRinging usedCallStyle=${incomingNotification.meta.usedCallStyle} error=${error::class.java.simpleName}: ${error.message}"
       )
-      val fallbackMeta = prepareIncomingNotification(
+      val fallbackResult = buildIncomingNotification(
         context,
         callId,
         from,
         displayName,
         callUuid,
+        isRinging,
         attachFullScreen = true,
-        useCallStyle = false
+        useCallStyle = false,
+        forceFullScreenIntent = isRinging,
       )
       try {
-        notificationManager.notify(fallbackMeta.baseId, buildNotification(fallbackMeta, isRinging))
+        notificationManager.notify(fallbackResult.meta.baseId, fallbackResult.notification)
       } catch (fallbackError: Exception) {
         CallLog.e(
           "CALLS_NOTIF",
@@ -155,22 +165,53 @@ object NotificationHelper {
     callUuid: String? = null,
     isRinging: Boolean
   ) {
+    CallLog.ensureInit(context)
     ensureChannel(context, notificationManager)
+    val incomingNotification = buildIncomingNotification(
+      context,
+      callId,
+      from,
+      displayName,
+      callUuid,
+      isRinging,
+      attachFullScreen = false,
+      useCallStyle = false,
+    )
+    val notification = incomingNotification.notification
+    debugLog(
+      "NotificationHelper",
+      "update baseId=${incomingNotification.meta.baseId} call_id=$callId call_uuid=${incomingNotification.meta.effectiveCallUuid} isRinging=$isRinging api=${Build.VERSION.SDK_INT}",
+    )
+    notificationManager.notify(incomingNotification.meta.baseId, notification)
+  }
+
+  data class IncomingNotificationResult(
+    val meta: IncomingNotificationMeta,
+    val notification: Notification
+  )
+
+  fun buildIncomingNotification(
+    context: Context,
+    callId: String,
+    from: String,
+    displayName: String?,
+    callUuid: String?,
+    isRinging: Boolean,
+    attachFullScreen: Boolean,
+    useCallStyle: Boolean,
+    forceFullScreenIntent: Boolean = false,
+  ): IncomingNotificationResult {
     val meta = prepareIncomingNotification(
       context,
       callId,
       from,
       displayName,
       callUuid,
-      attachFullScreen = false,
-      useCallStyle = false,
+      attachFullScreen = attachFullScreen,
+      useCallStyle = useCallStyle,
+      forceFullScreenIntent = forceFullScreenIntent,
     )
-    val notification = buildNotification(meta, isRinging)
-    debugLog(
-      "NotificationHelper",
-      "update baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging api=${Build.VERSION.SDK_INT}",
-    )
-    notificationManager.notify(meta.baseId, notification)
+    return IncomingNotificationResult(meta, buildNotification(meta, isRinging))
   }
 
   private fun buildNotification(
@@ -192,6 +233,7 @@ object NotificationHelper {
     callUuid: String?,
     attachFullScreen: Boolean,
     useCallStyle: Boolean = true,
+    forceFullScreenIntent: Boolean = false,
   ): IncomingNotificationMeta {
     val effectiveCallUuid = callUuid ?: callId
     val baseId = getNotificationId(callId)
@@ -256,7 +298,7 @@ object NotificationHelper {
       .setWhen(System.currentTimeMillis())
       .setShowWhen(false)
       .apply {
-        if (attachFullScreen && keyguardLocked) {
+        if (attachFullScreen && (forceFullScreenIntent || keyguardLocked)) {
           setFullScreenIntent(fullScreenIntent, true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -338,7 +380,8 @@ object NotificationHelper {
     return keyguardManager?.isKeyguardLocked ?: true
   }
 
-  fun cancel(notificationManager: NotificationManager, callId: String) {
+  fun cancel(context: Context, notificationManager: NotificationManager, callId: String) {
+    CallLog.ensureInit(context)
     notificationManager.cancel(getNotificationId(callId))
   }
 

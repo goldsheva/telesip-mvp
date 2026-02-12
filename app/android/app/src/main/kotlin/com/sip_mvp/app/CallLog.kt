@@ -7,10 +7,19 @@ import android.util.Log
 object CallLog {
   @Volatile
   private var debugFlag: Boolean? = null
+  private val initLock = Any()
 
   fun init(context: Context) {
+    ensureInit(context)
+  }
+
+  fun ensureInit(context: Context) {
     if (debugFlag == null) {
-      debugFlag = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+      synchronized(initLock) {
+        if (debugFlag == null) {
+          debugFlag = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        }
+      }
     }
   }
 

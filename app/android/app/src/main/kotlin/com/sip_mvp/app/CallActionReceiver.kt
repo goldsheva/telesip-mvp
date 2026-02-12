@@ -17,6 +17,7 @@ class CallActionReceiver : BroadcastReceiver() {
   }
 
   override fun onReceive(context: Context, intent: Intent) {
+    CallLog.ensureInit(context)
     val callId = intent.getStringExtra("call_id") ?: return
     val action = when (intent.action) {
       ACTION_ANSWER -> "answer"
@@ -51,7 +52,7 @@ class CallActionReceiver : BroadcastReceiver() {
         cancelAttempted = idsToCancel.size
         for (id in idsToCancel) {
           try {
-            NotificationHelper.cancel(notificationManager, id)
+            NotificationHelper.cancel(context, notificationManager, id)
             cancelSucceeded += 1
           } catch (error: Throwable) {
             CallLog.w("CALLS_ACTION", "notification cancel failed action=$action call=$id: $error")

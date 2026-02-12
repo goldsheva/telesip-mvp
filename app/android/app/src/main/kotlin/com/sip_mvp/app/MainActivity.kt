@@ -16,7 +16,7 @@ import android.os.PowerManager
 class MainActivity : FlutterFragmentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    CallLog.init(applicationContext)
+    CallLog.ensureInit(applicationContext)
   }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

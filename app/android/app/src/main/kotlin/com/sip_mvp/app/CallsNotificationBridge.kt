@@ -96,9 +96,9 @@ class CallsNotificationBridge(
             result.error("invalid_args", "callId is required", null)
             return@setMethodCallHandler
           }
-          NotificationHelper.cancel(notificationManager, callId)
+          NotificationHelper.cancel(context, notificationManager, callId)
           if (callUuid?.isNotBlank() == true && callUuid != callId) {
-            NotificationHelper.cancel(notificationManager, callUuid)
+            NotificationHelper.cancel(context, notificationManager, callUuid)
           }
           result.success(null)
         }
