@@ -248,7 +248,19 @@ class MainActivity : FlutterFragmentActivity() {
     }
     val releaseTrigger = intent.getBooleanExtra(EXTRA_CHECK_PENDING_HINT, false)
     if (releaseTrigger) {
-      Log.d("IncomingHint", "handleIncomingHintExtras release trigger")
+      val fromAction = intent.getBooleanExtra(
+        IncomingActionReceiver.EXTRA_FROM_INCOMING_ACTION,
+        false,
+      )
+      val actionType = intent.getStringExtra(
+        IncomingActionReceiver.EXTRA_ACTION_TYPE,
+      )
+      val callId = intent.getStringExtra(IncomingActionReceiver.EXTRA_CALL_ID)
+      Log.d(
+        "IncomingHint",
+        "handleIncomingHintExtras release trigger fromAction=$fromAction " +
+          "action=$actionType callId=${callId ?: "<none>"}",
+      )
       pendingReleaseHintCheck = true
       intent.removeExtra(EXTRA_CHECK_PENDING_HINT)
       maybeDispatchReleaseHintCheck()
