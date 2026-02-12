@@ -88,6 +88,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <receiver
+            android:name=".IncomingActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.sip_mvp.app.action.INCOMING_ANSWER" />
+                <action android:name="com.sip_mvp.app.action.INCOMING_DECLINE" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

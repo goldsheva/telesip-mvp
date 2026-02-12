@@ -125,6 +125,33 @@ object IncomingCallNotificationHelper {
       .setAutoCancel(true)
       .setContentIntent(tapPendingIntent)
 
+    if (callId != null) {
+      builder.addAction(
+        NotificationCompat.Action.Builder(
+          android.R.drawable.ic_menu_call,
+          "Answer",
+          buildReleaseActionPendingIntent(
+            applicationContext,
+            IncomingActionReceiver.ACTION_INCOMING_ANSWER,
+            requestCode = 11,
+            callId = callId,
+          ),
+        ).build(),
+      )
+      builder.addAction(
+        NotificationCompat.Action.Builder(
+          android.R.drawable.ic_menu_close_clear_cancel,
+          "Decline",
+          buildReleaseActionPendingIntent(
+            applicationContext,
+            IncomingActionReceiver.ACTION_INCOMING_DECLINE,
+            requestCode = 12,
+            callId = callId,
+          ),
+        ).build(),
+      )
+    }
+
     NotificationManagerCompat.from(applicationContext)
       .notify(RELEASE_NOTIFICATION_ID, builder.build())
     CallLog.d("IncomingHint", "Release incoming notification posted id=$RELEASE_NOTIFICATION_ID")
@@ -158,6 +185,24 @@ object IncomingCallNotificationHelper {
       if (callId != null) {
         putExtra("call_id", callId)
       }
+    }
+    return PendingIntent.getBroadcast(
+      context,
+      requestCode,
+      intent,
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+  }
+
+  private fun buildReleaseActionPendingIntent(
+    context: Context,
+    action: String,
+    requestCode: Int,
+    callId: String,
+  ): PendingIntent {
+    val intent = Intent(context, IncomingActionReceiver::class.java).apply {
+      this.action = action
+      putExtra(IncomingActionReceiver.EXTRA_CALL_ID, callId)
     }
     return PendingIntent.getBroadcast(
       context,
