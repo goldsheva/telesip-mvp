@@ -9,12 +9,11 @@ import 'package:app/config/app_theme.dart';
 import 'package:app/core/storage/battery_optimization_prompt_storage.dart';
 import 'package:app/features/auth/state/auth_notifier.dart';
 import 'package:app/features/auth/state/auth_state.dart';
-import 'package:app/features/calls/incoming/incoming_wake_coordinator.dart';
+import 'package:app/features/calls/incoming/incoming_call_coordinator.dart';
 import 'package:app/features/calls/state/call_notifier.dart';
 import 'package:app/platform/system_settings.dart';
 import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/firebase_messaging_service.dart';
-import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/ui/pages/call_screen.dart';
 import 'package:app/ui/pages/login_page.dart';
 import 'package:app/ui/pages/home_page.dart';
@@ -50,12 +49,12 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   String? _pendingBootstrapReason;
   bool _batteryPromptInFlight = false;
   bool _batteryPromptScheduled = false;
-  DateTime? _lastIncomingActivityAt;
-  bool _incomingProcessInFlight = false;
+  late final IncomingCallCoordinator _incomingCoordinator;
 
   @override
   void initState() {
     super.initState();
+    _incomingCoordinator = IncomingCallCoordinator(ref);
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _isResumed =
         lifecycleState == AppLifecycleState.resumed ||
@@ -63,7 +62,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == AppLifecycleState.inactive;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_processIncomingActivity());
+      unawaited(_incomingCoordinator.processIncomingActivity());
       final status =
           ref.read(authNotifierProvider).value?.status ?? AuthStatus.unknown;
       _logAuthGateState('init post-frame');
@@ -146,12 +145,12 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       }
       _batteryPromptScheduled = false;
       _batteryPromptInFlight = false;
-      unawaited(_processIncomingActivity());
+      unawaited(_incomingCoordinator.processIncomingActivity());
       _ensureCallsBootstrapped('app-resume');
       unawaited(_maybeAskBatteryOptimizations());
     } else {
       _batteryPromptScheduled = false;
-      _lastIncomingActivityAt = null;
+      _incomingCoordinator.clearLastIncomingActivity();
     }
   }
 
@@ -173,9 +172,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       return;
     }
     final now = DateTime.now();
-    if (_lastIncomingActivityAt != null &&
-        now.difference(_lastIncomingActivityAt!) <
-            const Duration(seconds: 10)) {
+    final lastIncomingAt = _incomingCoordinator.lastIncomingActivityAt;
+    if (lastIncomingAt != null &&
+        now.difference(lastIncomingAt) < const Duration(seconds: 10)) {
       debugPrint('[CALLS] battery prompt suppressed: recent incoming activity');
       return;
     }
@@ -292,82 +291,6 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     );
   }
 
-  Future<void> _processIncomingActivity() async {
-    if (_incomingProcessInFlight) return;
-    _incomingProcessInFlight = true;
-    try {
-      final handled = await ref
-          .read(incomingWakeCoordinatorProvider)
-          .checkPendingHint();
-      if (handled) {
-        _lastIncomingActivityAt = DateTime.now();
-      }
-      await _handlePendingCallAction();
-    } finally {
-      _incomingProcessInFlight = false;
-    }
-  }
-
-  Future<void> _handlePendingCallAction() async {
-    final rawAction = await IncomingNotificationService.readCallAction();
-    if (rawAction == null) return;
-    _lastIncomingActivityAt = DateTime.now();
-    final callId =
-        rawAction['call_id']?.toString() ?? rawAction['callId']?.toString();
-    final action = (rawAction['action'] ?? rawAction['type'])?.toString();
-    final timestampMillis = _timestampToMillis(
-      rawAction['timestamp'] ?? rawAction['ts'],
-    );
-    if (callId == null || action == null || timestampMillis == null) {
-      await IncomingNotificationService.clearCallAction();
-      return;
-    }
-    final actionAge = DateTime.now().difference(
-      DateTime.fromMillisecondsSinceEpoch(timestampMillis),
-    );
-    if (actionAge > const Duration(seconds: 30)) {
-      await IncomingNotificationService.clearCallAction();
-      return;
-    }
-
-    final callState = ref.read(callControllerProvider);
-    final callInfo = callState.calls[callId];
-    if (callInfo == null) {
-      debugPrint('[CALLS] pending action ignored: no call for callId=$callId');
-      await IncomingNotificationService.clearCallAction();
-      return;
-    }
-    if (callInfo.status == CallStatus.ended) {
-      debugPrint('[CALLS] pending action ignored: call ended callId=$callId');
-      await IncomingNotificationService.clearCallAction();
-      return;
-    }
-    if (callState.activeCallId != callId) {
-      debugPrint(
-        '[CALLS] pending action ignored: active=${callState.activeCallId} callId=$callId',
-      );
-      await IncomingNotificationService.clearCallAction();
-      return;
-    }
-
-    final notifier = ref.read(callControllerProvider.notifier);
-    var executed = false;
-    if (action == 'answer') {
-      await notifier.answerFromNotification(callId);
-      executed = true;
-    } else if (action == 'decline') {
-      await notifier.declineFromNotification(callId);
-      executed = true;
-    } else {
-      await IncomingNotificationService.clearCallAction();
-      return;
-    }
-
-    if (executed) {
-      await IncomingNotificationService.clearCallAction();
-    }
-  }
-
   void _logAuthGateState(String tag) {
     if (!kDebugMode) return;
     final status =
@@ -452,12 +375,6 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       _scheduledCallId = null;
       _pushCallScreen(callId);
     });
-  }
-
-  int? _timestampToMillis(Object? value) {
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    return int.tryParse(value?.toString() ?? '');
   }
 }
 
