@@ -560,21 +560,27 @@ class CallNotifier extends Notifier<CallState> {
     _clearSipMappingsForLocalCall(localId);
     _callDongleMap.remove(localId);
 
-    if (nextActiveCallId != null &&
-        !updatedCalls.containsKey(nextActiveCallId)) {
-      debugPrint(
-        '[CALLS] clearing dangling activeCallId=$nextActiveCallId reason=$reason',
-      );
-      nextActiveCallId = null;
-    }
-    if (nextActiveCallId == null) {
+    bool isLiveId(String? id) =>
+        id != null && updatedCalls[id]?.status != CallStatus.ended;
+
+    String? findFirstLive() {
       for (final entry in updatedCalls.entries) {
         if (entry.value.status != CallStatus.ended) {
-          nextActiveCallId = entry.key;
-          break;
+          return entry.key;
         }
       }
+      return null;
     }
+
+    if (!isLiveId(nextActiveCallId)) {
+      if (nextActiveCallId != null) {
+        debugPrint(
+          '[CALLS] clearing dangling activeCallId=$nextActiveCallId reason=$reason',
+        );
+      }
+      nextActiveCallId = null;
+    }
+    nextActiveCallId ??= findFirstLive();
     final nextState = previousState.copyWith(
       calls: updatedCalls,
       activeCallId: nextActiveCallId,
