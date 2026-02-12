@@ -588,10 +588,6 @@ class CallNotifier extends Notifier<CallState> {
     );
     final post = _sanitizeActiveCallId(nextState, 'endCall-postcommit');
     _commitSafe(post);
-    scheduleMicrotask(() {
-      if (!_alive) return;
-      _afterStateMutation(post, 'endCall-postcommit');
-    });
     debugPrint(
       '[CALLS] endCall final active=${post.activeCallId} calls=${post.calls.length}',
     );
@@ -1515,6 +1511,9 @@ class CallNotifier extends Notifier<CallState> {
     if (!_alive) return;
     final sanitized = _sanitizeActiveCallId(next, 'commitSafe');
     _commit(sanitized, syncFgs: syncFgs);
+    if (_isIdleSnapshot(sanitized)) {
+      _afterStateMutation(sanitized, 'commitSafe');
+    }
   }
 
   Future<void> _onEvent(SipEvent event) async {
@@ -2392,7 +2391,6 @@ class CallNotifier extends Notifier<CallState> {
       final nextState = state.copyWith(calls: updatedCalls);
       final sanitized = _sanitizeActiveCallId(nextState, 'ended-cleanup');
       _commitSafe(sanitized);
-      _afterStateMutation(sanitized, 'ended-cleanup');
       debugPrint(
         '[CALLS] ended cleanup fired primary=$primaryId secondary=${secondaryId ?? "<none>"} '
         'reason=$reason calls=${sanitized.calls.length}',
