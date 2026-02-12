@@ -52,6 +52,20 @@ object NotificationHelper {
       Log.d("NotificationHelper", "incoming suppressed call_id=$callId call_uuid=$callUuid")
       return
     }
+    if (isRinging) {
+      val serviceIntent = Intent(context, SipForegroundService::class.java).apply {
+        action = SipForegroundService.ACTION_START
+        putExtra(SipForegroundService.EXTRA_NEEDS_MICROPHONE, false)
+      }
+      try {
+        ContextCompat.startForegroundService(context, serviceIntent)
+      } catch (error: Throwable) {
+        Log.d(
+          "NotificationHelper",
+          "FGS start failed ${error::class.java.simpleName}: ${error.message}"
+        )
+      }
+    }
     val meta = prepareIncomingNotification(
       context,
       callId,
@@ -59,13 +73,36 @@ object NotificationHelper {
       displayName,
       callUuid,
       attachFullScreen = true,
+      useCallStyle = true
     )
     val notification = buildNotification(meta, isRinging)
     Log.d(
       "NotificationHelper",
       "notify baseId=${meta.baseId} call_id=$callId call_uuid=${meta.effectiveCallUuid} isRinging=$isRinging keyguardLocked=${meta.keyguardLocked} api=${Build.VERSION.SDK_INT} callStyle=${meta.usedCallStyle}",
     )
-    notificationManager.notify(meta.baseId, notification)
+    try {
+      notificationManager.notify(meta.baseId, notification)
+      Log.d("NotificationHelper", "CallStyle notification posted seq=${meta.baseId}")
+    } catch (error: Exception) {
+      Log.d(
+        "NotificationHelper",
+        "CallStyle notification failed ${error::class.java.simpleName}: ${error.message}, falling back"
+      )
+      val fallbackMeta = prepareIncomingNotification(
+        context,
+        callId,
+        from,
+        displayName,
+        callUuid,
+        attachFullScreen = true,
+        useCallStyle = false
+      )
+      try {
+        notificationManager.notify(fallbackMeta.baseId, buildNotification(fallbackMeta, isRinging))
+      } catch (fallbackError: Exception) {
+        Log.d("NotificationHelper", "Fallback notification failed ${fallbackError.message}")
+      }
+    }
   }
 
   fun updateIncomingState(
@@ -85,6 +122,7 @@ object NotificationHelper {
       displayName,
       callUuid,
       attachFullScreen = false,
+      useCallStyle = false,
     )
     val notification = buildNotification(meta, isRinging)
     Log.d(
@@ -112,6 +150,7 @@ object NotificationHelper {
     displayName: String?,
     callUuid: String?,
     attachFullScreen: Boolean,
+    useCallStyle: Boolean = true,
   ): IncomingNotificationMeta {
     val effectiveCallUuid = callUuid ?: callId
     val baseId = getNotificationId(callId)
@@ -182,7 +221,7 @@ object NotificationHelper {
         }
       }
       .setContentIntent(contentIntent)
-    val usedCallStyle = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val usedCallStyle = useCallStyle && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     if (!usedCallStyle) {
       builder
         .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)

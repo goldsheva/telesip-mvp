@@ -63,11 +63,11 @@ class MainActivity : FlutterFragmentActivity() {
                 try {
                   val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                   appSettings.data = Uri.fromParts("package", packageName, null)
-                startActivity(appSettings)
-                Log.d(
-                  "SystemSettings",
-                  "Opened APPLICATION_DETAILS_SETTINGS fallback",
-                )
+                  startActivity(appSettings)
+                  Log.d(
+                    "SystemSettings",
+                    "Opened APPLICATION_DETAILS_SETTINGS fallback",
+                  )
                   result.success(null)
                 } catch (finalFallback: Exception) {
                   Log.d("SystemSettings", "App settings fallback failed: $finalFallback")
@@ -85,10 +85,10 @@ class MainActivity : FlutterFragmentActivity() {
               val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
               appSettings.data = Uri.fromParts("package", packageName, null)
               startActivity(appSettings)
-            Log.d(
-              "SystemSettings",
-              "Opened APPLICATION_DETAILS_SETTINGS via openAppSettings",
-            )
+              Log.d(
+                "SystemSettings",
+                "Opened APPLICATION_DETAILS_SETTINGS via openAppSettings",
+              )
               result.success(null)
             } catch (error: Exception) {
               Log.d("SystemSettings", "App settings fallback failed: $error")
@@ -99,31 +99,31 @@ class MainActivity : FlutterFragmentActivity() {
               )
             }
           }
-        "isIgnoringBatteryOptimizations" -> {
-          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            result.success(true)
-            return@setMethodCallHandler
+          "isIgnoringBatteryOptimizations" -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+              result.success(true)
+              return@setMethodCallHandler
+            }
+            val pm = getSystemService(PowerManager::class.java)
+            val ignoring = pm?.isIgnoringBatteryOptimizations(packageName) ?: false
+            result.success(ignoring)
           }
-          val pm = getSystemService(PowerManager::class.java)
-          val ignoring = pm?.isIgnoringBatteryOptimizations(packageName) ?: false
-          result.success(ignoring)
+          "isRunningOnEmulator" -> {
+            val fingerprint = (Build.FINGERPRINT ?: "").lowercase()
+            val model = (Build.MODEL ?: "").lowercase()
+            val product = (Build.PRODUCT ?: "").lowercase()
+            val isEmulator =
+              fingerprint.contains("generic") ||
+              fingerprint.contains("vbox") ||
+              fingerprint.contains("test-keys") ||
+              model.contains("google_sdk") ||
+              model.contains("emulator") ||
+              product.contains("sdk_gphone")
+            result.success(isEmulator)
+          }
+          else -> result.notImplemented()
         }
-        "isRunningOnEmulator" -> {
-          val fingerprint = (Build.FINGERPRINT ?: "").lowercase()
-          val model = (Build.MODEL ?: "").lowercase()
-          val product = (Build.PRODUCT ?: "").lowercase()
-          val isEmulator =
-            fingerprint.contains("generic") ||
-            fingerprint.contains("vbox") ||
-            fingerprint.contains("test-keys") ||
-            model.contains("google_sdk") ||
-            model.contains("emulator") ||
-            product.contains("sdk_gphone")
-          result.success(isEmulator)
-        }
-        else -> result.notImplemented()
       }
-    }
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.boot_state")
       .setMethodCallHandler { call, result ->
         if (call.method == "wasBootCompleted") {
