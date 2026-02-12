@@ -116,6 +116,8 @@ object IncomingCallNotificationHelper {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    val resolvedCallId = callId ?: resolveCallIdFromPendingHint(applicationContext)
+
     val builder = NotificationCompat.Builder(applicationContext, RELEASE_CHANNEL_ID)
       .setSmallIcon(applicationContext.applicationInfo.icon)
       .setContentTitle("Incoming call")
@@ -125,7 +127,12 @@ object IncomingCallNotificationHelper {
       .setAutoCancel(true)
       .setContentIntent(tapPendingIntent)
 
-    if (callId != null) {
+    if (resolvedCallId != null) {
+      CallLog.d(
+        "IncomingHint",
+        "Release notification actions attached callId=$resolvedCallId " +
+          if (callId == null) "(resolved from pending hint)" else "",
+      )
       builder.addAction(
         NotificationCompat.Action.Builder(
           android.R.drawable.ic_menu_call,
@@ -134,7 +141,7 @@ object IncomingCallNotificationHelper {
             applicationContext,
             IncomingActionReceiver.ACTION_INCOMING_ANSWER,
             requestCode = 11,
-            callId = callId,
+            callId = resolvedCallId,
           ),
         ).build(),
       )
@@ -146,9 +153,14 @@ object IncomingCallNotificationHelper {
             applicationContext,
             IncomingActionReceiver.ACTION_INCOMING_DECLINE,
             requestCode = 12,
-            callId = callId,
+            callId = resolvedCallId,
           ),
         ).build(),
+      )
+    } else {
+      CallLog.d(
+        "IncomingHint",
+        "Release notification posted without actions (callId unavailable)",
       )
     }
 
@@ -210,6 +222,21 @@ object IncomingCallNotificationHelper {
       intent,
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+  }
+
+  private fun resolveCallIdFromPendingHint(context: Context): String? {
+    return try {
+      val record = PendingIncomingHintWriter.read(context)
+      if (record.isNullOrEmpty()) {
+        null
+      } else {
+        val payload = org.json.JSONObject(record).optJSONObject("payload")
+        payload?.optString("call_id")?.takeIf { it.isNotBlank() }
+      }
+    } catch (error: Exception) {
+      CallLog.w("IncomingHint", "Failed to resolve callId from pending hint: $error")
+      null
+    }
   }
 
   private fun ensureDebugChannel(context: Context) {
