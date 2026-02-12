@@ -31,7 +31,7 @@ class MainActivity : FlutterFragmentActivity() {
           }
           "stopForegroundService" -> {
             intent.action = SipForegroundService.ACTION_STOP
-            ContextCompat.startForegroundService(this, intent)
+            startService(intent)
             result.success(null)
           }
           else -> result.notImplemented()

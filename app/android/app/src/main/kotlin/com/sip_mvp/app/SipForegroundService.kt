@@ -47,17 +47,31 @@ class SipForegroundService : Service() {
       ACTION_START -> {
         val needsMicrophone = intent.getBooleanExtra(EXTRA_NEEDS_MICROPHONE, false)
         debugLog("service start needsMicrophone=$needsMicrophone")
-        ensureForegroundPromoted("START")
         isStarting = true
+        pendingStop = false
+        val started = startForegroundCompat(getNotification(), needsMicrophone)
+        if (!started) {
+          debugLog("ACTION_START -> startForeground failed, aborting")
+          if (SipWakeLock.isHeld()) {
+            SipWakeLock.release()
+          }
+          hasStartedForeground = false
+          isStarting = false
+          pendingStop = false
+          stopSelf()
+          return START_NOT_STICKY
+        }
         try {
           SipWakeLock.acquire(this)
         } catch (error: Throwable) {
           debugLog("wake lock acquire failed: $error")
           isStarting = false
           pendingStop = false
+          stopForegroundSafely()
+          stopSelf()
+          hasStartedForeground = false
           return START_NOT_STICKY
         }
-        startForegroundCompat(getNotification(), needsMicrophone)
         isStarting = false
         if (pendingStop) {
           debugLog("ACTION_STOP issued during startup, stopping now")
@@ -81,7 +95,6 @@ class SipForegroundService : Service() {
           debugLog("defer STOP until started")
           return START_NOT_STICKY
         }
-        ensureForegroundPromoted("STOP")
         stopForegroundSafely()
         isStarting = false
         pendingStop = false
@@ -143,16 +156,15 @@ class SipForegroundService : Service() {
     return notification
   }
 
-  private fun ensureForegroundPromoted(reason: String) {
-    if (hasStartedForeground) return
-    debugLog("promoting to foreground (safe) reason=$reason")
-    try {
-      startForeground(NOTIF_ID, getNotification())
-      hasStartedForeground = true
-      debugLog("ACTION_$reason -> startForeground(safe) done")
-    } catch (error: Throwable) {
-      debugLog("safe startForeground failed (reason=$reason): $error")
+  private fun startForegroundCompat(notification: Notification, needsMicrophone: Boolean): Boolean {
+    val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      val types = buildForegroundServiceTypes(needsMicrophone)
+      startForegroundWithTypes(types, notification)
+    } else {
+      startForegroundSafe(notification)
     }
+    hasStartedForeground = started
+    return started
   }
 
   private fun debugLog(message: String) {
@@ -173,12 +185,13 @@ class SipForegroundService : Service() {
     }
   }
 
-  private fun startForegroundCompat(notification: Notification, needsMicrophone: Boolean) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      val types = buildForegroundServiceTypes(needsMicrophone)
-      startForegroundWithTypes(types, notification)
-    } else {
+  private fun startForegroundSafe(notification: Notification): Boolean {
+    return try {
       startForeground(NOTIF_ID, notification)
+      true
+    } catch (error: Throwable) {
+      debugLog("startForeground(safe) failed: $error")
+      false
     }
   }
 
@@ -191,25 +204,22 @@ class SipForegroundService : Service() {
     return types
   }
 
-  private fun startForegroundWithTypes(types: Int, notification: Notification) {
-    try {
+  private fun startForegroundWithTypes(types: Int, notification: Notification): Boolean {
+    return try {
       startForeground(NOTIF_ID, notification, types)
+      true
     } catch (error: Throwable) {
       debugLog("startForeground(types=$types) failed: $error")
       val fallback = types and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
       if (fallback != types) {
         try {
           startForeground(NOTIF_ID, notification, fallback)
-          return
+          return true
         } catch (fallbackEx: Throwable) {
           debugLog("fallback startForeground(types=$fallback) failed: $fallbackEx")
         }
       }
-      try {
-        startForeground(NOTIF_ID, notification)
-      } catch (finalEx: Throwable) {
-        debugLog("final startForeground(safe) failed: $finalEx")
-      }
+      return startForegroundSafe(notification)
     }
   }
 
