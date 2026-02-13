@@ -43,7 +43,7 @@ object IncomingCallNotificationHelper {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(applicationContext, DEBUG_CHANNEL_ID)
       .setSmallIcon(applicationContext.applicationInfo.icon)
       .setContentTitle("Incoming call (debug)")
       .setContentText(composeContentText(callId, from))
@@ -55,13 +55,13 @@ object IncomingCallNotificationHelper {
     if (BuildConfig.DEBUG) {
       val answerPendingIntent = buildActionPendingIntent(
         applicationContext,
-        DebugIncomingActionReceiver.ACTION_DEBUG_INCOMING_ANSWER,
+        DebugIncomingAction.ACTION_DEBUG_INCOMING_ANSWER,
         requestCode = 1,
         callId = callId,
       )
       val declinePendingIntent = buildActionPendingIntent(
         applicationContext,
-        DebugIncomingActionReceiver.ACTION_DEBUG_INCOMING_DECLINE,
+        DebugIncomingAction.ACTION_DEBUG_INCOMING_DECLINE,
         requestCode = 2,
         callId = callId,
       )

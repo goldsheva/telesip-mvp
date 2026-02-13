@@ -9,8 +9,8 @@ class DebugIncomingActionReceiver : BroadcastReceiver() {
     CallLog.ensureInit(context)
     val action = intent.action ?: return
     val actionType = when (action) {
-      ACTION_DEBUG_INCOMING_ANSWER -> "answer"
-      ACTION_DEBUG_INCOMING_DECLINE -> "decline"
+      DebugIncomingAction.ACTION_DEBUG_INCOMING_ANSWER -> "answer"
+      DebugIncomingAction.ACTION_DEBUG_INCOMING_DECLINE -> "decline"
       else -> {
         CallLog.w(TAG, "Ignoring unknown action=$action")
         return
@@ -30,7 +30,5 @@ class DebugIncomingActionReceiver : BroadcastReceiver() {
 
   companion object {
     private const val TAG = "DebugIncomingHint"
-    const val ACTION_DEBUG_INCOMING_ANSWER = "com.sip_mvp.app.action.DEBUG_INCOMING_ANSWER"
-    const val ACTION_DEBUG_INCOMING_DECLINE = "com.sip_mvp.app.action.DEBUG_INCOMING_DECLINE"
   }
 }
