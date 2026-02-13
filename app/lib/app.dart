@@ -290,7 +290,9 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     _pipelineScheduled = true;
     scheduleMicrotask(() {
       _pipelineScheduled = false;
-      unawaited(notifier.runIncomingPipeline(reason));
+      if (!mounted) return;
+      final freshNotifier = ref.read(callControllerProvider.notifier);
+      unawaited(freshNotifier.runIncomingPipeline(reason));
     });
   }
 
