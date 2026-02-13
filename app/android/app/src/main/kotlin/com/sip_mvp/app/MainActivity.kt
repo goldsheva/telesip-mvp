@@ -213,6 +213,21 @@ class MainActivity : FlutterFragmentActivity() {
       when (call.method) {
         "refreshIncomingNotification" -> handleReleaseNotificationRefresh(result)
         "clearPendingIncomingHint" -> handleReleasePendingHintClear(result)
+        "dumpPendingIncomingActions" -> {
+          if (!BuildConfig.DEBUG) {
+            result.error("UNSUPPORTED", "debug-only", null)
+            return@setMethodCallHandler
+          }
+          val pendingCount = PendingCallActionStore.readCount(applicationContext)
+          val lastAction = IncomingActionDebugStore.read(applicationContext)
+          val payload = mutableMapOf<String, Any>(
+            "pendingActionCount" to pendingCount,
+          )
+          if (lastAction != null) {
+            payload["lastAction"] = lastAction.toMap()
+          }
+          result.success(payload)
+        }
         else -> result.notImplemented()
       }
     }

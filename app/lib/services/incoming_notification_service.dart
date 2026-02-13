@@ -204,4 +204,18 @@ class IncomingNotificationService {
       );
     }
   }
+
+  static Future<Map<String, dynamic>?> dumpPendingIncomingActions() async {
+    if (!kDebugMode) return null;
+    try {
+      final result = await _incomingChannel.invokeMapMethod<String, dynamic>(
+        'dumpPendingIncomingActions',
+      );
+      debugPrint('[CALLS_NOTIF] pending action dump=$result');
+      return result;
+    } catch (error) {
+      debugPrint('[CALLS_NOTIF] dumpPendingIncomingActions failed: $error');
+      return null;
+    }
+  }
 }

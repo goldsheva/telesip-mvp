@@ -68,4 +68,15 @@ object PendingCallActionStore {
     )
     return true
   }
+
+  fun readCount(context: Context): Int {
+    val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    val raw = prefs.getString(KEY_PENDING_ACTIONS, "[]") ?: "[]"
+    return try {
+      JSONArray(raw).length()
+    } catch (error: Exception) {
+      CallLog.w("IncomingHint", "Failed to read pending actions: $error")
+      0
+    }
+  }
 }

@@ -14,10 +14,13 @@ class IncomingFcmService : FirebaseMessagingService() {
 
   override fun onMessageReceived(message: RemoteMessage) {
     super.onMessageReceived(message)
+    if (shouldCancelIncoming(message)) {
+      cancelCall(message)
+      return
+    }
     val type = message.data["type"] ?: return
-    when (type) {
-      "incoming_call" -> showIncoming(message)
-      "call_cancelled" -> cancelCall(message)
+    if (type == "incoming_call") {
+      showIncoming(message)
     }
   }
 
@@ -33,6 +36,8 @@ class IncomingFcmService : FirebaseMessagingService() {
   }
 
   private fun cancelCall(message: RemoteMessage) {
+    val callId = message.data["call_id"]?.takeIf { it.isNotBlank() }
+    Log.d("IncomingHint", "cancelCall callId=${callId ?: "<none>"}")
     CallActionStore.clear(applicationContext)
     PendingIncomingHintWriter.clear(applicationContext)
     IncomingCallNotificationHelper.cancelIncomingNotification(applicationContext)
@@ -70,6 +75,20 @@ class IncomingFcmService : FirebaseMessagingService() {
     } catch (error: Exception) {
       Log.w("IncomingHint", "failed to persist pending hint: $error")
     }
+  }
+
+  private fun shouldCancelIncoming(message: RemoteMessage): Boolean {
+    val type = message.data["type"]
+    if (type == "call_cancelled" || type == "call_end") {
+      return true
+    }
+    if (message.data["event"] == "call_end") {
+      return true
+    }
+    if (message.data["is_ringing"] == "0") {
+      return true
+    }
+    return false
   }
 
   private fun isoTimestamp(): String {

@@ -327,10 +327,37 @@ class _HomePageState extends ConsumerState<HomePage> {
               },
               child: const Text('Run sequence'),
             ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _runIncomingDebugActionFlow();
+              },
+              child: const Text('Run incoming debug flow'),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _runIncomingDebugActionFlow() async {
+    try {
+      await IncomingNotificationService.refreshPendingIncomingNotification();
+      await ref
+          .read(callControllerProvider.notifier)
+          .runIncomingPipeline('manual-debug');
+      final dump =
+          await IncomingNotificationService.dumpPendingIncomingActions();
+      debugPrint(
+        '[CALLS] pending action dump manual-debug '
+        'pendingCount=${dump?["pendingActionCount"] ?? "<none>"} '
+        'lastAction=${dump?["lastAction"] ?? "<none>"}',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[CALLS] incoming debug action flow failed: $error\n$stackTrace',
+      );
+    }
   }
 
   Future<void> _showBatteryOptState(WidgetRef ref) async {
