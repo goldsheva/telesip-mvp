@@ -80,6 +80,8 @@ class CallNotifier extends Notifier<CallState> {
   ProviderSubscription<AsyncValue<SipEvent>>? _eventSubscription;
   Future<void> _eventChain = Future<void>.value();
   bool _disposed = false;
+  bool get bootstrapDone => _bootstrapDone;
+  bool get pipelineInFlight => _incomingPipelineInFlight;
   bool get _alive => !_disposed;
   final NetworkConnectivityService _connectivityService =
       NetworkConnectivityService();

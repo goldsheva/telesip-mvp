@@ -51,6 +51,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
   String? _pendingBootstrapReason;
   bool _batteryPromptInFlight = false;
   bool _batteryPromptScheduled = false;
+  bool _pipelineScheduled = false;
   late final IncomingCallCoordinator _incomingActivityCoordinator;
   MethodChannel? _debugIncomingChannel;
   bool _nativePendingHintCheckInFlight = false;
@@ -159,11 +160,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       _batteryPromptInFlight = false;
       unawaited(_incomingActivityCoordinator.processIncomingActivity());
       _ensureCallsBootstrapped('app-resume');
-      unawaited(
-        ref
-            .read(callControllerProvider.notifier)
-            .runIncomingPipeline('app-resume'),
-      );
+      _maybeTriggerPipeline('app-resume');
       unawaited(_maybeAskBatteryOptimizations());
     } else {
       _batteryPromptScheduled = false;
@@ -278,6 +275,25 @@ class _AuthGateState extends ConsumerState<_AuthGate>
     }
   }
 
+  void _maybeTriggerPipeline(String reason) {
+    if (!mounted) return;
+    final notifier = ref.read(callControllerProvider.notifier);
+    if (notifier.pipelineInFlight) {
+      if (kDebugMode) {
+        debugPrint(
+          '[CALLS] _maybeTriggerPipeline skip reason=$reason pipelineInFlight=true',
+        );
+      }
+      return;
+    }
+    if (_pipelineScheduled) return;
+    _pipelineScheduled = true;
+    scheduleMicrotask(() {
+      _pipelineScheduled = false;
+      unawaited(notifier.runIncomingPipeline(reason));
+    });
+  }
+
   Future<bool> _launchBatterySettings(BuildContext context) async {
     try {
       return await SystemSettings.openIgnoreBatteryOptimizations();
@@ -352,10 +368,11 @@ class _AuthGateState extends ConsumerState<_AuthGate>
       }
       _nativePendingHintCheckInFlight = true;
       try {
-        debugPrint('[INCOMING][NATIVE] checkPendingIncomingHint requested');
-        await ref
-            .read(callControllerProvider.notifier)
-            .runIncomingPipeline('native-check-pending-hint');
+        final notifier = ref.read(callControllerProvider.notifier);
+        debugPrint(
+          '[INCOMING][NATIVE] checkPendingIncomingHint requested bootstrapDone=${notifier.bootstrapDone} pipelineInFlight=${notifier.pipelineInFlight}',
+        );
+        _maybeTriggerPipeline('native-check-pending-hint');
       } catch (error, stackTrace) {
         debugPrint(
           '[INCOMING][NATIVE] checkPendingIncomingHint failed: $error\n$stackTrace',
