@@ -93,7 +93,7 @@ object IncomingCallNotificationHelper {
     NotificationManagerCompat.from(context.applicationContext).cancel(NOTIFICATION_ID)
   }
 
-  fun showIncomingNotification(
+  private fun showIncomingNotification(
     context: Context,
     callId: String?,
     from: String?,

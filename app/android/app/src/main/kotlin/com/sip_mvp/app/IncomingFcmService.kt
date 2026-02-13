@@ -1,7 +1,5 @@
 package com.sip_mvp.app
 
-import android.app.NotificationManager
-import android.content.Context
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -13,8 +11,6 @@ import java.util.TimeZone
 
 
 class IncomingFcmService : FirebaseMessagingService() {
-  private val notificationManager: NotificationManager
-    get() = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
   override fun onMessageReceived(message: RemoteMessage) {
     super.onMessageReceived(message)
@@ -32,25 +28,12 @@ class IncomingFcmService : FirebaseMessagingService() {
     if (isExpired(message)) {
       return
     }
-    val callId = message.data["call_id"] ?: return
-    val from = message.data["from"]
+    if (message.data["call_id"] == null) return
     persistPendingHint(message)
-    val displayName = message.data["display_name"]
-    NotificationHelper.showIncoming(
-      applicationContext,
-      notificationManager,
-      callId,
-      from,
-      displayName,
-      callUuid = message.data["call_uuid"] ?: callId,
-      isRinging = true
-    )
   }
 
   private fun cancelCall(message: RemoteMessage) {
     CallActionStore.clear(applicationContext)
-    val callId = message.data["call_id"] ?: return
-    NotificationHelper.cancel(applicationContext, notificationManager, callId)
     PendingIncomingHintWriter.clear(applicationContext)
     IncomingCallNotificationHelper.cancelIncomingNotification(applicationContext)
   }

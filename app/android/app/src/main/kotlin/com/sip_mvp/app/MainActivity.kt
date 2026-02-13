@@ -169,7 +169,7 @@ class MainActivity : FlutterFragmentActivity() {
             }
             try {
               PendingIncomingHintWriter.persist(applicationContext, recordJson)
-              showReleaseNotificationFromRecord(recordJson)
+              IncomingCallNotificationHelper.showIncomingNotificationFromPendingHint(this)
               result.success(null)
             } catch (error: Exception) {
               result.error(
@@ -359,15 +359,6 @@ class MainActivity : FlutterFragmentActivity() {
     } catch (_: Exception) {
       null
     }
-  }
-
-  private fun showReleaseNotificationFromRecord(recordJson: String) {
-    val parsed = parsePendingHint(recordJson) ?: return
-    IncomingCallNotificationHelper.showIncomingNotification(
-      this,
-      callId = parsed.first,
-      from = parsed.second,
-    )
   }
 
   companion object {
