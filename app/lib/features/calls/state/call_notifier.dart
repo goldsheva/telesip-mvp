@@ -1360,7 +1360,8 @@ class CallNotifier extends Notifier<CallState> {
       if (hintHandled || actionsApplied) {
         if (kDebugMode) {
           debugPrint(
-            '[CALLS] incomingPipeline clearing pending hint/notification',
+            '[CALLS] incomingPipeline cleanup hintHandled=$hintHandled actionsApplied=$actionsApplied '
+            'activeId=${state.activeCallId} status=${state.activeCall?.status}',
           );
         }
         await IncomingNotificationService.clearPendingIncomingHintNotification();

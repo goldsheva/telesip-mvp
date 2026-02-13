@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'call_models.dart';
 import 'call_notifications.dart';
 
@@ -122,22 +124,31 @@ class CallBootstrapService {
     var processed = 0;
     for (final item in raw) {
       if (item is! Map) continue;
-      final type = item['type']?.toString();
-      final callId = item['callId']?.toString() ?? '';
-      final tsMillis = item['ts'] is num ? (item['ts'] as num).toInt() : null;
+      final rawType = item['type'] ?? item['action'];
+      final type = rawType?.toString().toLowerCase();
+      if (type != 'answer' && type != 'decline') {
+        if (kDebugMode) {
+          log(
+            '[CALLS] drainPendingCallActions skipping invalid action=$rawType callId=${item['callId'] ?? item['call_id']} keys=${item.keys}',
+          );
+        }
+        continue;
+      }
+      final callId = (item['callId'] ?? item['call_id'])?.toString() ?? '';
+      final tsValue = item['ts'] ?? item['timestamp'];
+      final tsMillis = _parseTimestampMillis(tsValue);
       if (tsMillis != null &&
           now.difference(DateTime.fromMillisecondsSinceEpoch(tsMillis)) >=
               ttl) {
         expiredDropped++;
         continue;
       }
-      if (type == null) continue;
-      final tsKey = item['ts']?.toString() ?? '';
-      final dedupKey = '$type|$callId|$tsKey';
+      final tsKeyRaw = tsValue?.toString() ?? '';
+      final dedupKey = '$type|$callId|$tsKeyRaw';
       if (processedPendingCallActions.containsKey(dedupKey)) {
         log(
           '[CALLS] drainPendingCallActions skipping duplicate type=$type '
-          'callId=$callId ts=$tsKey',
+          'callId=$callId ts=$tsKeyRaw',
         );
         dedupSkipped++;
         continue;
@@ -167,6 +178,9 @@ class CallBootstrapService {
           '[CALLS] drainPendingCallActions applying answer callId=$resolvedCallId raw=$callId',
         );
         await answerFromNotification(resolvedCallId);
+        log(
+          '[CALLS] drainPendingCallActions applied type=answer resolvedCallId=$resolvedCallId rawCallId=$callId',
+        );
       } else if (type == 'decline') {
         processed++;
         if (resolvedCallId == null || !isCallAlive(resolvedCallId)) {
@@ -188,6 +202,9 @@ class CallBootstrapService {
           '[CALLS] drainPendingCallActions applying decline callId=$resolvedCallId raw=$callId',
         );
         await declineFromNotification(resolvedCallId);
+        log(
+          '[CALLS] drainPendingCallActions applied type=decline resolvedCallId=$resolvedCallId rawCallId=$callId',
+        );
       }
     }
     if (debugMode) {
@@ -199,5 +216,21 @@ class CallBootstrapService {
       );
     }
     return processed > 0;
+  }
+
+  int? _parseTimestampMillis(dynamic value) {
+    if (value == null) return null;
+    int? parsed;
+    if (value is num) {
+      parsed = value.toInt();
+    } else {
+      final str = value.toString();
+      parsed = int.tryParse(str);
+    }
+    if (parsed == null) return null;
+    if (parsed > 0 && parsed < 1000000000000) {
+      return parsed * 1000;
+    }
+    return parsed;
   }
 }
