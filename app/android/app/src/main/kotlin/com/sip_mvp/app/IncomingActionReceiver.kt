@@ -16,7 +16,7 @@ class IncomingActionReceiver : BroadcastReceiver() {
         return
       }
     }
-    val callId = intent.getStringExtra(EXTRA_CALL_ID) ?: "pending"
+    val callId = intent.getStringExtra(EXTRA_CALL_ID) ?: ""
     val timestamp = System.currentTimeMillis()
     val enqueued =
       PendingCallActionStore.enqueue(appContext, callId, actionType, timestamp)

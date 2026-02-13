@@ -2309,10 +2309,22 @@ class CallNotifier extends Notifier<CallState> {
       processedPendingCallActions: _processedPendingCallActions,
       pendingCallActionDedupTtl: _pendingCallActionDedupTtl,
       isCallAlive: _isCallAlive,
+      currentRingingCallId: _resolveRingingCallId,
       notifCleanup: _notifCleanup,
       answerFromNotification: answerFromNotification,
       declineFromNotification: declineFromNotification,
     );
+  }
+
+  String? _resolveRingingCallId() {
+    final candidates = state.calls.entries
+        .where((entry) => entry.value.status == CallStatus.ringing)
+        .map((entry) => entry.key)
+        .toList();
+    if (candidates.length == 1) {
+      return candidates.first;
+    }
+    return null;
   }
 
   void _completeBootstrapWaiters() {

@@ -89,6 +89,7 @@ class CallBootstrapService {
     required Map<String, DateTime> processedPendingCallActions,
     required Duration pendingCallActionDedupTtl,
     required bool Function(String callId) isCallAlive,
+    required String? Function() currentRingingCallId,
     required CallNotificationCleanup notifCleanup,
     required Future<void> Function(String callId) answerFromNotification,
     required Future<void> Function(String callId) declineFromNotification,
@@ -122,7 +123,7 @@ class CallBootstrapService {
     for (final item in raw) {
       if (item is! Map) continue;
       final type = item['type']?.toString();
-      final callId = item['callId']?.toString();
+      final callId = item['callId']?.toString() ?? '';
       final tsMillis = item['ts'] is num ? (item['ts'] as num).toInt() : null;
       if (tsMillis != null &&
           now.difference(DateTime.fromMillisecondsSinceEpoch(tsMillis)) >=
@@ -130,7 +131,7 @@ class CallBootstrapService {
         expiredDropped++;
         continue;
       }
-      if (type == null || callId == null) continue;
+      if (type == null) continue;
       final tsKey = item['ts']?.toString() ?? '';
       final dedupKey = '$type|$callId|$tsKey';
       if (processedPendingCallActions.containsKey(dedupKey)) {
@@ -142,36 +143,51 @@ class CallBootstrapService {
         continue;
       }
       processedPendingCallActions[dedupKey] = now;
+      final resolvedCallId = callId.isNotEmpty
+          ? callId
+          : currentRingingCallId();
       if (type == 'answer') {
         processed++;
-        if (!isCallAlive(callId)) {
-          log('[CALLS] pending answer deferred: no call yet callId=$callId');
-          await notifCleanup.clearCallNotificationState(
-            callId,
-            cancelNotification: true,
-            clearPendingHint: true,
+        if (resolvedCallId == null || !isCallAlive(resolvedCallId)) {
+          log(
+            '[CALLS] pending answer deferred: call unavailable raw=$callId resolved=$resolvedCallId',
           );
+          if (resolvedCallId != null && resolvedCallId.isNotEmpty) {
+            await notifCleanup.clearCallNotificationState(
+              resolvedCallId,
+              cancelNotification: true,
+              clearPendingHint: false,
+            );
+          }
           processedPendingCallActions.remove(dedupKey);
           deferredCount++;
           continue;
         }
-        log('[CALLS] drainPendingCallActions applying answer callId=$callId');
-        await answerFromNotification(callId);
+        log(
+          '[CALLS] drainPendingCallActions applying answer callId=$resolvedCallId raw=$callId',
+        );
+        await answerFromNotification(resolvedCallId);
       } else if (type == 'decline') {
         processed++;
-        if (!isCallAlive(callId)) {
-          log('[CALLS] pending decline deferred: no call yet callId=$callId');
-          await notifCleanup.clearCallNotificationState(
-            callId,
-            cancelNotification: true,
-            clearPendingHint: true,
+        if (resolvedCallId == null || !isCallAlive(resolvedCallId)) {
+          log(
+            '[CALLS] pending decline deferred: call unavailable raw=$callId resolved=$resolvedCallId',
           );
+          if (resolvedCallId != null && resolvedCallId.isNotEmpty) {
+            await notifCleanup.clearCallNotificationState(
+              resolvedCallId,
+              cancelNotification: true,
+              clearPendingHint: false,
+            );
+          }
           processedPendingCallActions.remove(dedupKey);
           deferredCount++;
           continue;
         }
-        log('[CALLS] drainPendingCallActions applying decline callId=$callId');
-        await declineFromNotification(callId);
+        log(
+          '[CALLS] drainPendingCallActions applying decline callId=$resolvedCallId raw=$callId',
+        );
+        await declineFromNotification(resolvedCallId);
       }
     }
     if (debugMode) {
