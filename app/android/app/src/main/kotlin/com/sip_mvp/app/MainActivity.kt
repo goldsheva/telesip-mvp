@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -24,12 +25,14 @@ class MainActivity : FlutterFragmentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     CallLog.ensureInit(applicationContext)
+    applyIncomingLockScreenFlagsIfNeeded(intent)
     handleIncomingHintExtras(intent)
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    applyIncomingLockScreenFlagsIfNeeded(intent)
     handleIncomingHintExtras(intent)
   }
 
@@ -250,6 +253,15 @@ class MainActivity : FlutterFragmentActivity() {
 
   private fun handleIncomingHintExtras(intent: Intent?) {
     if (intent == null) return
+    if (isOpenIncomingIntent(intent)) {
+      val callId = intent.getStringExtra("call_id")
+      Log.d(
+        "IncomingHint",
+        "handleIncomingHintExtras open_incoming trigger callId=${callId ?: "<none>"}",
+      )
+      pendingReleaseHintCheck = true
+      maybeDispatchReleaseHintCheck()
+    }
     val debugTrigger = intent.getBooleanExtra(EXTRA_DEBUG_CHECK_PENDING_HINT, false)
     if (debugTrigger) {
       val fromNotification = intent.getBooleanExtra("from_incoming_notification", false)
@@ -374,6 +386,33 @@ class MainActivity : FlutterFragmentActivity() {
     } catch (_: Exception) {
       null
     }
+  }
+
+  private fun applyIncomingLockScreenFlagsIfNeeded(intent: Intent?) {
+    if (!isOpenIncomingIntent(intent)) {
+      return
+    }
+    val legacyFlags =
+      WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+      setShowWhenLocked(true)
+      setTurnScreenOn(true)
+      window.addFlags(legacyFlags)
+    } else {
+      window.addFlags(legacyFlags)
+    }
+    CallLog.d(
+      "MainActivity",
+      "applyLockScreenFlags due to open_incoming action=${intent?.action} api=${Build.VERSION.SDK_INT}",
+    )
+  }
+
+  private fun isOpenIncomingIntent(intent: Intent?): Boolean {
+    if (intent == null) return false
+    val actionValue = intent.getStringExtra("action")
+    return intent.action == "open_incoming" || actionValue == "open_incoming"
   }
 
   companion object {

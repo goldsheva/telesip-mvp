@@ -105,6 +105,15 @@ object NotificationHelper {
         } else {
           null
         }
+      val channelSoundSet =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          notificationManager.getNotificationChannel(CHANNEL_ID)?.sound != null
+        } else {
+          incomingRingtoneUri != null
+        }
+      val keyguardLocked =
+        (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
+          ?.isKeyguardLocked ?: false
       val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
       val canUseFullScreenIntent =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -131,7 +140,7 @@ object NotificationHelper {
       val isMainThread = android.os.Looper.getMainLooper().thread == Thread.currentThread()
       debugLog(
         "CALLS_NOTIF",
-        "fgs start request api=${Build.VERSION.SDK_INT} mainThread=$isMainThread isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=$notificationsEnabled channelImportance=$channelImportance canUseFullScreenIntent=$canUseFullScreenIntent appImportance=$runningImportance"
+        "fgs start request api=${Build.VERSION.SDK_INT} mainThread=$isMainThread isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=$notificationsEnabled channelImportance=$channelImportance channelSoundSet=$channelSoundSet canUseFullScreenIntent=$canUseFullScreenIntent keyguardLocked=$keyguardLocked appImportance=$runningImportance"
       )
       try {
         ContextCompat.startForegroundService(context, serviceIntent)
@@ -272,7 +281,9 @@ object NotificationHelper {
   ): IncomingNotificationMeta {
     val effectiveCallUuid = callUuid ?: callId
     val baseId = getNotificationId(callId)
-    val keyguardLocked = shouldUseFullScreenIntent(context)
+    val keyguardLocked =
+      (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)
+        ?.isKeyguardLocked ?: false
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
     val channelImportance =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -282,7 +293,7 @@ object NotificationHelper {
       }
     val fsiAllowed =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        notificationManager?.canUseFullScreenIntent() ?: true
+        notificationManager?.canUseFullScreenIntent() ?: false
       } else {
         true
       }
@@ -296,7 +307,7 @@ object NotificationHelper {
     }
     val shouldAttachFullScreenIntent =
       attachFullScreen &&
-        (keyguardLocked || forceFullScreenIntent) &&
+        keyguardLocked &&
         importanceOk &&
         (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || fsiAllowed)
     debugLog(
@@ -368,7 +379,11 @@ object NotificationHelper {
         }
         if (shouldAttachFullScreenIntent) {
           setFullScreenIntent(fullScreenIntent, true)
-        } else if (attachFullScreen && (forceFullScreenIntent || keyguardLocked)) {
+          debugLog(
+            "CALLS_NOTIF",
+            "fullScreenIntent attached baseId=$baseId keyguardLocked=$keyguardLocked api=${Build.VERSION.SDK_INT}",
+          )
+        } else if (attachFullScreen) {
           debugLog(
             "CALLS_NOTIF",
             "fullScreenIntent skipped api=${Build.VERSION.SDK_INT} keyguardLocked=$keyguardLocked force=$forceFullScreenIntent fsiAllowed=$fsiAllowed channelImportance=$channelImportance importanceOk=$importanceOk",
@@ -451,12 +466,6 @@ object NotificationHelper {
           true
         },
     )
-  }
-
-  private fun shouldUseFullScreenIntent(context: Context): Boolean {
-    val keyguardManager =
-      context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-    return keyguardManager?.isKeyguardLocked ?: true
   }
 
   fun cancel(context: Context, notificationManager: NotificationManager, callId: String) {
