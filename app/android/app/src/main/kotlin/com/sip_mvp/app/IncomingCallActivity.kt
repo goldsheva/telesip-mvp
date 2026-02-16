@@ -3,6 +3,9 @@ package com.sip_mvp.app
 import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -10,6 +13,8 @@ import android.widget.Button
 import android.widget.TextView
 
 class IncomingCallActivity : Activity() {
+  private var nativeRingtone: Ringtone? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     CallLog.ensureInit(applicationContext)
@@ -40,15 +45,18 @@ class IncomingCallActivity : Activity() {
     findViewById<TextView>(R.id.incomingCaller).text = title
     findViewById<Button>(R.id.incomingDecline).setOnClickListener {
       CallLog.d("IncomingCallActivity", "native decline pressed")
+      stopNativeRingtone()
       sendCallAction(CallActionReceiver.ACTION_DECLINE)
       finish()
     }
     findViewById<Button>(R.id.incomingAnswer).setOnClickListener {
       CallLog.d("IncomingCallActivity", "native answer pressed")
+      stopNativeRingtone()
       sendCallAction(CallActionReceiver.ACTION_ANSWER)
       startActivity(buildMainIntent())
       finish()
     }
+    startNativeRingtone()
   }
 
   private fun sendCallAction(action: String) {
@@ -99,5 +107,44 @@ class IncomingCallActivity : Activity() {
   override fun onPause() {
     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     super.onPause()
+  }
+
+  override fun onDestroy() {
+    stopNativeRingtone()
+    super.onDestroy()
+  }
+
+  private fun startNativeRingtone() {
+    if (nativeRingtone?.isPlaying == true) return
+    try {
+      val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+      val ringtone = RingtoneManager.getRingtone(this, ringtoneUri) ?: return
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        ringtone.audioAttributes =
+          AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+      } else {
+        @Suppress("DEPRECATION")
+        ringtone.streamType = android.media.AudioManager.STREAM_RING
+      }
+      ringtone.play()
+      nativeRingtone = ringtone
+      CallLog.d("IncomingCallActivity", "native ringtone started")
+    } catch (error: Exception) {
+      CallLog.w("IncomingCallActivity", "native ringtone start failed: $error")
+    }
+  }
+
+  private fun stopNativeRingtone() {
+    try {
+      nativeRingtone?.stop()
+      CallLog.d("IncomingCallActivity", "native ringtone stopped")
+    } catch (error: Exception) {
+      CallLog.w("IncomingCallActivity", "native ringtone stop failed: $error")
+    } finally {
+      nativeRingtone = null
+    }
   }
 }
