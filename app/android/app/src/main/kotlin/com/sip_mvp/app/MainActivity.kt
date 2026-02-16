@@ -63,7 +63,7 @@ class MainActivity : FlutterFragmentActivity() {
           "openIgnoreBatteryOptimizations" -> {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
               Log.d("SystemSettings", "Battery optimization prompt not needed pre-M")
-              result.success(null)
+              result.success(true)
               return@setMethodCallHandler
             }
             try {
@@ -71,13 +71,13 @@ class MainActivity : FlutterFragmentActivity() {
               intent.data = Uri.parse("package:$packageName")
               startActivity(intent)
               Log.d("SystemSettings", "Opened ignore battery optimizations intent")
-              result.success(null)
+              result.success(true)
             } catch (error: Exception) {
               Log.d("SystemSettings", "Primary battery intent failed: $error")
               try {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                 Log.d("SystemSettings", "Opened legacy battery optimization settings")
-                result.success(null)
+                result.success(true)
               } catch (fallback: Exception) {
                 Log.d("SystemSettings", "Legacy battery intent failed: $fallback")
                 try {
@@ -88,7 +88,7 @@ class MainActivity : FlutterFragmentActivity() {
                     "SystemSettings",
                     "Opened APPLICATION_DETAILS_SETTINGS fallback",
                   )
-                  result.success(null)
+                  result.success(true)
                 } catch (finalFallback: Exception) {
                   Log.d("SystemSettings", "App settings fallback failed: $finalFallback")
                   result.error(
