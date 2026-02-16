@@ -153,12 +153,15 @@ class IncomingNotificationService {
 
   static Future<List<Map<String, dynamic>>?> drainPendingCallActions() async {
     try {
-      final result =
-          await _channel.invokeMethod<List<dynamic>>('drainPendingCallActions');
+      final result = await _channel.invokeMethod<List<dynamic>>(
+        'drainPendingCallActions',
+      );
       if (result == null) return null;
       return result
-          .map((entry) =>
-              Map<String, dynamic>.from(entry as Map).cast<String, dynamic>())
+          .map(
+            (entry) =>
+                Map<String, dynamic>.from(entry as Map).cast<String, dynamic>(),
+          )
           .toList();
     } catch (error) {
       debugPrint('[CALLS_NOTIF] drainPendingCallActions failed: $error');
