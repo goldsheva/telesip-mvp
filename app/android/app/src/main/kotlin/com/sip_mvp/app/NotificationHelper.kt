@@ -8,6 +8,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
@@ -17,13 +19,26 @@ import androidx.core.app.Person
 import com.sip_mvp.app.CallLog
 
 object NotificationHelper {
-  private const val CHANNEL_ID = "calls"
-  private const val CHANNEL_NAME = "Calls"
+  private const val CHANNEL_ID = "calls_incoming_v2"
+  private const val CHANNEL_NAME = "Incoming Calls"
   private const val SUPPRESSION_TTL_MS = 2_000L
   private val suppressionExpiry = mutableMapOf<String, Long>()
+  private val incomingRingtoneUri by lazy {
+    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+      ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+  }
 
   fun ensureChannel(context: Context, notificationManager: NotificationManager) {
-    if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      debugLog("CALLS_NOTIF", "ensureChannel skipped (pre-O)")
+      return
+    }
+    val existing = notificationManager.getNotificationChannel(CHANNEL_ID)
+    if (existing != null) {
+      debugLog(
+        "CALLS_NOTIF",
+        "channel exists id=$CHANNEL_ID importance=${existing.importance} soundSet=${existing.sound != null}",
+      )
       return
     }
     val channel = NotificationChannel(
@@ -34,8 +49,21 @@ object NotificationHelper {
       description = "Incoming call alerts"
       enableVibration(true)
       lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+      if (incomingRingtoneUri != null) {
+        setSound(
+          incomingRingtoneUri,
+          AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        )
+      }
     }
     notificationManager.createNotificationChannel(channel)
+    debugLog(
+      "CALLS_NOTIF",
+      "channel created id=$CHANNEL_ID importance=${channel.importance} ringtoneUri=${incomingRingtoneUri ?: "<none>"}",
+    )
   }
 
   fun showIncoming(
@@ -78,9 +106,16 @@ object NotificationHelper {
           null
         }
       val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+      val canUseFullScreenIntent =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+          notificationManager.canUseFullScreenIntent()
+        } else {
+          true
+        }
       val diagnosticsNeeded = !havePostNotifications ||
         !notificationsEnabled ||
-        (channelImportance != null && channelImportance < NotificationManager.IMPORTANCE_HIGH)
+        (channelImportance != null && channelImportance < NotificationManager.IMPORTANCE_HIGH) ||
+        !canUseFullScreenIntent
       val runningImportance = if (diagnosticsNeeded) {
         try {
           val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
@@ -96,7 +131,7 @@ object NotificationHelper {
       val isMainThread = android.os.Looper.getMainLooper().thread == Thread.currentThread()
       debugLog(
         "CALLS_NOTIF",
-        "fgs start request api=${Build.VERSION.SDK_INT} mainThread=$isMainThread isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=$notificationsEnabled channelImportance=$channelImportance appImportance=$runningImportance"
+        "fgs start request api=${Build.VERSION.SDK_INT} mainThread=$isMainThread isRinging=$isRinging postPermission=$havePostNotifications notificationsEnabled=$notificationsEnabled channelImportance=$channelImportance canUseFullScreenIntent=$canUseFullScreenIntent appImportance=$runningImportance"
       )
       try {
         ContextCompat.startForegroundService(context, serviceIntent)
@@ -238,6 +273,36 @@ object NotificationHelper {
     val effectiveCallUuid = callUuid ?: callId
     val baseId = getNotificationId(callId)
     val keyguardLocked = shouldUseFullScreenIntent(context)
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+    val channelImportance =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        notificationManager?.getNotificationChannel(CHANNEL_ID)?.importance
+      } else {
+        null
+      }
+    val fsiAllowed =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        notificationManager?.canUseFullScreenIntent() ?: true
+      } else {
+        true
+      }
+    val importanceOk =
+      channelImportance == null || channelImportance >= NotificationManager.IMPORTANCE_HIGH
+    if (!importanceOk) {
+      debugLog(
+        "CALLS_NOTIF",
+        "channel importance too low for heads-up/fullscreen: importance=$channelImportance (need HIGH)",
+      )
+    }
+    val shouldAttachFullScreenIntent =
+      attachFullScreen &&
+        (keyguardLocked || forceFullScreenIntent) &&
+        importanceOk &&
+        (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || fsiAllowed)
+    debugLog(
+      "CALLS_NOTIF",
+      "prepareIncomingNotification api=${Build.VERSION.SDK_INT} keyguardLocked=$keyguardLocked forceFullScreenIntent=$forceFullScreenIntent fsiAllowed=$fsiAllowed channelImportance=$channelImportance",
+    )
     val incomingIntent = Intent(context, IncomingCallActivity::class.java).apply {
       putExtra("call_id", callId)
       putExtra("call_uuid", effectiveCallUuid)
@@ -298,8 +363,16 @@ object NotificationHelper {
       .setWhen(System.currentTimeMillis())
       .setShowWhen(false)
       .apply {
-        if (attachFullScreen && (forceFullScreenIntent || keyguardLocked)) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+          setSound(incomingRingtoneUri)
+        }
+        if (shouldAttachFullScreenIntent) {
           setFullScreenIntent(fullScreenIntent, true)
+        } else if (attachFullScreen && (forceFullScreenIntent || keyguardLocked)) {
+          debugLog(
+            "CALLS_NOTIF",
+            "fullScreenIntent skipped api=${Build.VERSION.SDK_INT} keyguardLocked=$keyguardLocked force=$forceFullScreenIntent fsiAllowed=$fsiAllowed channelImportance=$channelImportance importanceOk=$importanceOk",
+          )
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
           setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -371,6 +444,12 @@ object NotificationHelper {
       "channelExists" to (channel != null),
       "hasPostNotificationsPermission" to hasPermission,
       "keyguardLocked" to keyguardState,
+      "canUseFullScreenIntent" to
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+          notificationManager.canUseFullScreenIntent()
+        } else {
+          true
+        },
     )
   }
 

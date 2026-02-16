@@ -21,6 +21,7 @@ import 'package:app/services/audio_route_service.dart';
 import 'package:app/platform/system_settings.dart';
 import 'package:app/services/permissions_service.dart';
 import 'package:app/services/audio_route_types.dart';
+import 'package:app/services/app_lifecycle_tracker.dart';
 import 'package:app/services/incoming_notification_service.dart';
 import 'package:app/services/network_connectivity_service.dart';
 import 'package:app/sip/sip_engine.dart';
@@ -2199,6 +2200,28 @@ class CallNotifier extends Notifier<CallState> {
         status == CallStatus.dialing) {
       unawaited(_refreshAudioRoute());
     }
+    if (status == CallStatus.ringing) {
+      final info = updated[callId];
+      if (info != null) {
+        unawaited(_showIncomingNotificationIfBackground(info));
+      }
+    }
+  }
+
+  Future<void> _showIncomingNotificationIfBackground(CallInfo call) async {
+    if (!Platform.isAndroid) return;
+    if (AppLifecycleTracker.isAppInForeground) return;
+    final callId = call.id.trim();
+    if (callId.isEmpty) return;
+    final normalizedFrom = call.destination.trim().isEmpty
+        ? 'Incoming'
+        : call.destination.trim();
+    await IncomingNotificationService.showIncoming(
+      callId: callId,
+      from: normalizedFrom,
+      callUuid: callId,
+      isRinging: true,
+    );
   }
 
   _CallPhase _phaseForStatus(CallStatus status) {

@@ -9,6 +9,11 @@ import android.view.WindowManager
 class IncomingCallActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    CallLog.ensureInit(applicationContext)
+    CallLog.d(
+      "IncomingCallActivity",
+      "onCreate action=${intent?.action} extras=${intent?.extras?.keySet()?.joinToString(",") ?: "<none>"} api=${Build.VERSION.SDK_INT}",
+    )
     applyLockScreenFlags()
     val mainIntent = Intent(this, MainActivity::class.java).apply {
       action = intent.action
@@ -19,26 +24,25 @@ class IncomingCallActivity : Activity() {
             Intent.FLAG_ACTIVITY_SINGLE_TOP
       )
     }
+    CallLog.d("IncomingCallActivity", "Forwarding to MainActivity with wake flags applied")
     startActivity(mainIntent)
     finish()
   }
 
   private fun applyLockScreenFlags() {
+    val legacyFlags =
+      WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
       setShowWhenLocked(true)
       setTurnScreenOn(true)
-      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        window.addFlags(
-          WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-              WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-        )
-      }
+      window.addFlags(legacyFlags)
     } else {
-      window.addFlags(
-        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-      )
+      window.addFlags(legacyFlags)
     }
+    CallLog.d("IncomingCallActivity", "applyLockScreenFlags done")
   }
 
   override fun onResume() {

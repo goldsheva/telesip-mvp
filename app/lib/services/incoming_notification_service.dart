@@ -186,7 +186,8 @@ class IncomingNotificationService {
       '[CALLS_NOTIF] androidState $method enabled=${state['notificationsEnabled']} '
       'postPerm=${state['hasPostNotificationsPermission']} channelExists=${state['channelExists']} '
       'channelEnabled=${state['channelEnabled']} importance=${state['channelImportance']} '
-      'keyguardLocked=${state['keyguardLocked']}',
+      'keyguardLocked=${state['keyguardLocked']} '
+      'fsiAllowed=${state['canUseFullScreenIntent']}',
     );
   }
 
@@ -198,7 +199,8 @@ class IncomingNotificationService {
       '[CALLS_NOTIF] androidState $tag enabled=${state['notificationsEnabled']} '
       'postPerm=${state['hasPostNotificationsPermission']} channelExists=${state['channelExists']} '
       'channelEnabled=${state['channelEnabled']} importance=${state['channelImportance']} '
-      'keyguardLocked=${state['keyguardLocked']}',
+      'keyguardLocked=${state['keyguardLocked']} '
+      'fsiAllowed=${state['canUseFullScreenIntent']}',
     );
   }
 

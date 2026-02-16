@@ -67,6 +67,7 @@ class _AuthGateState extends ConsumerState<_AuthGate>
         lifecycleState == AppLifecycleState.resumed ||
         lifecycleState == null ||
         lifecycleState == AppLifecycleState.inactive;
+    AppLifecycleTracker.update(lifecycleState ?? AppLifecycleState.resumed);
     WidgetsBinding.instance.addObserver(this);
     _registerNativeIncomingChannel();
     if (kDebugMode) {

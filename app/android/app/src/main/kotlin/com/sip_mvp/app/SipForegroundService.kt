@@ -228,7 +228,8 @@ class SipForegroundService : Service() {
       callUuid,
       isRinging = true,
       attachFullScreen = true,
-      useCallStyle = true
+      useCallStyle = true,
+      forceFullScreenIntent = false,
     )
     val notificationId = incomingNotification.meta.baseId
     val started = startForegroundCompat(
@@ -257,7 +258,7 @@ class SipForegroundService : Service() {
       isRinging = true,
       attachFullScreen = true,
       useCallStyle = false,
-      forceFullScreenIntent = true
+      forceFullScreenIntent = false
     )
     val fallbackStarted = startForegroundCompat(
       notificationId,
